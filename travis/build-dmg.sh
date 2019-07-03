@@ -67,7 +67,7 @@ cat > galacteek.app/Contents/MacOS/galacteek <<\EAT
 #!/usr/bin/env bash
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export PATH=$PATH:$DIR/../Resources/bin
-$DIR/../Resources/bin/python $DIR/../Resources/bin/galacteek $@
+$DIR/../Resources/bin/python $DIR/../Resources/bin/galacteek --no-ssl-verify $@
 EAT
 
 chmod a+x galacteek.app/Contents/MacOS/galacteek
@@ -76,9 +76,6 @@ chmod a+x galacteek.app/Contents/MacOS/galacteek
 pushd galacteek.app/Contents/Resources
 rm -rf pkgs
 find . -type d -iname '__pycache__' -print0 | xargs -0 rm -r
-find . -type f -not \( -path ./lib/python3.7/site-packages/PIL -prune \) -o \
-	-name '*.so*' -print -exec strip '{}' \;
-rm -rf lib/python3.7/site-packages/PyQt5/Qt/qml
 rm -rf lib/python3.7/site-packages/Cryptodome/SelfTest/*
 rm -rf lib/python3.7/site-packages/PyQt5/Qt/plugins/geoservices
 rm -rf lib/python3.7/site-packages/PyQt5/Qt/plugins/sceneparsers
@@ -92,4 +89,4 @@ popd
 brew install create-dmg
 create-dmg --hdiutil-verbose --volname "galacteek-${VERSION}" \
     --volicon "${OLD_CWD}"/share/icons/galacteek.icns \
-    --hide-extension galacteek.app galacteek-$VERSION.dmg "$BUILD_DIR"/
+    --hide-extension galacteek.app Galacteek-$VERSION.dmg "$BUILD_DIR"/

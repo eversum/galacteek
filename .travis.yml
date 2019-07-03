@@ -19,8 +19,8 @@ script:
 
 after_success:
   - if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$TRAVIS_BRANCH" == "master" ]; then
-        bash upload.sh galacteek*.AppImage;
+        bash upload.sh Galacteek*.AppImage;
     fi
   - if [ "$TRAVIS_OS_NAME" == "osx" ] && [ "$TRAVIS_BRANCH" == "master" ]; then
-        bash upload.sh galacteek*.dmg;
+        bash upload.sh Galacteek*.dmg;
     fi
