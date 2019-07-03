@@ -2,4 +2,7 @@ pipenv-to-requirements
 pytest
 pytest-asyncio
 pytest-qt
+pytest-xvfb
 flake8
+wheel
+tox

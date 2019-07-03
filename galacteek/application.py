@@ -755,7 +755,14 @@ class GalacteekApplication(QApplication):
         ensure(self.exitApp())
 
     async def exitApp(self):
-        await self.sqliteDb.close()
+        try:
+            await self.sqliteDb.close()
+        except:
+            pass
+
+        for task in self.pendingTasks:
+            task.cancel()
+
         await self.stopIpfsServices()
 
         if self.ipfsd:

@@ -135,6 +135,7 @@ class ClipboardTracker(QObject):
 
     clipboardPathProcessed = pyqtSignal(IPFSPath)
     clipboardHistoryChanged = pyqtSignal()  # not used anymore
+    clipboardPathInvalid = pyqtSignal(IPFSPath)
 
     itemRegister = pyqtSignal(ClipboardItem, bool)
     itemAdded = pyqtSignal(ClipboardItem)
@@ -221,6 +222,8 @@ class ClipboardTracker(QObject):
         path = IPFSPath(text)
         if path.valid:
             self.clipboardPathProcessed.emit(path)
+        else:
+            self.clipboardPathInvalid.emit(path)
 
     def getHistory(self):
         return list(self.items)

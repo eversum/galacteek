@@ -2,10 +2,12 @@ import pytest
 
 from galacteek.appsettings import *
 
+
 @pytest.fixture
 def mgr(tmpdir):
     filep = tmpdir.join('settings.txt')
     return SettingsManager(str(filep))
+
 
 class TestSettings:
     @pytest.mark.parametrize('sec', ['SEC1', 'SEC190'])
@@ -23,5 +25,5 @@ class TestSettings:
     def test_booleans(self, mgr, sec, name):
         mgr.setTrue(sec, name)
 
-        assert mgr.isTrue(sec, name) == True
-        assert mgr.isFalse(sec, name) == False
+        assert mgr.isTrue(sec, name)
+        assert mgr.isFalse(sec, name) is False

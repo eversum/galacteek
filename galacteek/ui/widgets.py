@@ -267,8 +267,7 @@ class HashmarkToolButton(QToolButton):
     deleteRequest = pyqtSignal()
 
     def __init__(self, mark, icon=None, parent=None):
-        super(HashmarkToolButton, self).__init__(icon=icon,
-                                                 parent=parent)
+        super(HashmarkToolButton, self).__init__(parent=parent)
         if icon:
             self.setIcon(icon)
 

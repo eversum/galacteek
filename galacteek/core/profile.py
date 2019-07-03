@@ -565,10 +565,11 @@ class UserProfile(QObject):
             self.userLogInfo('Loading DAG ..')
             self._dagUser = UserDAG(self.pathUserDagMeta, loop=self.ctx.loop)
 
-            self.dagUser.dagCidChanged.connect(self.onDagChange)
-
             ensure(self.dagUser.load())
             await self.dagUser.loaded
+
+            self.dagUser.dagCidChanged.connect(self.onDagChange)
+            ensure(self.publishDag())
 
             self.userWebsite = UserWebsite(
                 self.dagUser,
@@ -757,6 +758,10 @@ class UserProfile(QObject):
 
     @ipfsOp
     async def publishDag(self, op):
+        if not self.dagUser.dagCid:
+            self.debug('DAG CID not set yet ?')
+            return
+
         self.debug('Publishing DAG CID {}'.format(self.dagUser.dagCid))
 
         result = await op.publish(self.dagUser.dagCid, key=self.keyRoot,

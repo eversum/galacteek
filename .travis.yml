@@ -1,29 +1,26 @@
 sudo: required
-language: python
-python:
-  - "3.6"
+dist: xenial
+language: generic
 
 os:
   - linux
+  - osx
 
 before_install:
-  - pip3 install --upgrade pip
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then bash -xe travis/bootstrap-xenial.sh; fi
 
 install:
-  - pip install -r requirements.txt
-  - pip install -r requirements-dev.txt
-  - flake8 galacteek
-  - python setup.py build install
-  - python setup.py sdist bdist_wheel
+  - bash -xe travis/install.sh
 
 script:
-  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then cd AppImage; fi
-  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then bash -xe galacteek-appimage-build; fi
+  - if [ "$TRAVIS_OS_NAME" == "osx" ]; then bash -xe travis/build-dmg.sh; fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then cd AppImage; bash -xe galacteek-appimage-build; fi
   - wget https://github.com/probonopd/uploadtool/raw/master/upload.sh
 
 after_success:
-  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then echo "AppImage build successfull"; fi
-
-branches:
-  except:
-    - devel
+  - if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$TRAVIS_BRANCH" == "master" ]; then
+        bash upload.sh galacteek*.AppImage;
+    fi
+  - if [ "$TRAVIS_OS_NAME" == "osx" ] && [ "$TRAVIS_BRANCH" == "master" ]; then
+        bash upload.sh galacteek*.dmg;
+    fi

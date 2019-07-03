@@ -3,6 +3,7 @@ import os.path
 import asyncio
 import re
 import json
+import signal
 
 from galacteek import log
 
@@ -262,8 +263,10 @@ class AsyncIPFSDaemon(object):
                 pid=pid))
 
     def stop(self):
+        log.debug('Stopping IPFS daemon')
         try:
-            self.transport.terminate()
+            self.transport.send_signal(signal.SIGINT)
+            self.transport.send_signal(signal.SIGHUP)
             return True
         except Exception as e:
             self.terminateException = e

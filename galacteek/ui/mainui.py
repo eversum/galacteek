@@ -315,11 +315,12 @@ class MainWindow(QMainWindow):
         self.tabnChat = iChat()
         self.tabnFeeds = iAtomFeeds()
 
-        self.actionQuit = QAction(
-            getIcon('quit.png'),
-            'Exit', self,
-            shortcut=QKeySequence('Ctrl+q'),
-            triggered=self.quit)
+        self.quitButton = QToolButton(self)
+        self.quitButton.setObjectName('quitToolButton')
+        self.quitButton.setIcon(getIcon('quit.png'))
+        self.quitButton.clicked.connect(self.quit)
+        self.quitButton.setToolTip('Quit')
+        self.quitButton.setShortcut(QKeySequence('Ctrl+q'))
 
         self.menuManual = QMenu(iManual())
 
@@ -523,7 +524,7 @@ class MainWindow(QMainWindow):
 
         self.toolbarMain.addWidget(self.helpToolButton)
         self.toolbarMain.addSeparator()
-        self.toolbarMain.addAction(self.actionQuit)
+        self.toolbarMain.addWidget(self.quitButton)
 
         self.addToolBar(Qt.TopToolBarArea, self.toolbarMain)
         self.addToolBar(Qt.RightToolBarArea, self.toolbarPyramids)
@@ -1067,6 +1068,8 @@ class MainWindow(QMainWindow):
 
         if self.app.settingsMgr.isTrue(CFG_SECTION_BROWSER, CFG_KEY_GOTOHOME):
             tab.loadHomePage()
+        else:
+            tab.focusUrlZone()
 
         return tab
 

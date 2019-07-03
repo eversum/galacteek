@@ -105,6 +105,10 @@ QToolButton#helpToolButton::pressed {
     background-color: #eec146;
 }
 
+QToolButton#quitToolButton::hover {
+    background-color: #eec146;
+}
+
 QToolButton#pyramidsController::hover {
     background-color: #B7CDC2;
 }

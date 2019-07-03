@@ -192,12 +192,6 @@ class CustomWebPage (QtWebEngineWidgets.QWebEnginePage):
     def javaScriptConsoleMessage(self, level, message, lineNumber, sourceId):
         self.jsConsoleMessage.emit(level, message, lineNumber, sourceId)
 
-    def acceptNavigationRequest(self, url, nType, isMainFrame):
-        return True
-
-    def featurePermissionRequested(self, url, feature):
-        return True
-
 
 class JSConsoleWidget(QTextBrowser):
     def __init__(self, parent):
@@ -515,6 +509,7 @@ class URLInputWidget(QLineEdit):
             self.onHistoryItemSelected)
         self.historyMatches.collapsed.connect(
             self.onHistoryCollapse)
+        self.textEdited.connect(self.onUrlUserEdit)
 
     @property
     def editTimeoutMs(self):
@@ -533,15 +528,18 @@ class URLInputWidget(QLineEdit):
                               Qt.PopupFocusReason, Qt.ActiveWindowFocusReason,
                               Qt.TabFocusReason]:
             self.urlEditing = True
-            disconnectSig(self.textEdited, self.onUrlUserEdit)
-            self.textEdited.connect(self.onUrlUserEdit)
 
         super(URLInputWidget, self).focusInEvent(event)
 
     def focusOutEvent(self, event):
-        self.urlEditing = False
-        disconnectSig(self.textEdited, self.onUrlUserEdit)
-        self.editTimer.stop()
+        if event.reason() not in [
+                Qt.ActiveWindowFocusReason,
+                Qt.PopupFocusReason,
+                Qt.TabFocusReason,
+                Qt.OtherFocusReason]:
+            self.urlEditing = False
+            self.editTimer.stop()
+
         super(URLInputWidget, self).focusOutEvent(event)
 
     def onUrlUserEdit(self, text):
@@ -865,6 +863,8 @@ class BrowserTab(GalacteekTab):
         if select:
             self.urlZone.setSelection(0, len(self.urlZone.text()))
 
+        self.urlZone.urlEditing = True
+
     def onReloadPage(self):
         self.webEngineView.reload()
 
@@ -975,9 +975,10 @@ class BrowserTab(GalacteekTab):
             self.browseIpnsHash(text)
 
     def onFollowIpns(self):
-        runDialog(AddFeedDialog, self.app.marksLocal,
-                  self.currentIpfsResource.objPath,
-                  title=iFollowIpnsDialog())
+        if self.currentIpfsResource:
+            runDialog(AddFeedDialog, self.app.marksLocal,
+                      self.currentIpfsResource.objPath,
+                      title=iFollowIpnsDialog())
 
     def onLoadHome(self):
         self.loadHomePage()
@@ -1055,6 +1056,7 @@ class BrowserTab(GalacteekTab):
             self.urlZone.clear()
             self.urlZone.insert(url.toString())
             self._currentUrl = url
+            self.followIpnsAction.setEnabled(False)
 
         if url.scheme() in [SCHEME_ENS]:
             self.history.record(url.toString(), None)

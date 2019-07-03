@@ -6,6 +6,7 @@ ui_*.py
 *.qm
 *_rc.py
 .Python
+.tox
 build/
 dist/
 eggs/

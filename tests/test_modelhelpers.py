@@ -1,18 +1,20 @@
 import pytest
 
 from PyQt5.QtGui import QStandardItemModel, QStandardItem
-from PyQt5.QtCore import QModelIndex
 
 from galacteek.core.modelhelpers import *
+
 
 @pytest.fixture
 def model():
     return QStandardItemModel()
 
+
 @pytest.fixture
 def stditem():
     item = QStandardItem('test')
     return item
+
 
 class TestModel:
     def test_search(self, model, stditem):
@@ -33,6 +35,6 @@ class TestModel:
         item3 = QStandardItem('test3')
         stditem.appendRow([item2, item3])
 
-        deleted = modelDelete(model, 'test3')
+        modelDelete(model, 'test3')
         idxes = modelSearch(model, search='test3')
         assert len(idxes) == 0

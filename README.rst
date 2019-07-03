@@ -22,9 +22,12 @@ This started as an experiment with quamash_ and is WIP.
 Installation
 ============
 
-On Linux systems you can use the AppImage (from the releases_ page)
-or install from PyPI. On MacOS and other systems you'll need to
-install from PyPI.
+If you use Linux or MacOS you can download a prebuilt image
+(an AppImage for Linux or a .dmg bundle for osx) from the releases_
+page.
+
+If you use any other system or want to install the package
+manually you can always install from PyPI.
 
 PyPI
 ----
