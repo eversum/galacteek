@@ -18,7 +18,7 @@ script:
   - wget https://github.com/probonopd/uploadtool/raw/master/upload.sh
 
 after_success:
-  - bash -xe travis/upload-images.sh
+  - if [ "$TRAVIS_BRANCH" == "master" ]; then bash travis/upload-images.sh; fi
 
 branches:
   except:

@@ -1,7 +1,6 @@
 #!/bin/bash
 
 set -x
-set -e
 
 IFS='' read -r -d '' UPLOADTOOL_BODY <<"EOF"
 ## galacteek release\n
@@ -17,10 +16,10 @@ EOF
 
 export UPLOADTOOL_BODY
 
-if [ "$TRAVIS_OS_NAME" = "linux" ] && [ "$TRAVIS_BRANCH" = "master" ]; then
-	bash upload.sh Galacteek*.AppImage;
+if [ "$TRAVIS_OS_NAME" = "linux" ]; then
+	bash upload.sh Galacteek*.AppImage
 fi
 
-if [ "$TRAVIS_OS_NAME" = "osx" ] && [ "$TRAVIS_BRANCH" = "master" ]; then
+if [ "$TRAVIS_OS_NAME" = "osx" ]; then
 	bash upload.sh Galacteek*.dmg
 fi
