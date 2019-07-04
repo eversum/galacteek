@@ -18,7 +18,7 @@ script:
   - wget https://github.com/probonopd/uploadtool/raw/master/upload.sh
 
 after_success:
-  - bash -xe travis/upload.sh
+  - bash -xe travis/upload-images.sh
 
 branches:
   except:
