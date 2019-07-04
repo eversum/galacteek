@@ -46,6 +46,9 @@ pip install "$OLD_CWD"/dist/galacteek-${VERSION}-py3-none-any.whl
 # leave conda env
 source deactivate
 
+# Install libmagic
+brew install libmagic
+
 # create .app Framework
 mkdir -p galacteek.app/Contents/
 mkdir galacteek.app/Contents/MacOS galacteek.app/Contents/Resources galacteek.app/Contents/Resources/galacteek
@@ -61,6 +64,9 @@ cp "$OLD_CWD"/share/icons/galacteek.icns galacteek.app/Contents/Resources/share/
 # copy go-ipfs
 mkdir -p galacteek.app/Contents/Resources/bin
 cp $HOME/bin/ipfs galacteek.app/Contents/Resources/bin
+
+# Copy libmagic (don't know if python-magic will look there..)
+cp -av /usr/local/Cellar/libmagic/*/lib/* galacteek.app/Contents/Resources/lib
 
 # create entry script for galacteek
 cat > galacteek.app/Contents/MacOS/galacteek <<\EAT

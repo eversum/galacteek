@@ -6,6 +6,9 @@
 
 :info: A multi-platform browser for the distributed web
 
+.. image:: https://travis-ci.org/eversum/galacteek.svg?branch=master
+    :target: https://travis-ci.org/eversum/galacteek
+
 **galacteek** is an experimental multi-platform Qt5-based browser/toolbox
 for the IPFS_ peer-to-peer network.
 
