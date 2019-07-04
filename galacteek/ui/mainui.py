@@ -1119,8 +1119,8 @@ class MainWindow(QMainWindow):
             popupPoint = QPoint(btnPos.x() + 32, btnPos.y())
         elif self.toolbarMain.horizontal:
             popupPoint = QPoint(
-                btnPos.x() - self.ipfsSearchWidget.width() - 25,
-                btnPos.y() + 20)
+                btnPos.x() - self.ipfsSearchWidget.width() - 10,
+                btnPos.y() - 30)
 
         self.ipfsSearchWidget.move(popupPoint)
 
