@@ -82,14 +82,12 @@ rm -rf lib/cmake/
 rm -rf include/
 rm -rf share/{gtk-,}doc
 rm -rf bin/tcl*
-rm -rf bin/sqlite*
 rm -rf bin/lz*
 rm -rf bin/xz*
 rm -rf lib/libtcl*
 rm -rf lib/libtk*
 rm -rf lib/tk*
 rm -rf lib/tcl*
-rm -rf lib/sqlite*
 rm -rf lib/python3.7/site-packages/Cryptodome/SelfTest/*
 rm -rf lib/python3.7/site-packages/PyQt5/Qt/plugins/geoservices
 rm -rf lib/python3.7/site-packages/PyQt5/Qt/plugins/sceneparsers
