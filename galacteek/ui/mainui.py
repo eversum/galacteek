@@ -1113,14 +1113,17 @@ class MainWindow(QMainWindow):
         self.showMinimized()
 
     def toggleIpfsSearchWidget(self, forceshow=False):
-        btnPos = self.ipfsSearchButton.mapToGlobal(QPoint(0, 0))
+        btnPos = self.ipfsSearchButton.mapToGlobal(self.pos())
 
         if self.toolbarMain.vertical:
             popupPoint = QPoint(btnPos.x() + 32, btnPos.y())
         elif self.toolbarMain.horizontal:
-            popupPoint = QPoint(
-                btnPos.x() - self.ipfsSearchWidget.width() - 10,
-                btnPos.y() - 30)
+            posX = self.width() - self.ipfsSearchWidget.width() - \
+                self.toolbarPyramids.width() - 5
+            posY = self.toolbarMain.height()
+            popupPoint = QPoint(posX, posY)
+        else:
+            return
 
         self.ipfsSearchWidget.move(popupPoint)
 

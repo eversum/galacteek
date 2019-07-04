@@ -91,10 +91,15 @@ DMG (MacOS)
 -----------
 
 On MacOS the easiest is to download a DMG image from the releases_ page.
+MIME type detection will be faster if you install **libmagic**. Install
+**zbar** as well for QR codes if you want with::
 
-After opening/mounting the DMG image, hold Control and right-click on the
+    brew install libmagic zbar
+
+After opening/mounting the DMG image, hold Control and click on the
 **galacteek** icon, and select **Open** and accept. You probably need to
-allow the system to install apps *from anywhere* in the security settings.
+allow the system to install applications *from anywhere* in the security
+settings.
 
 Command-line usage
 ==================
