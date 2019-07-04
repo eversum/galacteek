@@ -14,7 +14,7 @@ install:
 
 script:
   - if [ "$TRAVIS_OS_NAME" == "osx" ]; then bash -xe travis/build-dmg.sh; fi
-  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then cd AppImage; bash -xe galacteek-appimage-build; fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then cd AppImage; bash -xe galacteek-appimage-build; cd ..; fi
   - wget https://github.com/probonopd/uploadtool/raw/master/upload.sh
 
 after_success:
