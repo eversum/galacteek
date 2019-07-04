@@ -81,12 +81,9 @@ class IPFSSearchWidget(QWidget):
     runSearch = pyqtSignal(str)
     hidden = pyqtSignal()
 
-    def __init__(
-            self,
-            icon: str,
-            parent=None,
-            f=Qt.Popup | Qt.FramelessWindowHint):
-        super(IPFSSearchWidget, self).__init__(parent, f)
+    def __init__(self, parent=None):
+        super(IPFSSearchWidget, self).__init__(
+            parent, Qt.Widget | Qt.FramelessWindowHint)
 
         self.input = ui_ipfssearchinput.Ui_SearchInput()
         self.input.setupUi(self)

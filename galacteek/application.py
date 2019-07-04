@@ -749,7 +749,7 @@ class GalacteekApplication(QApplication):
             self.debug('Pending task: {}'.format(task))
 
     def onShowWindow(self):
-        self.mainWindow.show()
+        self.mainWindow.showMaximized()
 
     def onExit(self):
         ensure(self.exitApp())

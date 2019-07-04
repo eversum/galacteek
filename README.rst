@@ -14,19 +14,25 @@ Platforms supported
 
 - Linux (main target)
 - FreeBSD (or any BSD OS, as long as you have PyCryptodome)
-- MacOS (*experimental*)
+- MacOS
 
-If it works for you, great, but most likely it won't :)
 This started as an experiment with quamash_ and is WIP.
+
+Please prefer the ready-to-use images over a manual install
+if available on your platform, as they contain everything
+needed, including the latest go-ipfs_ binary.
 
 Installation
 ============
 
 If you use Linux or MacOS you can download a prebuilt image
-(an AppImage for Linux or a .dmg bundle for osx) from the releases_
+(an AppImage for Linux or a .dmg image for osx) from the releases_
 page.
 
-If you use any other system or want to install the package
+If you want to use QR codes on MacOS, don't forget to install
+zbar by running **brew install zbar** in a terminal.
+
+If you use any other system or want to install the software
 manually you can always install from PyPI.
 
 PyPI
@@ -74,9 +80,18 @@ libzbar0 package and install it, on MacOS install it with
 AppImage
 --------
 
-For Linux users (arch: *x86_64*), you can get an AppImage
+For Linux users (arch: *x86_64*), you can get an AppImage_
 from the releases_ page. The script used to build the image can be found
 `here <https://github.com/eversum/galacteek/blob/master/AppImage/galacteek-appimage-build>`_
+
+DMG (MacOS)
+-----------
+
+On MacOS the easiest is to download a DMG image from the releases_ page.
+
+After opening/mounting the DMG image, hold Control and right-click on the
+**galacteek** icon, and select **Open** and accept. You probably need to
+allow the system to install apps *from anywhere* in the security settings.
 
 Command-line usage
 ==================
@@ -244,3 +259,4 @@ from the ipfs-logo_ project's repository is included, unchanged.
 .. _releases: https://github.com/eversum/galacteek/releases
 .. _ENS: https://ens.domains/
 .. _in-web-browsers: https://github.com/ipfs/in-web-browsers
+.. _AppImage: https://appimage.org/

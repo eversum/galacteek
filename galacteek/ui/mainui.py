@@ -1110,9 +1110,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         event.ignore()
-        self.hide()
-        self.app.systemTrayMessage('galacteek', iMinimized())
-        super(MainWindow, self).closeEvent(event)
+        self.showMinimized()
 
     def toggleIpfsSearchWidget(self, forceshow=False):
         btnPos = self.ipfsSearchButton.mapToGlobal(QPoint(0, 0))
@@ -1121,7 +1119,7 @@ class MainWindow(QMainWindow):
             popupPoint = QPoint(btnPos.x() + 32, btnPos.y())
         elif self.toolbarMain.horizontal:
             popupPoint = QPoint(
-                btnPos.x() - self.ipfsSearchWidget.width() - 30,
+                btnPos.x() - self.ipfsSearchWidget.width() - 25,
                 btnPos.y() + 20)
 
         self.ipfsSearchWidget.move(popupPoint)
@@ -1130,11 +1128,9 @@ class MainWindow(QMainWindow):
             self.ipfsSearchButton.setChecked(True)
 
         if self.ipfsSearchButton.isChecked() or forceshow:
-            self.ipfsSearchButton.setIcon(self.ipfsSearchButton.iconActive)
             self.ipfsSearchWidget.show()
             self.ipfsSearchWidget.focus()
         else:
-            self.ipfsSearchButton.setIcon(self.ipfsSearchButton.iconNormal)
             self.ipfsSearchWidget.hide()
 
     def addHashmarksTab(self):

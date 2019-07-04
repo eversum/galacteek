@@ -18,9 +18,8 @@ script:
   - wget https://github.com/probonopd/uploadtool/raw/master/upload.sh
 
 after_success:
-  - if [ "$TRAVIS_OS_NAME" == "linux" ] && [ "$TRAVIS_BRANCH" == "master" ]; then
-        bash upload.sh Galacteek*.AppImage;
-    fi
-  - if [ "$TRAVIS_OS_NAME" == "osx" ] && [ "$TRAVIS_BRANCH" == "master" ]; then
-        bash upload.sh Galacteek*.dmg;
-    fi
+  - bash -xe travis/upload.sh
+
+branches:
+  except:
+    - /^(?i:continuous)$/

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+set -x
+set -e
+
 PIP=pip3
 PYTHONEX=python3
 
