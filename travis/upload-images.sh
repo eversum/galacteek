@@ -17,6 +17,7 @@ EOF
 export UPLOADTOOL_BODY
 
 if [ "$TRAVIS_OS_NAME" = "linux" ]; then
+	cd AppImage
 	bash upload.sh Galacteek*.AppImage
 fi
 
