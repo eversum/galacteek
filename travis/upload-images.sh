@@ -3,8 +3,7 @@
 set -x
 
 if [ "$TRAVIS_OS_NAME" = "linux" ]; then
-	cd AppImage
-	bash upload.sh Galacteek*.AppImage
+	bash upload.sh AppImage/Galacteek*.AppImage
 fi
 
 if [ "$TRAVIS_OS_NAME" = "osx" ]; then
