@@ -1,5 +1,4 @@
 from urllib.parse import quote
-from async_generator import async_generator, yield_
 
 from galacteek import log
 
@@ -19,6 +18,10 @@ class IPFSSearchResults:
     def hits(self):
         return self.results.get('hits', [])
 
+    @property
+    def hitsCount(self):
+        return len(self.hits)
+
     def findByHash(self, hashV):
         for hit in self.hits:
             hitHash = hit.get('hash', None)
@@ -30,7 +33,6 @@ emptyResults = IPFSSearchResults(0, {})
 
 
 async def searchPage(query, page, filters={}, sslverify=True):
-
     params = {
         'q': query,
         'page': page
@@ -69,21 +71,21 @@ async def getMetadata(cid, sslverify=True):
         return None
 
 
-@async_generator
-async def search(query, preloadPages=0, filters={}, sslverify=True):
-    page1Results = await getPageResults(query, 0, filters=filters,
+async def search(query, pageStart=0, preloadPages=0,
+                 filters={}, sslverify=True):
+    page1Results = await getPageResults(query, pageStart, filters=filters,
                                         sslverify=sslverify)
     if page1Results is None:
-        await yield_(emptyResults)
         return
 
-    await yield_(page1Results)
+    yield page1Results
     pageCount = page1Results.pageCount
 
     if preloadPages > 0:
-        pageLast = preloadPages if pageCount >= preloadPages else pageCount
+        pageLast = preloadPages + pageStart if \
+            pageCount >= preloadPages else pageCount
         for page in range(page1Results.page + 1, pageLast + 1):
             results = await getPageResults(query, page, filters=filters,
                                            sslverify=sslverify)
             if results:
-                await yield_(results)
+                yield results

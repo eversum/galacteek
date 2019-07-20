@@ -8,6 +8,7 @@ CFG_SECTION_IPFSCONN1 = 'ipfsconn1'
 CFG_SECTION_UI = 'ui'
 CFG_SECTION_HISTORY = 'history'
 CFG_SECTION_USERINFO = 'userinfo'
+CFG_SECTION_ETHEREUM = 'ethereum'
 CFG_SECTION_ORBITDB = 'orbitdb'
 
 CFG_KEY_ENABLED = 'enabled'
@@ -17,6 +18,7 @@ CFG_KEY_APIPORT = 'apiport'
 CFG_KEY_SWARMPORT = 'swarmport'
 CFG_KEY_HTTPGWPORT = 'httpgwport'
 CFG_KEY_HTTPGWWRITABLE = 'httpgwwritable'
+CFG_KEY_PUBSUB_ROUTER = 'pubsub_router'
 CFG_KEY_HOST = 'host'
 CFG_KEY_SWARMLOWWATER = 'swarm_lowwater'
 CFG_KEY_SWARMHIGHWATER = 'swarm_highwater'
@@ -54,6 +56,10 @@ CFG_KEY_MAINWINDOW_GEOMETRY = 'mainwindow_geometry'
 # OrbitDB
 CFG_KEY_CONNECTOR_LISTENPORT = 'connectorlistenport'
 
+# Ethereum
+CFG_KEY_PROVIDERTYPE = 'providertype'
+CFG_KEY_RPCURL = 'rpcurl'
+
 # for fast access
 S_HOMEURL = (CFG_SECTION_BROWSER, CFG_KEY_HOMEURL)
 S_GOTOHOME = (CFG_SECTION_BROWSER, CFG_KEY_GOTOHOME)
@@ -61,6 +67,9 @@ S_DOWNLOADS_PATH = (CFG_SECTION_BROWSER, CFG_KEY_DLPATH)
 
 # Default homepage
 HOME_DEFAULT = 'dweb:/ipfs/QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco/wiki/'  # noqa
+
+ROUTER_TYPE_FLOOD = 'floodsub'
+ROUTER_TYPE_GOSSIP = 'gossipsub'
 
 
 def setDefaultSettings(gApp):
@@ -75,6 +84,8 @@ def setDefaultSettings(gApp):
     sManager.setDefaultSetting(section, CFG_KEY_SWARMLOWWATER, 600)
     sManager.setDefaultSetting(section, CFG_KEY_STORAGEMAX, 50)
     sManager.setDefaultSetting(section, CFG_KEY_ROUTINGMODE, 'dht')
+    sManager.setDefaultSetting(section, CFG_KEY_PUBSUB_ROUTER,
+                               ROUTER_TYPE_FLOOD)
     sManager.setDefaultSetting(section, CFG_KEY_NICE, 20)
     sManager.setDefaultTrue(section, CFG_KEY_CORS)
     sManager.setDefaultTrue(section, CFG_KEY_ENABLED)
@@ -112,6 +123,12 @@ def setDefaultSettings(gApp):
 
     section = CFG_SECTION_ORBITDB
     sManager.setDefaultSetting(section, CFG_KEY_CONNECTOR_LISTENPORT, 3000)
+
+    section = CFG_SECTION_ETHEREUM
+    sManager.setDefaultFalse(section, CFG_KEY_ENABLED)
+    sManager.setDefaultSetting(section, CFG_KEY_PROVIDERTYPE, 'http')
+    sManager.setDefaultSetting(section, CFG_KEY_RPCURL,
+                               'http://localhost:7545')
 
     sManager.sync()
     return True
@@ -248,3 +265,15 @@ class SettingsManager(object):
     @property
     def urlHistoryEditTimeout(self):
         return self.getInt(CFG_SECTION_HISTORY, CFG_KEY_TIMEOUTURLEDIT)
+
+    @property
+    def ethereumEnabled(self):
+        return self.isTrue(CFG_SECTION_ETHEREUM, CFG_KEY_ENABLED)
+
+    @property
+    def ethereumProvType(self):
+        return self.isTrue(CFG_SECTION_ETHEREUM, CFG_KEY_PROVIDERTYPE)
+
+    @property
+    def ethereumRpcUrl(self):
+        return self.isTrue(CFG_SECTION_ETHEREUM, CFG_KEY_RPCURL)

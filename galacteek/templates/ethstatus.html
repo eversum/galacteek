@@ -1,0 +1,30 @@
+{% extends "layouts/web3.html" %}
+
+{% block body %}
+<script type="text/javascript">
+    new QWebChannel(qt.webChannelTransport, function (channel) {
+        window.galacteek = channel.objects.galacteek;
+        window.ether = channel.objects.ether;
+
+        window.ether.newBlock.connect(function(hash) {
+            blockElem = document.getElementById('lblockhash')
+            blockElem.innerHTML = hash
+        });
+
+        console.log(window.web3)
+    });
+</script>
+
+<div>
+    <p style='text-align: left'>
+        <span>
+            <a>
+                <img src="qrc:///share/icons/ethereum.png" width="32"/>
+            </a>
+        </span>
+    </p>
+    <p>
+            <span id='lblockhash'/>
+    </p>
+</div>
+{% endblock %}

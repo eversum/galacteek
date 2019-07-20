@@ -41,6 +41,7 @@ if [ -e $APPDIR ]; then
 else
     mkdir -p $APPDIR
     mkdir -p $APPDIR/usr/share/applications
+    mkdir -p $APPDIR/usr/share/licenses/galacteek
     mkdir -p $APPDIR/usr/share/metainfo
     mkdir -p $APPDIR/usr/share/icons/hicolor/512x512/apps
 fi
@@ -58,8 +59,10 @@ fi
 # Install the wheel from local dists
 
 echo "Installing wheel: $WHEEL"
-$PIP install --force-reinstall $WHEEL
+$PIP install $WHEEL
 
+cp ../{LICENSE,LICENSE.go-ipfs,LICENSE.Qt.GPLv3} \
+	$APPDIR/usr/share/licenses/galacteek
 cp ../galacteek.desktop $APPDIR/usr/share/applications
 cp ../galacteek.desktop $APPDIR
 cp ../galacteek.appdata.xml $APPDIR/usr/share/metainfo

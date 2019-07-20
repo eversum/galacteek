@@ -8,6 +8,8 @@ import sys
 import re
 from distutils.version import StrictVersion
 
+from PyQt5.QtCore import QProcess
+
 from galacteek import log
 from galacteek import ensure
 from galacteek import __version__
@@ -34,6 +36,9 @@ except ImportError:
     haveAiomonitor = False
 else:
     haveAiomonitor = True
+
+
+appStarter = None
 
 
 def whichIpfs():
@@ -75,6 +80,21 @@ async def fetchGoIpfsDist(app):
             app.mainWindow.statusMessage(text)
         except Exception as e:
             app.debug(str(e))
+
+
+class ApplicationStarter:
+    def __init__(self, args):
+        self.args = args
+
+    def start(self):
+        galacteekGui(self.args)
+
+    def startProcess(self, args):
+        p = QProcess()
+        p.setProgram(args[0])
+        if len(args) > 1:
+            p.setArguments(args[1:])
+        p.startDetached()
 
 
 def galacteekGui(args):
@@ -166,10 +186,12 @@ def galacteekGui(args):
                 loop.run_forever()
     else:
         with loop:
+            log.debug('Inside context manager')
             loop.run_forever()
 
 
 def start():
+    global appStarter
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--version', dest='version',
@@ -224,4 +246,5 @@ def start():
         print(__version__)
         sys.exit()
 
-    galacteekGui(args)
+    appStarter = ApplicationStarter(args)
+    appStarter.start()

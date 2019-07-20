@@ -29,7 +29,8 @@ class ResourceAnalyzer(QObject):
 
         if mHashMeta:
             # Already have metadata for this object
-            mimetype = MIMEType(mHashMeta.get('mimetype'))
+            typeStr = mHashMeta.get('mimetype')
+            mimetype = MIMEType(typeStr) if typeStr else None
             statInfo = mHashMeta.get('stat')
             return mimetype, statInfo
         else:

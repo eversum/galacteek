@@ -242,6 +242,9 @@ class WebView(IPFSWebView):
         self.webPage.linkHovered.connect(self.onLinkHovered)
         self.setPage(self.webPage)
 
+        actionVSource = self.pageAction(QWebEnginePage.ViewSource)
+        actionVSource.triggered.connect(self.onViewSource)
+
         self.browserTab = browserTab
 
         self.webSettings = self.settings()
@@ -253,6 +256,29 @@ class WebView(IPFSWebView):
             QWebEngineSettings.LocalContentCanAccessFileUrls, True)
         self.webSettings.setAttribute(
             QWebEngineSettings.LocalContentCanAccessRemoteUrls, True)
+
+    def createWindow(self, wintype):
+        log.debug('createWindow called, wintype: {}'.format(wintype))
+
+    def onViewSource(self):
+        def callback(html):
+            if not html:
+                return
+
+            if self.browserTab.currentIpfsResource:
+                tooltip = str(self.browserTab.currentIpfsResource)
+            else:
+                tooltip = self.page().url()
+
+            tab = GalacteekTab(self.app.mainWindow)
+            widget = PageSourceWidget(html, tab)
+            tab.addToLayout(widget)
+            self.app.mainWindow.registerTab(
+                tab, 'Page source',
+                current=True,
+                tooltip=tooltip)
+
+        self.page().toHtml(callback)
 
     def onJsMessage(self, level, message, lineNo, sourceId):
         self.browserTab.jsConsole.showMessage(level, message, lineNo, sourceId)
@@ -283,6 +309,11 @@ class WebView(IPFSWebView):
         url = contextMenuData.linkUrl()
         mediaType = contextMenuData.mediaType()
         mediaUrl = contextMenuData.mediaUrl()
+
+        if not url.toString() or not url.isValid():
+            menu = currentPage.createStandardContextMenu()
+            menu.exec(event.globalPos())
+            return
 
         ipfsPath = IPFSPath(url.toString())
 
@@ -440,9 +471,6 @@ class WebView(IPFSWebView):
     def downloadLink(self, menudata):
         url = menudata.linkUrl()
         self.page().download(url, None)
-
-    def createWindow(self, wtype):
-        pass
 
 
 class BrowserKeyFilter(QObject):

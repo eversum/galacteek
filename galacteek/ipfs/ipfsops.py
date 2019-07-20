@@ -382,7 +382,7 @@ class IPFSOperator(object):
         Use /api/vx/resolve to resolve pretty much anything
         """
         try:
-            resolved = await asyncio.wait_for(
+            resolved = await self.waitFor(
                 self.client.core.resolve(path, recursive=recursive),
                 timeout)
         except asyncio.TimeoutError:
@@ -397,7 +397,7 @@ class IPFSOperator(object):
 
     async def nameResolve(self, path, timeout=20, recursive=False):
         try:
-            resolved = await asyncio.wait_for(
+            resolved = await self.waitFor(
                 self.client.name.resolve(path, recursive=recursive),
                 timeout)
         except asyncio.TimeoutError:
@@ -526,14 +526,17 @@ class IPFSOperator(object):
 
     async def objStat(self, path, timeout=30):
         try:
-            stat = await asyncio.wait_for(self.client.object.stat(path),
-                                          timeout)
+            stat = await self.waitFor(self.client.object.stat(path),
+                                      timeout)
         except Exception:
             return None
         else:
             return stat
 
     async def objStatCtxUpdate(self, path, timeout=30):
+        exStat = self.objStatCtxGet(path)
+        if exStat:
+            return exStat
         try:
             self.ctx.objectStats[path] = await self.objStat(path,
                                                             timeout=timeout)
@@ -729,7 +732,7 @@ class IPFSOperator(object):
 
         peers = []
         try:
-            await asyncio.wait_for(
+            await self.waitFor(
                 self.findProviders(key, peers, True,
                                    numproviders), timeout)
         except asyncio.TimeoutError:

@@ -31,7 +31,11 @@
                 box-shadow: 0 8px 6px -6px black;
                 background-color: #e0e0d1;
                 padding: 5px;
-                margin: 8px;
+                margin-left: 12px;
+                margin-right: 64px;
+                margin-bottom: 8px;
+                margin-top: 8px;
+                border-radius: 4px;
             }
 
             .marks {
@@ -86,28 +90,15 @@
                 var x = document.getElementById(category + '_marks')
                 if (x.style.display === "none" || !(x.style.display)) {
                     x.style.display = "block";
-                    cat.style.border = "1px solid black";
-                    cat.style.margin = "12px";
+                    cat.setAttribute('style',
+                        'border: 1px solid black; margin-left: 24px; margin-right: 24px;');
                     cat.style.background = '#B7CDC2';
                 } else {
                     x.style.display = "none";
-                    cat.style.border = "none";
-                    cat.style.margin = "8px";
+                    cat.style.border = "1px solid grey";
+                    cat.setAttribute('style',
+                        'border: 0px; margin-left: 12px; margin-right: 64px;');
                     cat.style.background = '#e0e0d1';
-                }
-            }
-
-            function hideShowShared(category) {
-                var cat = document.getElementById('shared_' + category)
-                var x = document.getElementById('shared_' + category + '_marks')
-                if (x.style.display === "none" || !(x.style.display)) {
-                    x.style.display = "block";
-                    cat.style.border = "1px solid black";
-                    cat.style.margin = "10px";
-                } else {
-                    x.style.display = "none";
-                    cat.style.border = "none";
-                    cat.style.margin = "5px";
                 }
             }
 

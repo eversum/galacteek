@@ -1,7 +1,10 @@
 import asyncio
-import time
+import async_timeout
+import uuid
 
 from PyQt5.QtWebEngineWidgets import QWebEnginePage
+from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWebEngineWidgets import QWebEngineProfile
 from PyQt5.QtWebChannel import QWebChannel
 
 from PyQt5.QtCore import QObject
@@ -11,11 +14,12 @@ from PyQt5.QtCore import QUrl
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QRegularExpression
 
+from PyQt5.QtCore import QVariant
+
 from PyQt5.QtWidgets import QWidget
-from PyQt5.QtWidgets import QStackedWidget
-from PyQt5.QtWidgets import QStyle
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QToolButton
+from PyQt5.QtWidgets import QVBoxLayout
 
 from PyQt5.QtGui import QSyntaxHighlighter
 from PyQt5.QtGui import QTextCharFormat
@@ -28,11 +32,11 @@ from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs import ipfssearch
 from galacteek.dweb.render import renderTemplate
+from galacteek.core.analyzer import ResourceAnalyzer
 from galacteek import ensure
 from galacteek import log
 
 from . import ui_ipfssearchinput
-from . import ui_ipfssearchw
 from .helpers import *
 from .hashmarks import *
 from .widgets import *
@@ -70,8 +74,6 @@ class IPFSSearchButton(QToolButton):
 
         self.iconNormal = getIcon('search-engine.png')
         self.iconActive = getIcon('search-engine-zoom.png')
-        self.setCheckable(True)
-        self.setAutoRaise(True)
 
     def enterEvent(self, ev):
         self.hovered.emit()
@@ -143,8 +145,12 @@ class NoResultsPage(QWebEnginePage):
 class BaseSearchPage(QWebEnginePage):
     pageRendered = pyqtSignal(str)
 
-    def __init__(self, parent):
-        super(BaseSearchPage, self).__init__(parent)
+    def __init__(self, parent, profile=None):
+        if profile:
+            super(BaseSearchPage, self).__init__(profile, parent)
+        else:
+            super(BaseSearchPage, self).__init__(parent)
+
         self.pageRendered.connect(self.onPageRendered)
 
     def onPageRendered(self, html):
@@ -163,36 +169,90 @@ class SearchInProgressPage(BaseSearchPage):
             self.pageRendered.emit(html)
 
 
+class SearchResultsPageFactory(QObject):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.app = QApplication.instance()
+        self.resultsTemplate = self.app.getJinjaTemplate('ipfssearch.html')
+
+        self.webProfile = QWebEngineProfile()
+        self.installScripts()
+
+        self._pages = {}
+        self.genPages(3)
+
+    def installScripts(self):
+        self.webScripts = self.webProfile.scripts()
+
+        exSc = self.webScripts.findScript('ipfs-http-client')
+        if self.app.settingsMgr.jsIpfsApi is True and exSc.isNull():
+            for script in self.app.scriptsIpfs:
+                self.webScripts.insert(script)
+
+    def genPages(self, count):
+        [self.makePage() for i in range(0, count)]
+
+    def getPage(self):
+        for uid, data in self._pages.items():
+            page = data['page']
+            if not page.used:
+                page.used = True
+                self.app.loop.call_soon(self.genPages, 2)
+                return page, data['handler'], data['channel']
+
+    def makePage(self):
+        uid = str(uuid.uuid4())
+        handler = IPFSSearchHandler(self)
+        channel = QWebChannel()
+
+        self._pages[uid] = {
+            'channel': channel,
+            'page': None,
+            'handler': handler
+        }
+
+        channel.registerObject('ipfssearch', handler)
+
+        resultsPage = SearchResultsPage(
+            self.webProfile,
+            handler,
+            self.resultsTemplate,
+            None,
+            self.app.getIpfsConnectionParams(),
+            parent=self,
+            webchannel=self._pages[uid]['channel']
+        )
+
+        self._pages[uid]['page'] = resultsPage
+        return resultsPage
+
+
 class SearchResultsPage(BaseSearchPage):
     def __init__(
             self,
+            profile,
             handler,
             tmplMain,
             tmplHits,
             ipfsConnParams,
             webchannel=None,
             parent=None):
-        super(SearchResultsPage, self).__init__(parent)
+        super(SearchResultsPage, self).__init__(parent, profile=profile)
+
+        self.used = False
 
         if webchannel:
             self.setWebChannel(webchannel)
 
         self.app = QApplication.instance()
+
+        self.url = QUrl('qrc:/')
         self.handler = handler
         self.template = tmplMain
         self.templateHits = tmplHits
         self.ipfsConnParams = ipfsConnParams
         self.noStatTimeout = 12
-        self.installScripts()
         ensure(self.render())
-
-    def installScripts(self):
-        self.webScripts = self.profile().scripts()
-
-        exSc = self.webScripts.findScript('ipfs-http-client')
-        if self.app.settingsMgr.jsIpfsApi is True and exSc.isNull():
-            for script in self.app.scriptsIpfs:
-                self.webScripts.insert(script)
 
     def javaScriptConsoleMessage(self, level, message, lineNumber, sourceId):
         log.info(
@@ -203,102 +263,82 @@ class SearchResultsPage(BaseSearchPage):
                 message))
 
     async def render(self):
-        html = await renderTemplate(self.template)
-        if html:
-            self.pageRendered.emit(html)
-
-    async def renderHits(self, pageNo, pageCount, results):
-        """
-        This used to be a simple function and not a coroutine
-        but now that we use jinja in async mode ..
-
-        Ensuring the fetchObjectStat task could be a source of
-        problems here, this should be changed
-        """
-        ctxHits = []
-
-        for hit in results.hits:
-            hitHash = hit.get('hash', None)
-            mimeType = hit.get('mimetype', None)
-
-            if hitHash is None or not cidValid(hitHash):
-                continue
-
-            path = joinIpfs(hitHash)
-            sizeFormatted = sizeFormat(hit.get('size', 0))
-
-            ctxHits.append({
-                'hash': hitHash,
-                'path': path,
-                'mimetype': mimeType if mimeType else '',
-                'title': hit.get('title', iUnknown()),
-                'size': hit.get('size', iUnknown()),
-                'sizeformatted': sizeFormatted,
-                'description': hit.get('description', None),
-                'type': hit.get('type', iUnknown()),
-                'first-seen': hit.get('first-seen', iUnknown())
-            })
-
-            ensure(self.fetchObjectStat(hitHash, path))
-
-        return await self.templateHits.render_async(
-            hits=ctxHits,
-            resultsCount=results.resultsCount,
-            pageCount=results.pageCount,
-            showPrevious=pageNo > 1,
-            showNext=pageNo < pageCount,
-            ipfsConnParams=self.ipfsConnParams
-        )
-
-    @ipfsOp
-    async def fetchObjectStat(self, op, cid, path):
-        def statCallback(f):
-            try:
-                result = f.result()
-            except BaseException as err:
-                log.debug('Exception on stat', exc_info=err)
-                return
-            if isinstance(result, dict):
-                self.handler.objectStatAvailable.emit(cid, result)
-            else:
-                self.handler.objectStatUnavailable.emit(cid)
-
-        if path not in op.ctx.objectStats:
-            f = ensure(op.objStatCtxUpdate(path, timeout=self.noStatTimeout))
-            f.add_done_callback(statCallback)
-        else:
-            stat = op.ctx.objectStats.get(path)
-            if stat is None:
-                self.handler.objectStatUnavailable.emit(cid)
+        html = await renderTemplate(self.template,
+                                    ipfsConnParams=self.ipfsConnParams)
+        self.setHtml(html, baseUrl=QUrl('qrc:/'))
 
 
 class IPFSSearchHandler(QObject):
     ready = pyqtSignal()
 
     resultsReceived = pyqtSignal(ipfssearch.IPFSSearchResults, bool)
-    resultsReadyDom = pyqtSignal(str)
+
+    resultReady = pyqtSignal(str, QVariant)
 
     objectReady = pyqtSignal(str)
-    objectStatAvailable = pyqtSignal(str, dict)
+    objectStatAvailable = pyqtSignal(str, dict, dict)
     objectStatUnavailable = pyqtSignal(str)
 
     filtersChanged = pyqtSignal()
+    clear = pyqtSignal()
+    resetForm = pyqtSignal()
+    vPageChanged = pyqtSignal(int)
+    vPageStatus = pyqtSignal(int, int)
+    searchTimeout = pyqtSignal(int)
+    searchError = pyqtSignal()
+    searchStarted = pyqtSignal(str)
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.searchW = parent
-        self.currentResults = None
-        self.uiCtrl = self.searchW.ui
-        self.resultsReceived.connect(self.onResultsRx)
+
         self.app = QApplication.instance()
-        self._reset()
+        self.analyzer = ResourceAnalyzer(self)
+        self.noStatTimeout = 8
+
+        self.vPageCurrent = 0
+        self.pagesPerVpage = 2
+        self.pageCount = 0
+        self.searchQuery = ''
+
+        self.filters = {}
+        self._tasks = []
+        self._taskSearch = None
+        self._cResults = []
+
+    @property
+    def vPageCurrent(self):
+        return self._vPageCurrent
+
+    @vPageCurrent.setter
+    def vPageCurrent(self, page):
+        self._vPageCurrent = page
+        self.vPageChanged.emit(self.vPageCurrent)
+
+    def setSearchWidget(self, widget):
+        self.searchW = widget
 
     def reload(self):
+        self.vPageCurrent = 0
         self.filtersChanged.emit()
 
-    def _reset(self):
-        self.pages = {}
-        self.pageCount = 0
+    def init(self):
+        self.vPageCurrent = 0
+
+    def formReset(self):
+        self.resetForm.emit()
+
+    def cleanup(self):
+        self._cancelTasks()
+        if self._taskSearch:
+            self._taskSearch.cancel()
+        self.clear.emit()
+        self._cResults = []
+
+    def _cancelTasks(self):
+        for task in self._tasks:
+            task.cancel()
+
+        self._tasks = []
 
     @pyqtSlot(str)
     def fetchObject(self, path):
@@ -315,11 +355,18 @@ class IPFSSearchHandler(QObject):
 
     @pyqtSlot()
     def previousPage(self):
-        self.searchW.onPrevPage()
+        if self.vPageCurrent > 0:
+            self._cancelTasks()
+            self.clear.emit()
+            self.vPageCurrent -= 1
+            ensure(self.runSearch(self.searchQuery))
 
     @pyqtSlot()
     def nextPage(self):
-        self.searchW.onNextPage()
+        self._cancelTasks()
+        self.clear.emit()
+        self.vPageCurrent += 1
+        ensure(self.runSearch(self.searchQuery))
 
     @ipfsOp
     async def fetch(self, op, path):
@@ -343,14 +390,16 @@ class IPFSSearchHandler(QObject):
         if isinstance(path, str):
             self.app.setClipboardText(path)
 
+    def findByHash(self, mHash):
+        for results in self._cResults:
+            found = results.findByHash(mHash)
+            if found:
+                return found
+
     @pyqtSlot(str)
     def hashmark(self, path):
         hashV = stripIpfs(path)
-
-        if not self.currentResults:
-            return
-
-        hit = self.currentResults.findByHash(hashV)
+        hit = self.findByHash(hashV)
 
         if not hit:
             return
@@ -361,7 +410,7 @@ class IPFSSearchHandler(QObject):
         pinSingle = (type == 'file')
         pinRecursive = (type == 'directory')
 
-        addHashmark(self.searchW.app.marksLocal,
+        addHashmark(self.app.marksLocal,
                     path, title, description=descr,
                     pin=pinSingle, pinRecursive=pinRecursive)
 
@@ -369,77 +418,126 @@ class IPFSSearchHandler(QObject):
     def explore(self, path):
         hashV = stripIpfs(path)
         if hashV:
-            self.searchW.app.mainWindow.explore(hashV)
+            self.app.mainWindow.explore(hashV)
 
-    @pyqtSlot()
-    def search(self):
-        ensure(self.runSearch(self.uiCtrl.searchQuery.text()))
+    @pyqtSlot(str, str)
+    def search(self, searchQuery, cType):
+        self.cleanup()
+        self.searchQuery = searchQuery
+        self.searchStarted.emit(self.searchQuery)
+        self.filters = self.getFilters(cType)
+        self._taskSearch = ensure(self.runSearch(searchQuery))
 
-    async def runSearch(self, searchQuery):
-        self.searchW.loading()
+    def getFilters(self, cTypeS):
+        filters = {}
 
-        async for sr in ipfssearch.search(searchQuery, preloadPages=0,
-                                          filters=self.searchW.getFilters(),
-                                          sslverify=self.app.sslverify):
-            await asyncio.sleep(0)
-            pageCount = sr.pageCount
+        cType = cTypeS.lower()
 
-            if pageCount == 0:
-                self.searchW.noResults()
-                break
+        if cType == 'images':
+            filters['metadata.Content-Type'] = 'image*'
+        elif cType == 'videos':
+            filters['metadata.Content-Type'] = 'video*'
+        elif cType == 'music':
+            filters['metadata.Content-Type'] = 'audio*'
+        elif cType == 'text':
+            filters['metadata.Content-Type'] = 'text*'
 
-            if sr.page == 0 and self.uiCtrl.comboPages.count() == 0:
-                resCount = sr.results.get('total', iUnknown())
-                maxScore = sr.results.get('max_score', iUnknown())
-                self.uiCtrl.labelInfo.setText(iResultsInfo(resCount, maxScore))
+        return filters
 
-                if pageCount > 256:
-                    pageCount = 256
+    def sendHit(self, hit):
+        hitHash = hit.get('hash', None)
+        mimeType = hit.get('mimetype', None)
 
-                self.pageCount = pageCount
+        if hitHash is None or not cidValid(hitHash):
+            return
 
-                for pageNum in range(1, pageCount + 1):
-                    self.uiCtrl.comboPages.insertItem(
-                        pageNum, 'Page {}'.format(pageNum))
+        path = joinIpfs(hitHash)
+        sizeFormatted = sizeFormat(hit.get('size', 0))
 
-            self.resultsReceived.emit(sr, False)
-
-    async def runSearchPage(self, searchQuery, page, display=False):
-        sr = await ipfssearch.getPageResults(searchQuery, page,
-                                             filters=self.searchW.getFilters(),
-                                             sslverify=self.app.sslverify)
-        if sr:
-            self.resultsReceived.emit(sr, display)
-
-    def onResultsRx(self, sr, display):
-        self.pages[sr.page] = {
-            'results': sr,
-            'time': int(time.time()),
-            'page': self.searchW.resultsPage
+        pHit = {
+            'hash': hitHash,
+            'path': path,
+            'mimetype': mimeType if mimeType else '',
+            'title': hit.get('title', iUnknown()),
+            'size': hit.get('size', iUnknown()),
+            'sizeformatted': sizeFormatted,
+            'description': hit.get('description', None),
+            'type': hit.get('type', iUnknown()),
+            'first-seen': hit.get('first-seen', iUnknown())
         }
 
-        self.currentResults = sr
-        self.searchW.loadPage(sr.page)
-        self.searchW.enableCombo()
+        self.resultReady.emit(hitHash, QVariant(pHit))
 
-    def getPageData(self, page):
-        return self.pages.get(page, None)
+    async def fetchObjectStat(self, ipfsop, hit):
+        cid = hit['hash']
+        path = joinIpfs(cid)
 
-    def getPageWidget(self, page):
-        pageData = self.getPageData(page)
-        if pageData:
-            return pageData.get('page', None)
+        stat = await ipfsop.objStatCtxUpdate(path, timeout=self.noStatTimeout)
+        if stat:
+            self.objectStatAvailable.emit(cid, stat, hit)
+
+    @ipfsOp
+    async def runSearch(self, ipfsop, searchQuery, timeout=20):
+        pageStart = self.vPageCurrent * self.pagesPerVpage
+        pageCount = 0
+        gotResults = False
+        statusEmitted = False
+
+        try:
+            with async_timeout.timeout(timeout):
+                async for sr in ipfssearch.search(
+                        searchQuery,
+                        pageStart=pageStart,
+                        preloadPages=self.pagesPerVpage,
+                        filters=self.filters,
+                        sslverify=self.app.sslverify):
+                    gotResults = True
+
+                    await asyncio.sleep(0)
+                    pageCount = sr.pageCount
+
+                    if not isinstance(pageCount, int) or pageCount <= 0:
+                        break
+
+                    vpCount = pageCount / self.pagesPerVpage
+
+                    if not statusEmitted:
+                        self.vPageStatus.emit(self.vPageCurrent + 1,
+                                              vpCount if vpCount > 0 else 1)
+                        statusEmitted = True
+
+                    self._cResults.append(sr)
+                    self.pageCount = pageCount
+
+                    for hit in sr.hits:
+                        self.sendHit(hit)
+
+                        await asyncio.sleep(0.2)
+
+                        self._tasks.append(
+                            ensure(self.fetchObjectStat(ipfsop, hit)))
+        except asyncio.TimeoutError:
+            self.searchTimeout.emit(timeout)
+        except asyncio.CancelledError:
+            self.searchTimeout.emit(timeout)
+        except Exception:
+            pass
+
+        if not gotResults:
+            self.searchError.emit()
 
 
-class IPFSSearchView(GalacteekTab):
+class IPFSSearchView(QWidget):
     resultsReceived = pyqtSignal(ipfssearch.IPFSSearchResults, bool)
+    titleNeedUpdate = pyqtSignal(str)
 
-    def __init__(self, searchQuery, *args, **kw):
-        super(IPFSSearchView, self).__init__(*args, **kw)
+    def __init__(self, searchQuery='', parent=None):
+        super(IPFSSearchView, self).__init__(parent)
+        self.setLayout(QVBoxLayout())
 
-        self.searchWidget = QWidget()
-        self.addToLayout(self.searchWidget)
+        self.tab = parent
 
+        self.app = QApplication.instance()
         self.setAttribute(Qt.WA_DeleteOnClose)
 
         # Templates
@@ -448,211 +546,34 @@ class IPFSSearchView(GalacteekTab):
         self.loadingTemplate = self.app.getJinjaTemplate(
             'ipfssearch-loading.html')
 
-        self.searchQuery = searchQuery
+        self.browser = QWebEngineView(parent=self)
+        self.layout().addWidget(self.browser)
 
-        self.ui = ui_ipfssearchw.Ui_IPFSSearchMain()
-        self.ui.setupUi(self.searchWidget)
-        self.ui.searchQuery.setText(self.searchQuery)
+        self.resultsPage, self.handler, self.channel = \
+            self.app.mainWindow.ipfsSearchPageFactory.getPage()
+        self.resultsPage.setParent(self)
 
-        self.stack = QStackedWidget()
-        self.channel = QWebChannel()
-        self.handler = IPFSSearchHandler(self)
-        self.channel.registerObject('ipfssearch', self.handler)
+        self.handler.searchStarted.connect(
+            lambda query: self.titleNeedUpdate.emit(query))
 
-        self.loadingPage = SearchInProgressPage(
-            self.loadingTemplate,
-            parent=self
-        )
+        self.browser.setPage(self.resultsPage)
+        self.browser.setFocus(Qt.OtherFocusReason)
 
-        self.resultsPage = SearchResultsPage(
-            self.handler,
-            self.resultsTemplate,
-            self.hitsTemplate,
-            self.app.getIpfsConnectionParams(),
-            parent=self,
-            webchannel=self.channel
-        )
+        self.handler.init()
 
-        self.ui.comboPages.activated.connect(self.onComboPages)
-        self.ui.prevPageButton.clicked.connect(self.onPrevPage)
-        self.ui.nextPageButton.clicked.connect(self.onNextPage)
-        self.ui.prevPageButton.setIcon(
-            self.style().standardIcon(QStyle.SP_MediaSkipBackward))
-        self.ui.nextPageButton.setIcon(
-            self.style().standardIcon(QStyle.SP_MediaSkipForward))
 
-        self.ui.itemTypeFilter.addItem('All')
-        self.ui.itemTypeFilter.addItem('Files')
-        self.ui.itemTypeFilter.addItem('Directories')
+class IPFSSearchTab(GalacteekTab):
+    def __init__(self, gWindow, query=None):
+        super(IPFSSearchTab, self).__init__(gWindow)
 
-        self.ui.contentTypeFilter.addItem('All')
-        self.ui.contentTypeFilter.addItem('Images')
-        self.ui.contentTypeFilter.addItem('Videos')
-        self.ui.contentTypeFilter.addItem('Text')
-        self.ui.contentTypeFilter.addItem('Music')
+        self.view = IPFSSearchView(query, parent=self)
+        self.view.titleNeedUpdate.connect(
+            lambda text: self.setTabName(iIpfsSearchText(text[0:12])))
+        self.addToLayout(self.view)
 
-        for i in range(20, 200, 10):
-            self.ui.resultsPerPage.addItem(str(i))
-
-        self.ui.resultsPerPage.setCurrentIndex(0)
-
-        self.lastSeenDays = 365
-
-        self.ui.lastSeenSlider.setTickInterval(1)
-        self.ui.lastSeenSlider.setMinimum(1)
-        self.ui.lastSeenSlider.setMaximum(365 * 7)
-        self.ui.lastSeenSlider.valueChanged.connect(self.onSliderChanged)
-        self.ui.lastSeenSlider.setValue(self.lastSeenDays)
-        self.ui.lastSeenSlider.sliderReleased.connect(self.onFiltersChanged)
-        self.setResultsPage()
-
-        # Rerender when the filters change
-        self.ui.filenameFilter.returnPressed.connect(self.onFiltersChanged)
-        self.ui.searchQuery.returnPressed.connect(self.onFiltersChanged)
-        self.ui.searchQuery.returnPressed.connect(self.onFiltersChanged)
-        self.ui.itemTypeFilter.currentTextChanged.connect(
-            self.onFiltersChanged)
-        self.ui.contentTypeFilter.currentTextChanged.connect(
-            self.onFiltersChanged)
-        self.ui.titleFilter.returnPressed.connect(self.onFiltersChanged)
-
-    @property
-    def currentPage(self):
-        return self.ui.comboPages.currentIndex()
-
-    @property
-    def resultsPerPage(self):
-        return int(self.ui.resultsPerPage.currentText())
-
-    def setResultsPage(self):
-        self.ui.browser.setPage(self.resultsPage)
-
-    def setLoadingPage(self):
-        self.ui.browser.setPage(self.loadingPage)
-
-    def onSliderChanged(self, value):
-        self.ui.lastSeenLabel.setText('{0} days'.format(str(value)))
-
-    def onFiltersChanged(self):
-        self.handler._reset()
-        self.ui.comboPages.setCurrentIndex(0)
-        self.lastSeenDays = self.ui.lastSeenSlider.value()
-        self.searchQuery = self.ui.searchQuery.text()
-        self.handler.reload()
-
-    def loading(self):
-        self.setLoadingPage()
-        self.ui.labelInfo.setText(iSearching())
-        self.ui.comboPages.clear()
-
-    def noResults(self):
-        self.addEmptyResultsPage()
-        self.enableNavArrows(False)
-        self.disableCombo()
-
-    def disableCombo(self):
-        self.ui.comboPages.setEnabled(False)
-
-    def enableCombo(self):
-        self.ui.comboPages.setEnabled(True)
-
-    def enableNavArrows(self, enable=True):
-        self.ui.prevPageButton.setEnabled(enable)
-        self.ui.nextPageButton.setEnabled(enable)
-
-    def onPageChanged(self, idx):
-        self.ui.prevPageButton.setEnabled(idx > 0)
-        self.ui.nextPageButton.setEnabled(self.handler.pageCount > idx + 1)
-
-    def onPrevPage(self):
-        cIdx = self.currentPage
-        self.loadPage(cIdx - 1)
-
-    def onNextPage(self):
-        cIdx = self.currentPage
-        self.loadPage(cIdx + 1)
-
-    def onComboPages(self, idx):
-        self.loadPage(idx)
-
-    def loadPage(self, pageNum):
-        self.disableCombo()
-        pageData = self.handler.getPageData(pageNum)
-
-        if not pageData:
-            ensure(self.handler.runSearchPage(self.searchQuery,
-                                              pageNum, True))
-        else:
-            self.displayPage(pageNum)
-            self.enableCombo()
-
-    def addEmptyResultsPage(self):
-        page = NoResultsPage(None, parent=self)
-        self.ui.browser.setPage(page)
-        self.ui.labelInfo.setText(iNoResults())
-
-    def addErrorPage(self):
-        pass
-
-    def fileFilter(self):
-        if self.ui.itemTypeFilter.currentIndex() == 1:
-            objType = 'file'
-        elif self.ui.itemTypeFilter.currentIndex() == 2:
-            objType = 'directory'
-        else:
-            objType = 'all'
-        return objType
-
-    def getFilters(self):
-        filters = {}
-
-        filenameF = self.ui.filenameFilter.text()
-        if len(filenameF) > 0:
-            filters['references.name'] = filenameF
-
-        titleF = self.ui.titleFilter.text()
-        if len(titleF) > 0:
-            filters['references.title'] = titleF
-
-        if self.lastSeenDays in range(0, 31):
-            filters['last-seen'] = '>now-{0}d'.format(self.lastSeenDays)
-        elif self.lastSeenDays >= 31:
-            filters['last-seen'] = '>now-{0}M'.format(
-                int(self.lastSeenDays / 30))
-
-        if self.fileFilter() == 'directory':
-            filters['_type'] = 'directory'
-        if self.fileFilter() == 'file':
-            filters['_type'] = 'file'
-
-        ctypeF = self.ui.contentTypeFilter.currentText()
-        if ctypeF == 'Images':
-            filters['metadata.Content-Type'] = 'image*'
-        if ctypeF == 'Videos':
-            filters['metadata.Content-Type'] = 'video*'
-        if ctypeF == 'Music':
-            filters['metadata.Content-Type'] = 'audio*'
-        if ctypeF == 'Text':
-            filters['metadata.Content-Type'] = 'text*'
-
-        return filters
-
-    def displayPage(self, page):
-        self.setResultsPage()
-        pageData = self.handler.getPageData(page)
-
-        def hitsRendered(future, page):
-            try:
-                rendered = future.result()
-            except Exception as err:
-                log.debug('Exception rendering hits: {}'.format(
-                    str(err)))
-            else:
-                self.ui.comboPages.setCurrentIndex(page)
-                self.handler.resultsReadyDom.emit(rendered)
-                self.onPageChanged(page)
-
-        if pageData:
-            ensure(self.resultsPage.renderHits(
-                page, self.handler.pageCount, pageData['results']),
-                futcallback=lambda future: hitsRendered(future, page))
+    def onClose(self):
+        self.view.handler.cleanup()
+        self.view.handler.formReset()
+        self.view.resultsPage.used = False
+        del self.view
+        return True

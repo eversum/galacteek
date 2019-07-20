@@ -155,9 +155,14 @@ def iPeers():
     return QCoreApplication.translate('GalacteekWindow', 'Peers')
 
 
-def iIpfsSearch(text):
+def iIpfsSearchText(text):
     return QCoreApplication.translate('GalacteekWindow',
                                       'Search: {0}').format(text)
+
+
+def iIpfsSearch():
+    return QCoreApplication.translate('GalacteekWindow',
+                                      'Search')
 
 
 def iNewProfile():
@@ -306,6 +311,14 @@ def iZoomIn():
 
 def iZoomOut():
     return QCoreApplication.translate('GalacteekWindow', 'Zoom out')
+
+
+def iQuit():
+    return QCoreApplication.translate('GalacteekWindow', 'Quit')
+
+
+def iRestart():
+    return QCoreApplication.translate('GalacteekWindow', 'Restart')
 
 
 def iClearHistory():

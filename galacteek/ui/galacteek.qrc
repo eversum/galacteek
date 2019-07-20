@@ -1,5 +1,8 @@
 <RCC>
   <qresource>
+    <file>../../share/icons/blockchain1.png</file>
+    <file>../../share/icons/blockchain2.png</file>
+    <file>../../share/js/web3.min.js</file>
     <file>../../share/static/docs/markdown-reference.html</file>
     <file>../../share/icons/blog.png</file>
     <file>../../share/icons/mimetypes/application-atom+xml.png</file>
@@ -17,6 +20,7 @@
     <file>../../share/icons/cubehouse.png</file>
     <file>../../share/icons/hotspot.png</file>
     <file>../../share/icons/distributed.png</file>
+    <file>../../share/icons/ethereum.png</file>
     <file>../../share/icons/stroke-code.png</file>
     <file>../../share/icons/atom.png</file>
     <file>../../share/icons/web-devel.png</file>

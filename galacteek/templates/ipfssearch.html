@@ -8,17 +8,72 @@
                 font: 11pt "Montserrat";
             }
 
-            .grayscale { 
-                -webkit-filter: grayscale(100%);
-                -moz-filter: grayscale(100%);
-                -ms-filter: grayscale(100%);
-                -o-filter: grayscale(100%);
-                filter: grayscale(100%);
-                filter: gray;
-              }
+            label {
+                  position: absolute;
+                  top: 36.66667px;
+                  color: rgba(255, 255, 255, 0.5);
+                  font: 400 36.66667px Roboto;
+                  cursor: text;
+                  transition: .25s ease;
+                }
+
+            form {
+                padding: 10px;
+            }
+
+            input {
+                 font: 14pt "Montserrat";
+            }
+
+            div#results {
+                margin-left: 20px;
+                margin-right: 20px;
+            }
+
+            input[type=text] {
+                 font: 14pt "Montserrat";
+                  background-color: #C3D7DF;
+                  background-image: url('qrc:///share/icons/ipfs-cube-64.png');
+                  background-position: 10px 10px; 
+                  background-size: 32px 32px; 
+                  background-repeat: no-repeat;
+                  padding-left: 40px;
+                  border: 1px solid #4a9ea1;
+                  border-radius: 4px;
+                  width: 42%;
+                  height: 50px;
+                  margin: 8px 0;
+                  padding-left: 50px;
+                  box-sizing: border-box;
+            }
+
+            input[type=text]:focus {
+                  background-color: lightblue;
+            }
+
+            input[type=button], input[type=submit], input[type=reset] {
+                  background-color: #C3D7DF;
+                  border: 1px solid #4a9ea1;
+                  padding: 8px 8px;
+                  text-decoration: none;
+                  margin: 4px 2px;
+                  cursor: pointer;
+            }
+
+            select {
+              padding: 4px 4px;
+              border: none;
+              border-radius: 4px;
+            }
+
             .grayout {
                 opacity: 0.6; /* Real browsers */
                 filter: alpha(opacity = 60); /* MSIE */
+            }
+
+            .container {
+                  display: grid;
+                  grid-template-columns: 3fr 1fr 1fr;
             }
 
             ul {
@@ -47,7 +102,7 @@
                 box-shadow: 0 8px 6px -6px black;
                 background-color: #e0e0d1;
                 padding: 8px;
-                margin: 8px;
+                margin: 12px;
                 border-radius: 4px;
             }
 
@@ -66,9 +121,75 @@
                 white-space: -o-pre-wrap;
                 word-wrap: break-word;
             }
+            .loader {
+                border: 16px solid #f3f3f3; /* Light grey */
+                border-top: 16px solid #3498db; /* Blue */
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                animation: spin 2s linear infinite;
+            }
+
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
         </style>
 
         <script type="text/javascript">
+            function renderHit(hit, div) {
+                markup = `
+        <p style="text-align: left">
+            <a style="margin-right: 15px" href="dweb:${hit.path}" onclick='event.preventDefault(); window.openIpfs("${hit.path}")' >${hit.title}</a>
+            <a href="#" onclick='event.preventDefault(); window.hashmark("${hit.path}")'><img src="qrc:///share/icons/star-navy.png" width="16" height="16"/></a>
+            <a href="#" onclick='event.preventDefault(); window.ipfssearch.pinObject("${hit.path }")'><img src="qrc:///share/icons/pin.png" width="16" height="16"/></a>
+            <a href="#" onclick='event.preventDefault(); window.ipfssearch.clipboardInput("${hit.path}")'><img src="qrc:///share/icons/clipboard.png" width="16" height="16"/></a>
+
+            `;
+
+                if (hit['type'] == 'directory') {
+                    markup += `
+                <a href="#" onclick='event.preventDefault(); window.exploreIpfs("${hit.path}")'><img src="qrc:///share/icons/folder-open-black.png" width="16" height="16"/></a>
+                `;
+                }
+
+                markup += `
+                <span style="float: right; width: 30%">
+                    Content type: <b>${ hit.mimetype }</b> Size: <b>${ hit.sizeformatted }</b>
+                </span>`;
+
+                markup += '</p>';
+
+                /* Description */
+                markup += `<div id="${hit.hash}_description" class="hitdescr">`;
+
+                if (hit['description']) {
+                    markup += `<p>${hit.description}</p>`;
+                } else {
+                    markup += `<p>No description available for this result</p>`;
+                }
+
+                markup += '</div>';
+
+                if (hit['mimetype'].startsWith('image')) {
+                    markup += `
+                <a href="#" onclick='event.preventDefault(); window.openIpfs("${hit.path}")'>
+                <img id="img" src="{{ ipfsConnParams.gatewayUrl }}/${hit.path}" width="20%"></img>
+                </a>`;
+                }
+
+                if (hit['mimetype'].startsWith('text')) {
+                    markup += `
+                <button onclick="previewFile('${hit.hash}');">Preview</button>
+                <div id="${hit.hash}_preview" class="textpreview">
+                    <pre id="${hit.hash}_text"></pre>
+                </div>
+                    `;
+                }
+
+                div.innerHTML = markup;
+            }
+
             function previewFile(hash) {
                 preview = document.getElementById(hash + "_preview")
                 raw = document.getElementById(hash + "_text")
@@ -104,32 +225,88 @@
                 window.galacteek = channel.objects.galacteek;
                 window.ipfssearch = channel.objects.ipfssearch;
 
-                channel.objects.ipfssearch.filtersChanged.connect(function() {
+                document.getElementById('searchquery').focus()
+
+                window.ipfssearch.filtersChanged.connect(function() {
+                    document.getElementById('results').innerHTML = ''
                     channel.objects.ipfssearch.search()
                 })
 
-                channel.objects.ipfssearch.resultsReadyDom.connect(function(results) {
+                window.ipfssearch.resultReady.connect(function(cid, hit) {
                     var resDiv = document.getElementById('results')
-                    resDiv.innerHTML = results
+                    var elem = document.createElement("div", cid);
+                    elem.setAttribute('id', cid);
+                    elem.setAttribute('class', 'grayout');
+                    elem.setAttribute('disabled', 'true');
+                    elem.style.display = 'none';
+                    renderHit(hit, elem);
+                    resDiv.appendChild(elem);
                 });
 
-                window.ipfssearch.objectStatAvailable.connect(function(cid, stat) {
-                    var element = document.getElementById(cid)
-                });
-
-                window.ipfssearch.objectStatUnavailable.connect(function(cid) {
-                    var element = document.getElementById(cid)
-
-                    if (element) {
-                        element.setAttribute("class", "unavailable")
-                        var fields = element.getElementsByTagName('*')
-                        for(var i = 0; i < fields.length; i++) {
-                            fields[i].disabled = true
-                        }
+                window.ipfssearch.clear.connect(function() {
+                    var div = document.getElementById('results')
+                    while(div.firstChild){
+                        div.removeChild(div.firstChild);
                     }
                 })
 
-                window.ipfssearch.search()
+                window.ipfssearch.objectStatAvailable.connect(function(cid, stat, hit) {
+                    var element = document.getElementById(cid)
+                    if (element) {
+                        element.style.display = 'block'
+                        element.setAttribute('class', 'hit')
+                    }
+                    document.getElementById('controls_b').style.display = 'flex'
+                });
+
+                window.ipfssearch.searchTimeout.connect(function(timeout) {
+                    document.getElementById('loading').style.display = 'none'
+                })
+
+                window.ipfssearch.searchError.connect(function() {
+                    document.getElementById('loading').style.display = 'none'
+                })
+
+                window.ipfssearch.resetForm.connect(function() {
+                    document.getElementById('searchquery').value = ''
+                    document.getElementById('contenttype').value = 'all'
+                    document.getElementById('controls').style.display = 'none'
+                    document.getElementById('controls_b').style.display = 'none'
+                    document.getElementById('loading').style.display = 'none'
+                    document.getElementById('searchquery').focus()
+                })
+
+                window.ipfssearch.vPageStatus.connect(function(vPageCur, vPageLast) {
+                    var ctrl = document.getElementById('controls')
+                    var ctrlb = document.getElementById('controls_b')
+                    var prev = document.getElementById('pageprev')
+                    var prevb = document.getElementById('pageprev_b')
+                    var next = document.getElementById('pagenext')
+                    var nextb = document.getElementById('pagenext_b')
+                    var pageinfo = document.getElementById('pageinfo')
+
+                    pageinfo.innerHTML = `Page ${vPageCur} / ${vPageLast}`
+                    pageinfo.style.display = 'block'
+
+                    ctrl.style.display = 'flex'
+
+                    document.getElementById('loading').style.display = 'none'
+
+                    if (vPageCur == 1) {
+                        prev.style.display = 'none'
+                        prevb.style.display = 'none'
+                    } else {
+                        prev.style.display = 'block'
+                        prevb.style.display = 'block'
+                    }
+                    if (vPageCur < vPageLast) {
+                        next.style.display = 'block'
+                        nextb.style.display = 'block'
+                    } else {
+                        next.style.display = 'none'
+                        nextb.style.display = 'none'
+                    }
+                })
             })
 
             window.openIpfs = function (path) {
@@ -143,21 +320,66 @@
             window.exploreIpfs = function (path) {
                 window.ipfssearch.explore(path);
             }
+
+            window.runSearch = function () {
+                document.getElementById('controls').style.display = 'none'
+                document.getElementById('controls_b').style.display = 'none'
+                query = document.getElementById('searchquery').value
+                type = document.getElementById('contenttype').value
+
+                document.getElementById('loading').style.display = 'block'
+
+                window.ipfssearch.search(query, type)
+            }
+
+            window.previousPage = function () {
+                document.getElementById('controls_b').style.display = 'none'
+                document.getElementById('controls').style.display = 'none'
+                document.getElementById('loading').style.display = 'block'
+                window.ipfssearch.previousPage()
+            }
+
+            window.nextPage = function () {
+                document.getElementById('controls_b').style.display = 'none'
+                document.getElementById('controls').style.display = 'none'
+                document.getElementById('loading').style.display = 'block'
+                window.ipfssearch.nextPage()
+            }
         </script>
-
-
     </head>
     <body>
+        <div width="100%" class="container">
+            <div style="float: left; width='40%'">
+                <form onsubmit="window.runSearch();">
+                    <input type="text" name="query" id="searchquery" width="300"/>
+                    <select name="contenttype" id="contenttype">
+                      <option value="all">All</option>
+                      <option value="images">Images</option>
+                      <option value="music">Music</option>
+                      <option value="videos">Videos</option>
+                      <option value="text">Text</option>
+                    </select>
+                    <input type="submit" name="searchbtn" value="Search" width="300"/>
+                </form>
+            </div>
+            <div id="loading" class="loader" style="float: right; display: none;">
+            </div>
+        </div>
+
+        <br style="clear: left;"/>
+
+        <div width="100%" id="controls" style="display: none">
+            <a style="margin-right: 10px" href="#" id="pageprev" onclick="window.previousPage();">Previous page</a>
+            <span id="pageinfo"></span>
+            <a style="margin-left: 10px" href="#" id="pagenext" onclick="window.nextPage();">Next page</a>
+        </div>
+
         <div id="results">
         </div>
 
-        <br/>
-
-        <div align="right">
-            <p>
-                <img src="qrc:///share/icons/ipfs-search.png"></img>
-                Powered by the <a title='ipfs-search.com' href="https://ipfs-search.com"><b>ipfs-search.com</b></a> search engine
-            </p>
+        <div width="100%" id="controls_b" style="display: none">
+            <a style="margin-right: 10px" href="#" id="pageprev_b" onclick="window.previousPage();">Previous page</a>
+            <a style="margin-left: 10px" href="#" id="pagenext_b" onclick="window.nextPage();">Next page</a>
         </div>
     </body>
 </html>

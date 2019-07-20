@@ -58,6 +58,9 @@ class ChatRoomWidget(GalacteekTab):
 
     def onSendMessage(self):
         messageText = self.ui.message.text()
+        if not messageText:
+            return
+
         self.ui.message.clear()
         ensure(self.sendMessage(messageText))
 

@@ -5,6 +5,7 @@ set -e
 
 PIP=pip3
 PYTHONEX=python3
+SOLIDITY_VERSION=0.5.0
 
 mkdir -p $HOME/bin
 
@@ -35,6 +36,11 @@ source venvg/bin/activate
 
 $PIP install -r requirements.txt
 $PIP install -r requirements-dev.txt
+
+if [ "$TRAVIS_OS_NAME" = "osx" ]; then
+	wget -O $HOME/bin/solc \
+		"https://github.com/ethereum/solidity/releases/download/v0.5.10/solc-static-linux"
+fi
 
 $PYTHONEX setup.py build install
 $PYTHONEX setup.py sdist bdist_wheel

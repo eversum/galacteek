@@ -14,7 +14,7 @@ whoisBaseUrl = URL.build(host=whoisApiHost,
                          scheme='https')
 
 
-async def ensContentHash(domain, sslverify=True, timeout=5):
+async def ensContentHash(domain, sslverify=True, timeout=8):
     """
     Resolve the content hash of an ENS domain
 
@@ -43,7 +43,7 @@ async def ensContentHash(domain, sslverify=True, timeout=5):
         return None
 
 
-async def ensResolveAddr(domain, sslverify=True, timeout=5):
+async def ensResolveAddr(domain, sslverify=True, timeout=8):
     """
     Resolve the address of an ENS domain
     """

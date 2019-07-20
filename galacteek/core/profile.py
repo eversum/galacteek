@@ -107,8 +107,7 @@ class UserInfos(CipheredIPFSJson):
 
     @property
     def usernameSet(self):
-        return self.parser.traverse(
-            'userinfo.uid') != self.parser.traverse('userinfo.username')
+        return self.uid != self.username
 
     @property
     def uid(self):

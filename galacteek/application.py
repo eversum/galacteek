@@ -12,6 +12,7 @@ import concurrent.futures
 import re
 import platform
 import async_timeout
+import time
 
 from quamash import QEventLoop
 
@@ -35,6 +36,7 @@ from galacteek import log
 from galacteek import logUser
 from galacteek import ensure
 from galacteek import pypicheck, GALACTEEK_NAME
+
 from galacteek.core.asynclib import asyncify
 from galacteek.core.ctx import IPFSContext
 from galacteek.core.multihashmetadb import IPFSObjectMetadataDatabase
@@ -53,6 +55,8 @@ from galacteek.ipfs.feeds import FeedFollower
 
 from galacteek.dweb.webscripts import ipfsClientScripts
 from galacteek.dweb.render import defaultJinjaEnv
+from galacteek.dweb.ethereum import EthereumController
+from galacteek.dweb.ethereum import EthereumConnectionParams
 
 from galacteek.ui import mainui
 from galacteek.ui import downloads
@@ -190,6 +194,7 @@ class GalacteekApplication(QApplication):
         self.setupTranslator()
         self.initSystemTray()
         self.initMisc()
+        self.initEthereum()
         self.createMainWindow()
 
         self.setStyle()
@@ -521,6 +526,13 @@ class GalacteekApplication(QApplication):
                 mgr.getSetting(section, CFG_KEY_HTTPGWPORT)
             )
 
+    def getEthParams(self):
+
+        mgr = self.settingsMgr
+        provType = mgr.getSetting(CFG_SECTION_ETHEREUM, CFG_KEY_PROVIDERTYPE)
+        rpcUrl = mgr.getSetting(CFG_SECTION_ETHEREUM, CFG_KEY_RPCURL)
+        return EthereumConnectionParams(rpcUrl, provType=provType)
+
     async def updateIpfsClient(self):
         connParams = self.getIpfsConnectionParams()
         client = aioipfs.AsyncIPFS(host=connParams.host,
@@ -704,6 +716,13 @@ class GalacteekApplication(QApplication):
         else:
             logUser.info(iIpfsDaemonInitProblem())
 
+    def initEthereum(self):
+        self.ethereum = EthereumController(self.getEthParams(),
+                                           loop=self.loop, parent=self,
+                                           executor=self.executor)
+        if self.settingsMgr.ethereumEnabled:
+            ensure(self.ethereum.start())
+
     def setupClipboard(self):
         self.appClipboard = self.clipboard()
         self.clipTracker = ClipboardTracker(self, self.appClipboard)
@@ -751,6 +770,17 @@ class GalacteekApplication(QApplication):
     def onShowWindow(self):
         self.mainWindow.showMaximized()
 
+    def restart(self):
+        ensure(self.restartApp())
+
+    async def restartApp(self):
+        from galacteek.guientrypoint import appStarter
+        pArgs = self.arguments()
+
+        await self.exitApp()
+        time.sleep(1)
+        appStarter.startProcess(pArgs)
+
     def onExit(self):
         ensure(self.exitApp())
 
@@ -764,12 +794,15 @@ class GalacteekApplication(QApplication):
             task.cancel()
 
         await self.stopIpfsServices()
+        await self.ethereum.stop()
 
         if self.ipfsd:
             self.ipfsd.stop()
 
         if self.ipfsCtx.inOrbit:
             await self.ipfsCtx.orbitConnector.stop()
+
+        self.mainWindow.close()
 
         if self.debug:
             self.showTasks()

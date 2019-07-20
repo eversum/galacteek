@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import QListView
 from PyQt5.QtWidgets import QTextEdit
 from PyQt5.QtWidgets import QHBoxLayout
 from PyQt5.QtWidgets import QSizePolicy
+from PyQt5.QtWidgets import QTextBrowser
 
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWebEngineWidgets import QWebEngineProfile
@@ -35,6 +36,11 @@ from PyQt5.QtCore import QVariant
 
 from PyQt5.QtGui import QImage
 from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QTextCursor
+
+from pygments import highlight
+from pygments.formatters import HtmlFormatter
+from pygments.lexers import get_lexer_by_name
 
 from galacteek.ipfs.stat import StatInfo
 from galacteek.ipfs.wrappers import ipfsOp
@@ -861,3 +867,25 @@ class AtomFeedsToolbarButton(QToolButton):
             self.subscribeResult.emit(url, 2)
         else:
             self.subscribeResult.emit(url, 3)
+
+
+class PageSourceWidget(QTextBrowser):
+    def __init__(self, sourceText, parent):
+        super(PageSourceWidget, self).__init__(parent)
+
+        self.setAcceptRichText(True)
+        self.setLineWrapMode(QTextEdit.WidgetWidth)
+
+        formatter = HtmlFormatter()
+        cssDefs = formatter.get_style_defs()
+
+        lexer = get_lexer_by_name('html')
+
+        try:
+            high = highlight(sourceText, lexer, formatter)
+            self.document().setDefaultStyleSheet(cssDefs)
+            self.document().setHtml(high)
+        except:
+            self.document().setPlainText('Could not load source')
+
+        self.moveCursor(QTextCursor.Start)

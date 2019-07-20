@@ -33,6 +33,8 @@ feedgen = ">=0.7.0"
 feedparser = ">=5.2.0"
 async-timeout = ">=3.0.1"
 aiosqlite = ">=0.10.0"
+"web3" = ">=4.9.2"
+py-solc-x = ">=0.4.0"
 
 [dev-packages]
 pytest = "*"

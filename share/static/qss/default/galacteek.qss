@@ -16,6 +16,11 @@
     font: 11pt "Montserrat";
 }
 
+QWidget#centralWidget {
+    padding: 0px;
+    margin: 0px;
+}
+
 QToolBar#toolbarMain {
     padding: 0px;
     margin: 0px;

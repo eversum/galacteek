@@ -28,6 +28,47 @@ def ipfsClientScripts(connParams):
     return scripts
 
 
+def ethereumClientScripts(connParams):
+    scripts = []
+    jsFile = QFile(':/share/js/web3.min.js')
+    if not jsFile.open(QFile.ReadOnly):
+        return None
+
+    scriptWeb3 = QWebEngineScript()
+    scriptWeb3.setName('web3.js')
+    scriptWeb3.setSourceCode(jsFile.readAll().data().decode('utf-8'))
+    scriptWeb3.setWorldId(QWebEngineScript.MainWorld)
+    scriptWeb3.setInjectionPoint(QWebEngineScript.DocumentCreation)
+    scriptWeb3.setRunsOnSubFrames(True)
+    scripts.append(scriptWeb3)
+
+    script = QWebEngineScript()
+    if connParams.provType == 'http':
+        script.setSourceCode(
+            '''
+            window.web3 = new Web3(
+                new Web3.providers.HttpProvider('{rpcurl}')
+            );
+            window.web3.eth.defaultAccount = web3.eth.accounts[0];
+            '''.format(rpcurl=connParams.rpcUrl))
+    elif connParams.provType == 'websocket':
+        script.setSourceCode(
+            '''
+            window.web3 = new Web3(
+                new Web3.providers.WebsocketProvider('{rpcurl}')
+            );
+            window.web3.eth.defaultAccount = web3.eth.accounts[0];
+            '''.format(rpcurl=connParams.rpcUrl))
+    else:
+        return None
+
+    script.setWorldId(QWebEngineScript.MainWorld)
+    script.setName('web3.injector')
+    script.setInjectionPoint(QWebEngineScript.DocumentReady)
+    scripts.append(script)
+    return scripts
+
+
 def orbitScripts(connParams):
     scripts = []
     jsFile = QFile(':/share/js/orbit-db/orbitdb.js')

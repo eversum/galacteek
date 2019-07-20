@@ -39,19 +39,29 @@ SCHEME_IPNS = 'ipns'
 def initializeSchemes():
     name = QWebEngineUrlScheme.schemeByName(SCHEME_DWEB.encode()).name()
     if name:
+        # initializeSchemes() already called ?
         return
 
     schemeDweb = QWebEngineUrlScheme(SCHEME_DWEB.encode())
-    schemeDweb.setFlags(QWebEngineUrlScheme.SecureScheme)
+    schemeDweb.setFlags(
+        QWebEngineUrlScheme.SecureScheme |
+        QWebEngineUrlScheme.ViewSourceAllowed
+    )
 
     schemeFs = QWebEngineUrlScheme(SCHEME_FS.encode())
     schemeFs.setFlags(QWebEngineUrlScheme.SecureScheme)
 
     schemeIpfs = QWebEngineUrlScheme(SCHEME_IPFS.encode())
-    schemeIpfs.setFlags(QWebEngineUrlScheme.SecureScheme)
+    schemeIpfs.setFlags(
+        QWebEngineUrlScheme.SecureScheme |
+        QWebEngineUrlScheme.ViewSourceAllowed
+    )
 
     schemeIpns = QWebEngineUrlScheme(SCHEME_IPNS.encode())
-    schemeIpns.setFlags(QWebEngineUrlScheme.SecureScheme)
+    schemeIpns.setFlags(
+        QWebEngineUrlScheme.SecureScheme |
+        QWebEngineUrlScheme.ViewSourceAllowed
+    )
 
     schemeEns = QWebEngineUrlScheme(SCHEME_ENS.encode())
     schemeEns.setFlags(QWebEngineUrlScheme.SecureScheme)

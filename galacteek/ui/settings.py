@@ -22,7 +22,6 @@ class SettingsDialog(QDialog):
             self.onChangeDownloadsPath)
 
         self.ui.language.insertItem(0, iLangEnglish())
-        self.ui.language.insertItem(1, iLangFrench())
 
         self.ui.swarmMaxConns.valueChanged.connect(self.onSwarmMaxConns)
 
@@ -130,6 +129,19 @@ class SettingsDialog(QDialog):
         self.setChecked(self.ui.hideHashes,
                         self.sManager.isTrue(section, CFG_KEY_HIDEHASHES))
 
+        # Eth
+        section = CFG_SECTION_ETHEREUM
+        ethEnabled = self.sManager.isTrue(section, CFG_KEY_ENABLED)
+
+        if ethEnabled:
+            self.ui.groupBoxEth.setEnabled(True)
+            self.ui.groupBoxEth.setChecked(True)
+
+        self.ui.ethProvType.setCurrentText(
+            self.sManager.getSetting(section, CFG_KEY_PROVIDERTYPE))
+        self.ui.ethRpcUrl.setText(
+            self.sManager.getSetting(section, CFG_KEY_RPCURL))
+
         lang = self.sManager.getSetting(section, CFG_KEY_LANG)
         if lang == 'en':
             self.ui.language.setCurrentText(iLangEnglish())
@@ -188,6 +200,17 @@ class SettingsDialog(QDialog):
         elif lang == iLangFrench():
             self.sManager.setSetting(section, CFG_KEY_LANG, 'fr')
         self.app.setupTranslator()
+
+        section = CFG_SECTION_ETHEREUM
+
+        if self.ui.groupBoxEth.isChecked():
+            self.sManager.setTrue(section, CFG_KEY_ENABLED)
+        else:
+            self.sManager.setFalse(section, CFG_KEY_ENABLED)
+
+        self.setS(section, CFG_KEY_PROVIDERTYPE,
+                  self.ui.ethProvType.currentText())
+        self.setS(section, CFG_KEY_RPCURL, self.ui.ethRpcUrl.text())
 
         self.app.urlHistory.historyConfigChanged.emit(
             self.sManager.urlHistoryEnabled)

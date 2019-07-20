@@ -13,10 +13,9 @@ from galacteek.ui.widgets import GalacteekTab
 from galacteek import ensure
 from galacteek import log
 from galacteek.dweb.render import renderTemplate
-from galacteek.dweb.webscripts import ipfsClientScripts, orbitScripts
-
-import asyncio
-import functools
+from galacteek.dweb.webscripts import ipfsClientScripts
+from galacteek.dweb.webscripts import orbitScripts
+from galacteek.dweb.webscripts import ethereumClientScripts
 
 
 class BaseHandler(QObject):
@@ -26,10 +25,6 @@ class BaseHandler(QObject):
     @pyqtSlot()
     def test(self):
         pass
-
-    def awrap(self, fn, *args, **kw):
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(functools.partial(fn, *args, **kw))
 
 
 class GalacteekHandler(QObject):
@@ -67,6 +62,7 @@ class BasePage(QWebEnginePage):
         self.app = QApplication.instance()
         self.template = template
         self._handlers = {}
+        self.pageCtx = {}
         self.channel = QWebChannel()
         self.url = url if url else QUrl('qrc:/')
         self.setUrl(self.url)
@@ -98,7 +94,8 @@ class BasePage(QWebEnginePage):
                 message))
 
     async def render(self):
-        self.setHtml(await renderTemplate(self.template), baseUrl=self.url)
+        self.setHtml(await renderTemplate(self.template, **self.pageCtx),
+                     baseUrl=self.url)
 
 
 class IPFSPage(BasePage):
@@ -106,8 +103,14 @@ class IPFSPage(BasePage):
         exSc = self.webScripts.findScript('ipfs-http-client')
         if exSc.isNull():
             scripts = self.app.scriptsIpfs
-            for script in scripts:
-                self.webScripts.insert(script)
+            [self.webScripts.insert(script) for script in scripts]
+
+        if self.app.settingsMgr.ethereumEnabled:
+            ethereumScripts = ethereumClientScripts(
+                self.app.getEthParams())
+            if ethereumScripts:
+                [self.webScripts.insert(script) for script in
+                 ethereumScripts]
 
 
 class OrbitPage(BasePage):
@@ -154,13 +157,19 @@ class HashmarksHandler(BaseHandler):
         return self.marksLocal.delete(path)
 
 
-class HashmarksPage(BasePage):
+class HashmarksPage(IPFSPage):
     def __init__(self, marksLocal, marksNetwork, parent=None):
         super(HashmarksPage, self).__init__('hashmarks.html', parent=parent)
 
         self.marksLocal = marksLocal
         self.marksNetwork = marksNetwork
-        self.marksLocal.changed.connect(self.onMarksChanged)
+        self.marksLocal.markAdded.connect(
+            lambda path, mark: self.onMarksChanged())
+        self.marksLocal.markDeleted.connect(
+            lambda path: self.onMarksChanged())
+        self.marksLocal.feedMarkAdded.connect(
+            lambda path, mark: self.onMarksChanged())
+
         self.hashmarks = HashmarksHandler(self.marksLocal,
                                           self.marksNetwork, self)
         self.register('hashmarks', self.hashmarks)

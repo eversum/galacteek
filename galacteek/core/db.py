@@ -83,8 +83,14 @@ class SqliteDatabase:
         COLLATE NOCASE
         ORDER BY atime desc'''
 
+        _urls = []
         async with self.db.execute(query.format(input=input)) as cursor:
             async for row in cursor:
+                if row['url'] in _urls:
+                    continue
+
+                _urls.append(row['url'])
+
                 await asyncio.sleep(0)
                 rows.append(row)
         return rows

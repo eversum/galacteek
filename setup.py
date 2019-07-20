@@ -6,8 +6,10 @@ import codecs
 import subprocess
 import glob
 import shutil
+import json
 
-from setuptools import setup, find_packages, Command
+from setuptools import setup
+from setuptools import Command
 from distutils.command.build import build
 
 PY_VER = sys.version_info
@@ -27,10 +29,12 @@ with codecs.open(os.path.join(os.path.abspath(os.path.dirname(
     except IndexError:
         raise RuntimeError('Unable to determine version.')
 
+
 def run(*args):
     p = subprocess.Popen(*args, stdout=subprocess.PIPE)
     stdout, err = p.communicate()
     return stdout
+
 
 class build_docs(Command):
     user_options = []
@@ -44,8 +48,62 @@ class build_docs(Command):
     def run(self):
         from sphinx import build_main
         build_main([sys.argv[0], '-b', 'html',
-            'galacteek/docs/manual/en',
-            'galacteek/docs/manual/en/html'])
+                    'galacteek/docs/manual/en',
+                    'galacteek/docs/manual/en/html'])
+
+
+class build_contracts(Command):
+    user_options = [
+        ("deploy=", None, "Deploy given contracts"),
+        ("contracts=", None, "Contracts list to build"),
+        ("rpcurl=", None, "Ethereum RPC url"),
+    ]
+
+    def initialize_options(self):
+        self.deploy = None
+        self.contracts = None
+        self.rpcurl = 'http://127.0.0.1:7545'
+
+    def finalize_options(self):
+        pass
+
+    def run(self):
+        from web3 import Web3
+        from galacteek.smartcontracts import listContracts
+        from galacteek.dweb.ethereum.contract import solCompileFile
+        from galacteek.dweb.ethereum.contract import contractDeploy
+
+        usrcontracts = [c for c in self.contracts.split(',')] if \
+            self.contracts else ['*']
+        cdeploy = [c for c in self.deploy.split(',')] if \
+            self.deploy else []
+
+        w3 = Web3(Web3.HTTPProvider(self.rpcurl))
+        w3.eth.defaultAccount = w3.eth.accounts[0]
+
+        for contract in listContracts():
+            print('>', contract, contract.dir)
+
+            if usrcontracts != ['*'] and contract not in usrcontracts:
+                continue
+
+            ifacePath = os.path.join(contract.dir, 'interface.json')
+
+            compiled = solCompileFile(contract.solSourcePath)
+            if not compiled:
+                continue
+
+            try:
+                contractId, iface = compiled.popitem()
+                with open(ifacePath, 'w+t') as ifacefd:
+                    ifacefd.write(json.dumps(iface, indent=4))
+            except Exception as err:
+                print(str(err))
+            else:
+                if contract.name in cdeploy:
+                    addr = contractDeploy(w3, iface)
+                    print(contractId, 'deployed at', addr)
+
 
 class build_ui(Command):
     user_options = [
@@ -61,11 +119,10 @@ class build_ui(Command):
     def run(self):
         uifiles = []
         uidir = 'galacteek/ui'
-        dstdir = uidir
 
         if self.uiforms:
-            uifiles = [ os.path.join(uidir, '{0}.ui'.format(form)) for form
-                    in self.uiforms.split(',') ]
+            uifiles = [os.path.join(uidir, '{0}.ui'.format(form)) for form
+                       in self.uiforms.split(',')]
         else:
             uifiles = glob.iglob('{}/*.ui'.format(uidir))
 
@@ -76,9 +133,7 @@ class build_ui(Command):
 
             run(['pyuic5', '--from-imports',
                 uifile,
-                '-o',
-                os.path.join(uidir, out)
-                ])
+                '-o', os.path.join(uidir, out)])
 
         run(['pylupdate5', '-verbose', 'galacteek.pro'])
 
@@ -91,18 +146,18 @@ class build_ui(Command):
         for lang in ['en', 'fr']:
             if lrelease:
                 run([lrelease,
-                    os.path.join(trdir, 'galacteek_{}.ts'.format(lang)),
-                    '-qm',
-                    os.path.join(trdir, 'galacteek_{}.qm'.format(lang)),
-                    ])
+                    os.path.join(trdir, 'galacteek_{}.ts'.format(lang)), '-qm',
+                    os.path.join(trdir, 'galacteek_{}.qm'.format(lang))])
             else:
                 print('lrelease was not found, cannot build translation files')
 
         run(['pyrcc5', os.path.join(uidir, 'galacteek.qrc'), '-o',
             os.path.join(uidir, 'galacteek_rc.py')])
 
+
 class _build(build):
     sub_commands = [('build_ui', None)] + build.sub_commands
+
 
 with open('README.rst', 'r') as fh:
     long_description = fh.read()
@@ -125,10 +180,15 @@ setup(
     author='David Ferlier',
     author_email='galacteek@protonmail.com',
     url='https://github.com/eversum/galacteek',
-    description='Distributed web browser',
+    description='Browser for the distributed web',
     long_description=long_description,
     include_package_data=True,
-    cmdclass={'build': _build, 'build_ui': build_ui, 'build_docs': build_docs},
+    cmdclass={
+        'build': _build,
+        'build_ui': build_ui,
+        'build_docs': build_docs,
+        'build_contracts': build_contracts
+    },
     packages=[
         'galacteek',
         'galacteek.docs',
@@ -144,6 +204,8 @@ setup(
         'galacteek.hashmarks.default',
         'galacteek.templates',
         'galacteek.dweb',
+        'galacteek.dweb.ethereum',
+        'galacteek.smartcontracts',
         'galacteek.ui',
         'galacteek.ui.orbital'
     ],
@@ -151,9 +213,9 @@ setup(
     dependency_links=deps_links,
     package_data={
         'galacteek': [
-             'docs/manual/en/html/*.html',
-             'docs/manual/en/html/_images/*',
-             'docs/manual/en/html/_static/*',
+            'docs/manual/en/html/*.html',
+            'docs/manual/en/html/_images/*',
+            'docs/manual/en/html/_static/*',
             'templates/*.html',
             'templates/usersite/*.html',
             'templates/usersite/assets/*',
