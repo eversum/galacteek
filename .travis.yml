@@ -28,8 +28,10 @@ deploy:
   provider: pypi
   distributions: "sdist bdist_wheel"
   skip_existing: true
+  skip_cleanup: true
   user: "cipres"
   password:
     secure: "RjXqP0S8s9wyxlTkqu76W1JwrmkaaHkEQXLPxkO1cFll46Mn3J8rzSsiey+L78vBVwy8V4Awlo7w4vyjQqsO9F0S1XZEyEMa8yUfUL26scr6L5SnWQH2j4fAAMzwi/zMo0C/gxseYUBLCtwoq93kmHg21fBnyECVSVZRMzgBS3CsFvTIcIRk+8RTZuO9JuDQ2iejLFUQZX2UpU+Y11p25toc2JWmZjroGhIfVtGr1crISORv14j7VFeHYYxHz/gn0QJYuSCqL0o3YzyfX8xrfVzJ2Iv9DhrtGEobfq5TDctr+oF933eG0SqhB0G3+9JY5C6qSwK5Uv7Gb3VLfKy4Ize8vT5M32iv1TT2jSnAe0bwnyT8SaC8VIqQkf8U/hrdLGJ6oVTW2ptoG68FdkLYZ2B07hbaQYAS0DU8sqqjRhlen67xO++wxCuwQq6wt4oOrtarDT9xROOaQbY8a08gYNgZQdpx4/VPAuhkRLEmkOiFg12G0DdyH1d6grtkhBHNJWgS1/BAGEDmEVl4xGhUeih0yvkDVFpUBMVDmZQGN/W3xv4gJVZRHKmlYB+g3mYMkJXChl4fSKz2ijLkb8bEmXMxKIe+jqt6P9bt1VAoqQJTeSPOeHrqrP2wKd8wtSnroZuKqlbQ9AQP6P9ZLfi4kTYYd5XUXDAPyF6H8SsvR1k="
   on:
-    branch: master
+    branch: release
+    condition: $RELEASE_ON_PYPI = yes
