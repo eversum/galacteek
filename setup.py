@@ -71,6 +71,7 @@ class build_contracts(Command):
         from web3 import Web3
         from galacteek.smartcontracts import listContracts
         from galacteek.dweb.ethereum.contract import solCompileFile
+        from galacteek.dweb.ethereum.contract import vyperCompileFile
         from galacteek.dweb.ethereum.contract import contractDeploy
 
         usrcontracts = [c for c in self.contracts.split(',')] if \
@@ -89,20 +90,30 @@ class build_contracts(Command):
 
             ifacePath = os.path.join(contract.dir, 'interface.json')
 
-            compiled = solCompileFile(contract.solSourcePath)
-            if not compiled:
+            if contract.type == 'vyper':
+                iface = vyperCompileFile(contract.sourcePath)
+                if not iface:
+                    print('Error compiling vyper contract')
+                    continue
+            elif contract.type == 'solidity':
+                compiled = solCompileFile(contract.sourcePath)
+                if not compiled:
+                    print('Error compiling solidity contract')
+                    continue
+                contractId, iface = compiled.popitem()
+            else:
                 continue
 
             try:
-                contractId, iface = compiled.popitem()
                 with open(ifacePath, 'w+t') as ifacefd:
                     ifacefd.write(json.dumps(iface, indent=4))
             except Exception as err:
                 print(str(err))
             else:
+                print(contract.name, 'compiled')
                 if contract.name in cdeploy:
                     addr = contractDeploy(w3, iface)
-                    print(contractId, 'deployed at', addr)
+                    print(contract.name, 'deployed at', addr)
 
 
 class build_ui(Command):

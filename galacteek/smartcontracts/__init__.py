@@ -12,10 +12,9 @@ def listContracts():
     try:
         listing = pkg_resources.resource_listdir(pkg, '')
         for fn in listing:
-            path = pkg_resources.resource_filename(pkg, fn)
-            mainSol = os.path.join(path, 'contract.sol')
-            if os.path.isdir(path) and os.path.isfile(mainSol):
-                yield LocalContract(fn, path, mainSol)
+            contract = getContractByName(fn)
+            if contract:
+                yield contract
     except Exception:
         pass
 
@@ -23,5 +22,9 @@ def listContracts():
 def getContractByName(name):
     path = pkg_resources.resource_filename(pkg, name)
     mainSol = os.path.join(path, 'contract.sol')
+    vyperPath = os.path.join(path, 'contract.vy')
+
     if os.path.isdir(path) and os.path.isfile(mainSol):
-        return LocalContract(name, path, mainSol)
+        return LocalContract(name, path, mainSol, ctype='solidity')
+    elif os.path.isdir(path) and os.path.isfile(vyperPath):
+        return LocalContract(name, path, vyperPath, ctype='vyper')

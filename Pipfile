@@ -33,14 +33,19 @@ feedgen = ">=0.7.0"
 feedparser = ">=5.2.0"
 async-timeout = ">=3.0.1"
 aiosqlite = ">=0.10.0"
-"web3" = ">=4.9.2"
-py-solc-x = ">=0.4.0"
+web3 = ">=4.9.2"
 
 [dev-packages]
 pytest = "*"
 pytest-qt = "*"
 pytest-asyncio = "*"
+pytest-xvfb = "*"
 pipenv-to-requirements = "*"
+flake8 = "*"
+wheel = "*"
+tox = "*"
+py-solc-x = ">=0.4.0"
+vyper = "==0.1.0b10"
 
 [requires]
 python_version = "3.6"

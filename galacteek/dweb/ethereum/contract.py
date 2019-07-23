@@ -1,12 +1,22 @@
 import os.path
 import json
 
-from solcx import compile_source
-
 from galacteek import log
 
 
+def vyperCompileFile(file_path, formats=['abi', 'bytecode']):
+    from vyper import compile_code
+    try:
+        with open(file_path, 'r') as f:
+            source = f.read()
+
+        return compile_code(source, formats)
+    except Exception as err:
+        log.debug(str(err))
+
+
 def solCompileFile(file_path):
+    from solcx import compile_source
     try:
         with open(file_path, 'r') as f:
             source = f.read()
@@ -18,9 +28,16 @@ def solCompileFile(file_path):
 
 def contractDeploy(w3, contract_interface):
     try:
+        if 'bytecode' in contract_interface:
+            binary = contract_interface['bytecode']
+        elif 'bin' in contract_interface:
+            binary = contract_interface['bin']
+        else:
+            raise ValueError('Invalid contract interface')
+
         contract = w3.eth.contract(
             abi=contract_interface['abi'],
-            bytecode=contract_interface['bin'])
+            bytecode=binary)
 
         txHash = contract.constructor().transact()
         address = w3.eth.getTransactionReceipt(txHash)['contractAddress']
@@ -31,11 +48,12 @@ def contractDeploy(w3, contract_interface):
 
 
 class LocalContract:
-    def __init__(self, name, rootDir, solPath):
+    def __init__(self, name, rootDir, cPath, ctype='solidity'):
         self.name = name
         self.rootDir = rootDir
-        self.solSourcePath = solPath
+        self.sourcePath = cPath
         self._deployedAddress = None
+        self._type = ctype
 
     def interface(self):
         fp = os.path.join(self.dir, 'interface.json')
@@ -44,12 +62,12 @@ class LocalContract:
                 return json.load(fd)
 
     @property
-    def dir(self):
-        return self.rootDir
+    def type(self):
+        return self._type
 
     @property
-    def sol(self):
-        return self.solSourcePath
+    def dir(self):
+        return self.rootDir
 
     @property
     def address(self):
@@ -60,7 +78,7 @@ class LocalContract:
         self._deployedAddress = addr
 
     def __repr__(self):
-        return 'Local contract: {}'.format(self.solSourcePath)
+        return 'Local contract: {}'.format(self.sourcePath)
 
 
 class ContractWrapper:

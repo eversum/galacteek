@@ -17,8 +17,6 @@ from galacteek import log
 from galacteek import logUser
 
 from .contract import ContractWrapper
-from .contract import solCompileFile
-from .contract import contractDeploy
 
 from requests.exceptions import ConnectionError
 
@@ -157,15 +155,3 @@ class EthereumController(QObject):
             )
             return ContractWrapper(self, contract)
         return await self._e(load, address, abi)
-
-    async def localContractDeploy(self, lContract):
-        compiled = await self._e(solCompileFile, lContract.sol)
-
-        if not compiled:
-            return
-
-        try:
-            contractId, contractIface = compiled.popitem()
-            return await self._e(contractDeploy, self.web3, contractIface)
-        except Exception as err:
-            log.debug('Contract deploy error: {}'.format(str(err)))
