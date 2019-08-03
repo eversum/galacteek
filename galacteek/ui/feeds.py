@@ -98,7 +98,7 @@ class AtomFeedsView(QWidget):
             menu.addAction('Remove feed',
                            functools.partial(self.removeFeed, item))
 
-        menu.exec(self.ui.treeFeeds.mapToGlobal(point))
+            menu.exec(self.ui.treeFeeds.mapToGlobal(point))
 
     def removeFeed(self, feedItem):
         ensure(self.app.sqliteDb.feeds.unfollow(

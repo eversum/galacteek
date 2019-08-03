@@ -1,6 +1,5 @@
 import functools
 import os.path
-import re
 
 from PyQt5.QtWidgets import QDialog
 from PyQt5.QtWidgets import QAction
@@ -268,7 +267,7 @@ class WebView(IPFSWebView):
             if self.browserTab.currentIpfsResource:
                 tooltip = str(self.browserTab.currentIpfsResource)
             else:
-                tooltip = self.page().url()
+                tooltip = self.page().url().toString()
 
             tab = GalacteekTab(self.app.mainWindow)
             widget = PageSourceWidget(html, tab)
@@ -1201,8 +1200,6 @@ class BrowserTab(GalacteekTab):
                 self.app.settingsMgr.allowHttpBrowsing is True:
             # Browse http urls if allowed
             self.enterUrl(url)
-        elif re.match('[a-zA-Z0-9.]+', inputStr):
-            self.enterUrl(QUrl('dweb:/ipns/{input}'.format(input=inputStr)))
         else:
             messageBox('Unknown URL type')
 

@@ -61,6 +61,11 @@ class DownloadsManager(QObject):
 
         downPath = downItem.path()
         name = os.path.basename(downPath)
+        autoDownloadFor = ['qwe_download']
+
+        if name in autoDownloadFor:
+            downItem.accept()
+            return
 
         if downPath.startswith(self.app.tempDirWeb):
             downItem.finished.connect(

@@ -228,6 +228,7 @@ setup(
             'docs/manual/en/html/_images/*',
             'docs/manual/en/html/_static/*',
             'templates/*.html',
+            'templates/layouts/*',
             'templates/usersite/*.html',
             'templates/usersite/assets/*',
             'templates/usersite/assets/css/*',

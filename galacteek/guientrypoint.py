@@ -91,7 +91,8 @@ class ApplicationStarter:
 
     def startProcess(self, args):
         p = QProcess()
-        p.setProgram(args[0])
+        prog = self.args.binaryname if self.args.binaryname else args[0]
+        p.setProgram(prog)
         if len(args) > 1:
             p.setArguments(args[1:])
         p.startDetached()
