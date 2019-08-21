@@ -211,6 +211,7 @@ setup(
         'galacteek.ipfs.pubsub',
         'galacteek.ipfs.pb',
         'galacteek.ipfs.p2pservices',
+        'galacteek.ipdapps',
         'galacteek.hashmarks',
         'galacteek.hashmarks.default',
         'galacteek.templates',
