@@ -216,7 +216,7 @@ def start():
         dest='monitor',
         help='Monitor application with aiomonitor')
     parser.add_argument(
-        '--appimage',
+        '--from-appimage',
         action='store_true',
         dest='appimage',
         help='Running from an AppImage')

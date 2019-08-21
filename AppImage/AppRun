@@ -11,7 +11,7 @@ fi
 if [ ! -z $APPIMAGE ] ; then
 	BINARY_PATH=$APPIMAGE
 	BINARY_NAME=$(basename "$APPIMAGE")
-	"${HERE}"/usr/bin/python "${HERE}"/usr/bin/galacteek --appimage \
+	"${HERE}"/usr/bin/python "${HERE}"/usr/bin/galacteek \
 		--binary-name="${BINARY_NAME}" --binary-path="${BINARY_PATH}" \
 		--no-ssl-verify --no-release-check "$@"
 fi
