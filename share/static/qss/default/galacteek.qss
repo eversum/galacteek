@@ -86,7 +86,7 @@ QToolBox::tab {
 }
 
 QLineEdit {
-    background-color: rgb(189, 236, 255);
+    background-color: #C3D7DF;
     selection-background-color: #4a9ea1;
     selection-color: black;
     border: 1px solid #244e66;
@@ -178,9 +178,9 @@ QToolButton#jsConsoleButton::checked {
     background-color: #eec146;
 }
 
-QListView#historySearchResults {
+QTreeView#historySearchResults {
     background-color: #B7CDC2;
-    margin: 5px;
+    margin: 4px;
     font: 10pt "Courier";
 }
 

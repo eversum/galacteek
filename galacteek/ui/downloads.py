@@ -3,7 +3,6 @@ import os.path
 import os
 import aioipfs
 
-from PyQt5 import QtWebEngineWidgets
 from PyQt5.QtWebEngineWidgets import QWebEngineDownloadItem
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import QObject
@@ -39,11 +38,8 @@ def iPageSaved(title):
 
 class DownloadsManager(QObject):
     def __init__(self, app):
-        super(DownloadsManager, self).__init__()
-
+        super(DownloadsManager, self).__init__(app)
         self.app = app
-        self.webProfile = QtWebEngineWidgets.QWebEngineProfile.defaultProfile()
-        self.webProfile.downloadRequested.connect(self.onDownloadRequested)
 
     def onDownloadRequested(self, downItem):
         if not downItem:

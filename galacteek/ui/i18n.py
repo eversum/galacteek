@@ -419,7 +419,7 @@ def iWebPages():
 
 
 def iDWebApps():
-    return QCoreApplication.translate('FileManagerForm', 'Dweb Apps')
+    return QCoreApplication.translate('FileManagerForm', 'Dapps')
 
 
 def iQrCodes():

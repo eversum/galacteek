@@ -72,7 +72,7 @@ cat > galacteek.app/Contents/MacOS/galacteek <<\EAT
 #!/usr/bin/env bash
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export PATH=$PATH:$DIR/../Resources/bin
-$DIR/../Resources/bin/python $DIR/../Resources/bin/galacteek --no-ssl-verify $@
+$DIR/../Resources/bin/python $DIR/../Resources/bin/galacteek --no-ssl-verify
 EAT
 
 chmod a+x galacteek.app/Contents/MacOS/galacteek
@@ -85,6 +85,7 @@ rm -rf lib/python3.7/site-packages/Cryptodome/SelfTest/*
 rm -rf lib/python3.7/site-packages/PyQt5/Qt/plugins/geoservices
 rm -rf lib/python3.7/site-packages/PyQt5/Qt/plugins/sceneparsers
 rm -rf lib/cmake/
+rm -f bin/sqlite3*
 rm -rf include/
 rm -rf share/{info,man}
 popd

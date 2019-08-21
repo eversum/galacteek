@@ -232,6 +232,7 @@ class ClipboardTracker(QObject):
         for item in self._items:
             self.itemRemoved.emit(item)
         self._items.clear()
+        self._current = None
 
     def getCurrent(self):
         """ Returns current clipboard item """

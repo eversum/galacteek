@@ -84,13 +84,14 @@ async def renderTemplate(tmplname, loop=None, env=None, **kw):
 
 @ipfsOpFn
 async def ipfsRender(op, env, tmplname, **kw):
+    _offline = kw.pop('offline', False)
     tmpl = env.get_template(tmplname)
     if not tmpl:
         raise Exception('template not found')
 
     try:
         data = await tmpl.render_async(**kw)
-        entry = await op.addString(data)
+        entry = await op.addString(data, offline=_offline)
     except Exception as err:
         log.debug('Could not render web template {0}: {1}'.format(
             tmplname, str(err)))

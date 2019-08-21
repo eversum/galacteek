@@ -58,6 +58,21 @@ class IPFSOperatorOfflineContext(object):
         log.debug('IPFS Operator in online mode')
 
 
+class APIErrorDecoder:
+    def __init__(self, exc):
+        self.exc = exc
+
+    def errIsDirectory(self):
+        return self.exc.message == 'this dag node is a directory'
+
+    def errNoSuchLink(self):
+        return self.exc.message.startswith('no link named') or \
+            self.exc.message == 'no such link found'
+
+    def errUnknownNode(self):
+        return self.exc.message == 'unknown node type'
+
+
 class IPFSOperator(object):
     """
     IPFS operator, for your daily operations!
@@ -547,9 +562,17 @@ class IPFSOperator(object):
     def objStatCtxGet(self, path):
         return self.ctx.objectStats.get(path, None)
 
+    async def hashComputePath(self, path, recursive=True):
+        """
+        Use the only-hash flag of the ipfs add command to compute
+        the hash of a resource (does not add the data)
+        """
+
+        return await self.addPath(path, recursive=recursive, only_hash=True)
+
     async def addPath(self, path, recursive=True, wrap=False,
                       callback=None, cidversion=1, offline=False,
-                      hidden=False):
+                      hidden=False, only_hash=False):
         """
         Add files from path in the repo, and returns the top-level entry (the
         root directory), optionally wrapping it with a directory object
@@ -568,6 +591,7 @@ class IPFSOperator(object):
                                                recursive=recursive,
                                                cid_version=cidversion,
                                                offline=offline, hidden=hidden,
+                                               only_hash=only_hash,
                                                wrap_with_directory=wrap):
                 await self.sleep()
                 added = entry

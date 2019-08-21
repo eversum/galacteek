@@ -3,6 +3,7 @@ import os.path
 
 from PyQt5.QtWidgets import QDialog
 from PyQt5.QtWidgets import QAction
+from PyQt5.QtWidgets import QActionGroup
 from PyQt5.QtWidgets import QMenu
 from PyQt5.QtWidgets import QInputDialog
 from PyQt5.QtWidgets import QWidget
@@ -27,6 +28,7 @@ from PyQt5.QtWebEngineWidgets import QWebEnginePage
 from PyQt5.QtWebEngineWidgets import QWebEngineDownloadItem
 from PyQt5.QtWebEngineWidgets import QWebEngineSettings
 from PyQt5.QtWebEngineWidgets import QWebEngineContextMenuData
+from PyQt5.QtWebChannel import QWebChannel
 
 from PyQt5.QtWebEngineCore import QWebEngineUrlRequestInterceptor
 
@@ -43,11 +45,17 @@ from galacteek.ipfs.cidhelpers import joinIpns
 from galacteek.ipfs.cidhelpers import cidValid
 from galacteek.core.analyzer import ResourceAnalyzer
 
+from galacteek.core.schemes import isSchemeRegistered
 from galacteek.core.schemes import SCHEME_DWEB
 from galacteek.core.schemes import SCHEME_ENS
 from galacteek.core.schemes import SCHEME_IPFS
 from galacteek.core.schemes import SCHEME_IPNS
-from galacteek.core.schemes import isIpfsUrl
+from galacteek.core.schemes import DAGProxySchemeHandler
+from galacteek.core.schemes import MultiDAGProxySchemeHandler
+
+from galacteek.dweb.webscripts import scriptFromString
+from galacteek.dweb.page import BaseHandler
+from galacteek.dweb.page import pyqtSlot
 
 from . import ui_browsertab
 from .helpers import *
@@ -55,6 +63,7 @@ from .dialogs import *
 from .hashmarks import *
 from .i18n import *
 from .clipboard import iCopyPathToClipboard
+from .clipboard import iClipboardEmpty
 from .history import HistoryMatchesWidget
 from .widgets import *
 from ..appsettings import *
@@ -82,6 +91,10 @@ def iDownload():
 def iSaveWebPage():
     return QCoreApplication.translate(
         'BrowserTabForm', 'Save page to the "Web Pages" folder')
+
+
+def iJsConsole():
+    return QCoreApplication.translate('BrowserTabForm', 'Javascript console')
 
 
 def iPin():
@@ -135,6 +148,11 @@ def iBrowseIpnsHash():
                                       'Browse IPNS resource from hash/name')
 
 
+def iBrowseCurrentClipItem():
+    return QCoreApplication.translate('BrowserTabForm',
+                                      'Browse current clipboard item')
+
+
 def iEnterIpns():
     return QCoreApplication.translate('BrowserTabForm',
                                       'Enter an IPNS hash/name')
@@ -172,12 +190,22 @@ def iNotAnIpfsResource():
         'Not an IPFS resource')
 
 
-def makeDwebPath(path):
-    return '{0}:{1}'.format(SCHEME_DWEB, path)
+def iWebProfileMinimal():
+    return QCoreApplication.translate(
+        'BrowserTabForm',
+        'Minimal profile')
 
 
-def usesIpfsNs(url):
-    return url.startswith('{0}:/'.format(SCHEME_DWEB))
+def iWebProfileIpfs():
+    return QCoreApplication.translate(
+        'BrowserTabForm',
+        'IPFS profile')
+
+
+def iWebProfileWeb3():
+    return QCoreApplication.translate(
+        'BrowserTabForm',
+        'Web3 profile')
 
 
 class RequestInterceptor(QWebEngineUrlRequestInterceptor):
@@ -185,8 +213,26 @@ class RequestInterceptor(QWebEngineUrlRequestInterceptor):
         pass
 
 
+class CurrentPageHandler(BaseHandler):
+    def __init__(self, parent):
+        super().__init__(parent)
+
+        self.rootCid = None
+
+    @pyqtSlot()
+    def getRootCid(self):
+        return self.rootCid
+
+
 class CustomWebPage (QtWebEngineWidgets.QWebEnginePage):
     jsConsoleMessage = pyqtSignal(int, str, int, str)
+
+    def __init__(self, webProfile, parent):
+        super(CustomWebPage, self).__init__(webProfile, parent)
+        self.channel = QWebChannel()
+        self.setWebChannel(self.channel)
+        self.pageHandler = CurrentPageHandler(self)
+        self.channel.registerObject('gpage', self.pageHandler)
 
     def javaScriptConsoleMessage(self, level, message, lineNumber, sourceId):
         self.jsConsoleMessage.emit(level, message, lineNumber, sourceId)
@@ -199,6 +245,7 @@ class JSConsoleWidget(QTextBrowser):
         self.setReadOnly(True)
         self.setAcceptRichText(True)
         self.setObjectName('javascriptConsole')
+        self.append('<p><b>Javascript output console</b></p>')
 
     def showMessage(self, level, message, lineNumber, sourceId):
         sourcePath = IPFSPath(sourceId)
@@ -229,22 +276,20 @@ class JSConsoleWidget(QTextBrowser):
 
 
 class WebView(IPFSWebView):
-    def __init__(self, browserTab, enablePlugins=False, parent=None):
+    def __init__(self, browserTab, webProfile, enablePlugins=False,
+                 parent=None):
         super(WebView, self).__init__(parent=parent)
 
         self.app = QCoreApplication.instance()
+        self.browserTab = browserTab
         self.linkInfoTimer = QTimer()
         self.linkInfoTimer.timeout.connect(self.onLinkInfoTimeout)
 
-        self.webPage = CustomWebPage(self)
-        self.webPage.jsConsoleMessage.connect(self.onJsMessage)
-        self.webPage.linkHovered.connect(self.onLinkHovered)
-        self.setPage(self.webPage)
+        self.webPage = None
+        self.changeWebProfile(webProfile)
 
         actionVSource = self.pageAction(QWebEnginePage.ViewSource)
         actionVSource.triggered.connect(self.onViewSource)
-
-        self.browserTab = browserTab
 
         self.webSettings = self.settings()
         self.webSettings.setAttribute(QWebEngineSettings.PluginsEnabled,
@@ -302,6 +347,8 @@ class WebView(IPFSWebView):
             self.linkInfoTimer.start(2200)
 
     def contextMenuEvent(self, event):
+        # TODO: cleanup and refactoring provably
+
         analyzer = ResourceAnalyzer(parent=self)
         currentPage = self.page()
         contextMenuData = currentPage.contextMenuData()
@@ -471,11 +518,25 @@ class WebView(IPFSWebView):
         url = menudata.linkUrl()
         self.page().download(url, None)
 
+    def installPage(self):
+        if self.webPage:
+            del self.webPage
+
+        self.webPage = CustomWebPage(self.webProfile, self)
+        self.webPage.jsConsoleMessage.connect(self.onJsMessage)
+        self.webPage.linkHovered.connect(self.onLinkHovered)
+        self.setPage(self.webPage)
+
+    def changeWebProfile(self, profile):
+        self.webProfile = profile
+        self.installPage()
+
 
 class BrowserKeyFilter(QObject):
     hashmarkPressed = pyqtSignal()
     savePagePressed = pyqtSignal()
     reloadPressed = pyqtSignal()
+    reloadFullPressed = pyqtSignal()
     zoominPressed = pyqtSignal()
     zoomoutPressed = pyqtSignal()
     focusUrlPressed = pyqtSignal()
@@ -483,11 +544,7 @@ class BrowserKeyFilter(QObject):
     def eventFilter(self, obj, event):
         if event.type() == QEvent.KeyPress:
             modifiers = event.modifiers()
-
             key = event.key()
-            if key == Qt.Key_F5:
-                self.reloadPressed.emit()
-                return True
 
             if modifiers & Qt.ControlModifier:
                 if key == Qt.Key_B:
@@ -499,6 +556,9 @@ class BrowserKeyFilter(QObject):
                 if key == Qt.Key_R:
                     self.reloadPressed.emit()
                     return True
+                if key == Qt.Key_F5:
+                    self.reloadFullPressed.emit()
+                    return True
                 if key == Qt.Key_L:
                     self.focusUrlPressed.emit()
                     return True
@@ -508,6 +568,11 @@ class BrowserKeyFilter(QObject):
                 if key == Qt.Key_Minus:
                     self.zoomoutPressed.emit()
                     return True
+
+            if key == Qt.Key_F5:
+                self.reloadPressed.emit()
+                return True
+
         return False
 
 
@@ -543,12 +608,21 @@ class URLInputWidget(QLineEdit):
         timeout = self.app.settingsMgr.urlHistoryEditTimeout
         return timeout if isinstance(timeout, int) else 1000
 
+    def unfocus(self):
+        self.urlEditing = False
+        self.clearFocus()
+
+    def cancelTimer(self):
+        self.editTimer.stop()
+
     def onReturnPressed(self):
         self.urlEditing = False
+        self.unfocus()
         self.browser.handleEditedUrl(self.text())
 
     def onHistoryCollapse(self):
         self.setFocus(Qt.PopupFocusReason)
+        self.deselect()
 
     def focusInEvent(self, event):
         if event.reason() in [Qt.ShortcutFocusReason, Qt.MouseFocusReason,
@@ -572,7 +646,7 @@ class URLInputWidget(QLineEdit):
     def onUrlUserEdit(self, text):
         self.urlInput = text
 
-        if not self.urlEditing or not self.history.enabled:
+        if not self.urlEditing:
             return
 
         if not self.editTimer.isActive():
@@ -586,10 +660,25 @@ class URLInputWidget(QLineEdit):
 
     async def historyLookup(self):
         if self.urlInput:
-            matches = await self.history.match(self.urlInput)
+            markMatches = []
+            result = list(self.app.marksLocal.searchAllByMetadata({
+                'title': self.urlInput,
+                'description': self.urlInput
+            }))
 
-            if len(matches) > 0:
-                self.historyMatches.showMatches(matches)
+            for mark in result:
+                try:
+                    markMatches.append({
+                        'title': mark.markData['metadata']['title'],
+                        'url': IPFSPath(mark.path).ipfsUrl
+                    })
+                except Exception:
+                    continue
+
+            hMatches = await self.history.match(self.urlInput)
+
+            if len(markMatches) > 0 or len(hMatches) > 0:
+                self.historyMatches.showMatches(markMatches, hMatches)
                 self.historyMatches.show()
                 self.historyMatches.setFocus(Qt.OtherFocusReason)
 
@@ -652,7 +741,7 @@ class BrowserTab(GalacteekTab):
     # signals
     ipfsObjectVisited = pyqtSignal(IPFSPath)
 
-    def __init__(self, gWindow, pinBrowsed=False):
+    def __init__(self, gWindow, webProfileName='ipfs', pinBrowsed=False):
         super(BrowserTab, self).__init__(gWindow)
 
         self.browserWidget = QWidget(self)
@@ -678,17 +767,15 @@ class BrowserTab(GalacteekTab):
         self.cidInfosDisplay = CIDInfosDisplay(self.ui.cidInfoLabel,
                                                parent=self)
 
-        # Install scheme handler early on
-        self.webProfile = QtWebEngineWidgets.QWebEngineProfile.defaultProfile()
+        webProfile = self.app.webProfiles.get(webProfileName,
+                                              self.app.webProfiles['ipfs'])
 
         self.webEngineView = WebView(
-            self, enablePlugins=self.app.settingsMgr.ppApiPlugins,
+            self, webProfile,
+            enablePlugins=self.app.settingsMgr.ppApiPlugins,
             parent=self
         )
         self.ui.vLayoutBrowser.addWidget(self.webEngineView)
-
-        self.webScripts = self.webProfile.scripts()
-        self.installScripts()
 
         self.webEngineView.urlChanged.connect(self.onUrlChanged)
         self.webEngineView.loadFinished.connect(self.onLoadFinished)
@@ -707,11 +794,6 @@ class BrowserTab(GalacteekTab):
         self.ui.stopButton.setEnabled(False)
 
         self.ui.linkInfosLabel.setObjectName('linkInfos')
-        self.ui.jsConsoleButton.setCheckable(True)
-        self.ui.jsConsoleButton.toggled.connect(self.onJsConsoleToggle)
-
-        self.ui.loadFromClipboardButton.clicked.connect(
-            self.loadFromClipboardButtonClicked)
 
         # Save page button, visible when non-IPFS content is displayed
         saveIcon = getMimeIcon('text/html')
@@ -733,8 +815,34 @@ class BrowserTab(GalacteekTab):
 
         self.ui.hLayoutCtrl.addWidget(self.savePageButton)
 
-        # Setup the tool button for browsing IPFS content
-        self.loadIpfsMenu = QMenu()
+        # Setup the IPFS control tool button (has actions
+        # for browsing CIDS and web profiles etc..)
+
+        self.ipfsControlMenu = QMenu()
+        self.webProfilesMenu = QMenu('Web profile')
+
+        self.webProfilesGroup = QActionGroup(self.webProfilesMenu)
+        self.webProfilesGroup.setExclusive(True)
+        self.webProfilesGroup.triggered.connect(self.onWebProfileSelected)
+
+        self.webProMinAction = QAction(iWebProfileMinimal(), self)
+        self.webProMinAction.setCheckable(True)
+        self.webProIpfsAction = QAction(iWebProfileIpfs(), self)
+        self.webProIpfsAction.setCheckable(True)
+        self.webProIpfsAction.setChecked(True)
+        self.webProWeb3Action = QAction(iWebProfileWeb3(), self)
+        self.webProWeb3Action.setCheckable(True)
+
+        self.webProfilesGroup.addAction(self.webProMinAction)
+        self.webProfilesGroup.addAction(self.webProIpfsAction)
+        self.webProfilesGroup.addAction(self.webProWeb3Action)
+
+        for action in self.webProfilesGroup.actions():
+            self.webProfilesMenu.addAction(action)
+
+        self.ipfsControlMenu.addMenu(self.webProfilesMenu)
+        self.ipfsControlMenu.addSeparator()
+
         self.loadIpfsCIDAction = QAction(getIconIpfsIce(),
                                          iBrowseIpfsCID(), self,
                                          triggered=self.onLoadIpfsCID)
@@ -752,15 +860,31 @@ class BrowserTab(GalacteekTab):
         self.loadHomeAction = QAction(getIcon('go-home.png'),
                                       iBrowseHomePage(), self,
                                       triggered=self.onLoadHome)
+
+        self.jsConsoleAction = QAction(getIcon('terminal.png'),
+                                       iJsConsole(), self,
+                                       shortcut=QKeySequence('Ctrl+x'))
+        self.jsConsoleAction.setCheckable(True)
+        self.jsConsoleAction.toggled.connect(self.onJsConsoleToggle)
+
+        self.loadFromCbAction = QAction(
+            getIcon('clipboard.png'),
+            iBrowseCurrentClipItem(), self,
+            triggered=self.onBrowseCurrentClipItem
+        )
+
         self.followIpnsAction.setEnabled(False)
 
-        self.loadIpfsMenu.addAction(self.loadIpfsCIDAction)
-        self.loadIpfsMenu.addAction(self.loadIpfsMultipleCIDAction)
-        self.loadIpfsMenu.addAction(self.loadIpnsAction)
-        self.loadIpfsMenu.addAction(self.followIpnsAction)
-        self.loadIpfsMenu.addAction(self.loadHomeAction)
+        self.ipfsControlMenu.addAction(self.jsConsoleAction)
+        self.ipfsControlMenu.addSeparator()
+        self.ipfsControlMenu.addAction(self.loadFromCbAction)
+        self.ipfsControlMenu.addAction(self.loadIpfsCIDAction)
+        self.ipfsControlMenu.addAction(self.loadIpfsMultipleCIDAction)
+        self.ipfsControlMenu.addAction(self.loadIpnsAction)
+        self.ipfsControlMenu.addAction(self.followIpnsAction)
+        self.ipfsControlMenu.addAction(self.loadHomeAction)
 
-        self.ui.loadIpfsButton.setMenu(self.loadIpfsMenu)
+        self.ui.loadIpfsButton.setMenu(self.ipfsControlMenu)
         self.ui.loadIpfsButton.setPopupMode(QToolButton.InstantPopup)
         self.ui.loadIpfsButton.clicked.connect(self.onLoadIpfsCID)
 
@@ -793,6 +917,7 @@ class BrowserTab(GalacteekTab):
         evfilter = BrowserKeyFilter(self)
         evfilter.hashmarkPressed.connect(self.onHashmarkPage)
         evfilter.reloadPressed.connect(self.onReloadPage)
+        evfilter.reloadFullPressed.connect(self.onReloadPageNoCache)
         evfilter.zoominPressed.connect(self.onZoomIn)
         evfilter.zoomoutPressed.connect(self.onZoomOut)
         evfilter.focusUrlPressed.connect(self.onFocusUrl)
@@ -850,14 +975,35 @@ class BrowserTab(GalacteekTab):
     def currentIpfsResource(self):
         return self._currentIpfsResource
 
-    def installScripts(self):
-        self.webScripts = self.webProfile.scripts()
+    def installCustomPageScripts(self, handler, url):
+        # Page-specific IPFS scripts
 
-        exSc = self.webScripts.findScript('ipfs-http-client')
-        if self.app.settingsMgr.jsIpfsApi is True and exSc.isNull():
-            log.debug('Adding ipfs-http-client scripts')
-            for script in self.app.scriptsIpfs:
-                self.webScripts.insert(script)
+        if url.scheme() == SCHEME_IPFS:
+            rootCid = None
+
+            if issubclass(handler.__class__, DAGProxySchemeHandler):
+                if handler.proxied:
+                    rootCid = handler.proxied.dagCid
+            elif issubclass(handler.__class__, MultiDAGProxySchemeHandler):
+                if len(handler.proxied) > 0:
+                    rootCid = handler.proxied[0].dagCid
+            else:
+                rootCid = url.host()
+
+            if not rootCid:
+                return
+
+            scripts = self.webEngineView.webPage.scripts()
+
+            script = scriptFromString('rootcid', '''
+                window.rootcid = '{cid}';
+            '''.format(cid=rootCid))
+
+            existing = scripts.findScript('rootcid')
+            if existing:
+                scripts.remove(existing)
+
+            scripts.insert(script)
 
     def onPathVisited(self, ipfsPath):
         # Called after a new IPFS object has been loaded in this tab
@@ -872,11 +1018,39 @@ class BrowserTab(GalacteekTab):
         if self.pinAll is True:
             self.pinPath(path, recursive=False, notify=False)
 
+    def changeWebProfileByName(self, wpName):
+        if wpName == 'minimal':
+            self.webProMinAction.setChecked(True)
+        elif wpName == 'ipfs':
+            self.webProIpfsAction.setChecked(True)
+        elif wpName == 'web3':
+            self.webProWeb3Action.setChecked(True)
+
+    def onWebProfileSelected(self, action):
+        url = self.currentUrl
+
+        if action is self.webProMinAction:
+            self.webEngineView.changeWebProfile(
+                self.app.webProfiles['minimal']
+            )
+        elif action is self.webProIpfsAction:
+            self.webEngineView.changeWebProfile(
+                self.app.webProfiles['ipfs']
+            )
+        elif action is self.webProWeb3Action:
+            self.webEngineView.changeWebProfile(
+                self.app.webProfiles['web3']
+            )
+
+        if url:
+            # Reload page
+            self.enterUrl(url)
+
     def onJsConsoleToggle(self, checked):
         self.jsConsoleWidget.setVisible(checked)
 
     def onClipboardIpfs(self, pathObj):
-        self.ui.loadFromClipboardButton.setEnabled(True)
+        pass
 
     def onToggledPinAll(self, checked):
         pass
@@ -893,7 +1067,17 @@ class BrowserTab(GalacteekTab):
         self.urlZone.urlEditing = True
 
     def onReloadPage(self):
-        self.webEngineView.reload()
+        self.reloadPage()
+
+    def onReloadPageNoCache(self):
+        self.reloadPage(bypassCache=True)
+
+    def reloadPage(self, bypassCache=False):
+        self.urlZone.unfocus()
+        self.webEngineView.triggerPageAction(
+            QWebEnginePage.ReloadAndBypassCache if bypassCache is True else
+            QWebEnginePage.Reload
+        )
 
     def onSavePage(self):
         tmpd = self.app.tempDirCreate(self.app.tempDirWeb)
@@ -910,12 +1094,6 @@ class BrowserTab(GalacteekTab):
 
         path = os.path.join(tmpd, filename)
         page.save(path, QWebEngineDownloadItem.CompleteHtmlSaveFormat)
-
-    def onHashmarkClicked(self, path, title):
-        ipfsPath = IPFSPath(path)
-
-        if ipfsPath.valid:
-            self.browseFsPath(ipfsPath)
 
     def onHashmarkPage(self):
         if self.currentIpfsResource and self.currentIpfsResource.valid:
@@ -971,10 +1149,12 @@ class BrowserTab(GalacteekTab):
 
         self.pinPath(self.currentIpfsResource.objPath, recursive=True)
 
-    def loadFromClipboardButtonClicked(self):
+    def onBrowseCurrentClipItem(self):
         current = self.app.clipTracker.getCurrent()
         if current:
             self.browseFsPath(IPFSPath(current.fullPath))
+        else:
+            messageBox(iClipboardEmpty())
 
     def onLoadIpfsCID(self):
         def onValidated(d):
@@ -1024,10 +1204,12 @@ class BrowserTab(GalacteekTab):
         self.ui.stopButton.setEnabled(False)
 
     def backButtonClicked(self):
+        self.urlZone.unfocus()
         currentPage = self.webEngineView.page()
         currentPage.history().back()
 
     def forwardButtonClicked(self):
+        self.urlZone.unfocus()
         currentPage = self.webEngineView.page()
         currentPage.history().forward()
 
@@ -1164,29 +1346,46 @@ class BrowserTab(GalacteekTab):
         self.browseFsPath(IPFSPath(joinIpns(ipnsHash)))
 
     def enterUrl(self, url):
+        self.urlZone.cancelTimer()
+
+        if not url.isValid():
+            messageBox('Invalid URL: {0}'.format(url.toString()))
+            return
+
         self.urlZone.urlEditing = False
         self.urlZone.clearFocus()
 
         self.savePageButton.setEnabled(False)
         log.debug('Entering URL {}'.format(url.toString()))
 
+        handler = self.webEngineView.webProfile.urlSchemeHandler(
+            url.scheme().encode())
+
         def onEnsTimeout():
             pass
 
-        # This should not be necessary starting with qt 5.12.4
-        if url.scheme() in [SCHEME_IPFS, SCHEME_IPNS]:
-            if not url.path():
-                url.setPath('/')
+        # This should not be necessary starting with qt 5.13
+        if not url.path():
+            url.setPath('/')
 
         if url.scheme() == SCHEME_ENS:
             self.resolveTimer.timeout.connect(onEnsTimeout)
             self.resolveTimer.start(self.resolveTimerEnsMs)
+
+        if handler:
+            if hasattr(handler, 'webProfileNeeded'):
+                wpName = handler.webProfileNeeded
+                if self.webEngineView.webProfile.profileName != wpName and \
+                        wpName in self.app.webProfiles:
+                    self.changeWebProfileByName(wpName)
 
         self.urlZone.clear()
         self.urlZone.insert(url.toString())
         self.webEngineView.load(url)
 
     def handleEditedUrl(self, inputStr):
+        self.urlZone.unfocus()
+
         if cidhelpers.cidValid(inputStr):
             # Raw CID in the URL zone
             return self.browseIpfsHash(inputStr)
@@ -1194,7 +1393,7 @@ class BrowserTab(GalacteekTab):
         url = QUrl(inputStr)
         scheme = url.scheme()
 
-        if isIpfsUrl(url) or scheme == SCHEME_ENS:
+        if isSchemeRegistered(scheme):
             self.enterUrl(url)
         elif scheme in ['http', 'https'] and \
                 self.app.settingsMgr.allowHttpBrowsing is True:

@@ -87,8 +87,8 @@ class ImageViewerTab(GalacteekTab):
         self.view.qrCodesPresent.connect(self.onQrCodesListed)
         self.vLayout.addWidget(self.view)
 
-        self.zoomIn.clicked.connect(self.view.zoomIn)
-        self.zoomOut.clicked.connect(self.view.zoomOut)
+        self.zoomIn.clicked.connect(self.view.zoomInClicked)
+        self.zoomOut.clicked.connect(self.view.zoomOutClicked)
         self.fitWindow.clicked.connect(
             lambda: self.view.fitWindow(self.fitWindow.isChecked()))
         self.pinButton.clicked.connect(self.view.pinImage)
@@ -185,6 +185,27 @@ class ImageView(QScrollArea):
         self.scaleFactor = 1.0
         self.setWidget(self.labelImage)
 
+    def wheelEvent(self, event):
+        """
+        Zoom in/out on the image on mouse wheel events
+        """
+
+        degrees = event.angleDelta()
+
+        if degrees.y() == 0:
+            return
+
+        yDeg = max(min(60, abs(degrees.y())), 240)
+
+        if degrees.y() > 0:
+            factor = 1 + ((yDeg / 30) * 0.05)
+            self.zoomIn(factor=factor)
+        elif degrees.y() < 0:
+            factor = 1 - ((yDeg / 30) * 0.05)
+            self.zoomOut(factor=factor)
+
+        event.accept()
+
     def pinImage(self):
         if self.currentImgPath and self.currentImgPath.valid:
             ensure(self.pinImageFromPath(self.currentImgPath))
@@ -200,13 +221,19 @@ class ImageView(QScrollArea):
             self.scaleFactor = 1.0
             self.resizePixmap()
 
-    def zoomOut(self):
-        self.scaleFactor *= 0.75
+    def zoomOut(self, factor=0.75):
+        self.scaleFactor *= factor
         self.resizePixmap()
 
-    def zoomIn(self):
-        self.scaleFactor *= 1.25
+    def zoomIn(self, factor=1.25):
+        self.scaleFactor *= factor
         self.resizePixmap()
+
+    def zoomInClicked(self):
+        self.zoomIn()
+
+    def zoomOutClicked(self):
+        self.zoomOut()
 
     def resizePixmap(self):
         pixmap = self.labelImage.pixmap()

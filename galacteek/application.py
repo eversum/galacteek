@@ -41,17 +41,28 @@ from galacteek.core.asynclib import asyncify
 from galacteek.core.ctx import IPFSContext
 from galacteek.core.multihashmetadb import IPFSObjectMetadataDatabase
 from galacteek.core.clipboard import ClipboardTracker
-from galacteek.core.schemes import DWebSchemeHandler
-from galacteek.core.schemes import ENSWhoisSchemeHandler
-from galacteek.core.schemes import DedicatedIPFSSchemeHandler
 from galacteek.core.db import SqliteDatabase
 from galacteek.core.models.atomfeeds import AtomFeedsModel
+from galacteek.core.signaltowers import DAGSignalsTower
+
+from galacteek.core.schemes import SCHEME_MANUAL
+from galacteek.core.schemes import DWebSchemeHandler
+from galacteek.core.schemes import ENSWhoisSchemeHandler
+from galacteek.core.schemes import NativeIPFSSchemeHandler
+from galacteek.core.schemes import ObjectProxySchemeHandler
+
 from galacteek.ipfs import asyncipfsd, cidhelpers
 from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.wrappers import *
 from galacteek.ipfs.feeds import FeedFollower
+
+from galacteek.ipdapps.loader import DappsRegistry
+
+from galacteek.core.webprofiles import IPFSProfile
+from galacteek.core.webprofiles import Web3Profile
+from galacteek.core.webprofiles import MinimalProfile
 
 from galacteek.dweb.webscripts import ipfsClientScripts
 from galacteek.dweb.render import defaultJinjaEnv
@@ -165,6 +176,7 @@ class GalacteekApplication(QApplication):
         self._progName = progName
         self._progCid = None
         self._system = platform.system()
+        self._urlSchemes = {}
 
         self._icons = {}
         self._ipfsIconsCache = {}
@@ -185,16 +197,20 @@ class GalacteekApplication(QApplication):
 
         self.setupAsyncLoop()
         self.setupPaths()
+        self.initSettings()
+
+        self.setupMainObjects()
         self.setupDb()
         self.setupClipboard()
         self.setupSchemeHandlers()
         self.setupModels()
 
-        self.initSettings()
         self.setupTranslator()
         self.initSystemTray()
         self.initMisc()
         self.initEthereum()
+        self.initWebProfiles()
+        self.initDapps()
         self.createMainWindow()
 
         self.setStyle()
@@ -363,8 +379,6 @@ class GalacteekApplication(QApplication):
         self.tempDir = QTemporaryDir()
         self.tempDirWeb = self.tempDirCreate(
             self.tempDir.path(), 'webdownloads')
-
-        self.scriptsIpfs = ipfsClientScripts(self.getIpfsConnectionParams())
 
     def tempDirCreate(self, basedir, name=None):
         tmpdir = QDir(basedir)
@@ -564,6 +578,11 @@ class GalacteekApplication(QApplication):
     def setupModels(self):
         self.modelAtomFeeds = AtomFeedsModel(self.sqliteDb.feeds, parent=self)
 
+    def setupMainObjects(self):
+        self.towers = {
+            'dags': DAGSignalsTower(self)
+        }
+
     def setupAsyncLoop(self):
         """
         Install the quamash event loop and enable debugging
@@ -736,10 +755,22 @@ class GalacteekApplication(QApplication):
     def getClipboardText(self):
         return self.clipTracker.getText()
 
+    def initWebProfiles(self):
+        self.scriptsIpfs = ipfsClientScripts(self.getIpfsConnectionParams())
+
+        self.webProfiles = {
+            'minimal': MinimalProfile(parent=self),
+            'ipfs': IPFSProfile(parent=self),
+            'web3': Web3Profile(parent=self)
+        }
+
+    def initDapps(self):
+        self.dappsRegistry = DappsRegistry(self.ethereum, parent=self)
+
     def setupSchemeHandlers(self):
         self.ipfsSchemeHandler = DWebSchemeHandler(self)
         self.ensSchemeHandler = ENSWhoisSchemeHandler(self)
-        self.dedIpfsSchemeHandler = DedicatedIPFSSchemeHandler(self)
+        self.nativeIpfsSchemeHandler = NativeIPFSSchemeHandler(self)
 
     def subUrl(self, path):
         """ Joins the gatewayUrl and path to form a new URL """
@@ -824,6 +855,7 @@ class ManualsManager(QObject):
 
         self.app = app
         self.registry = {}
+        self._schemeHandlers = []
         self.defaultManualLang = 'en'
 
     def getManualEntry(self, lang):
@@ -860,6 +892,7 @@ class ManualsManager(QObject):
                         self.registry[lang] = entry
                         self.app.manualAvailable.emit(lang, entry)
                         manualAlreadyImported = True
+                        self.installManualSchemeHandler(entry)
                         break
 
                 if manualAlreadyImported:
@@ -889,8 +922,26 @@ class ManualsManager(QObject):
         if docEntry:
             await ipfsop.sleep()
             self.registry[lang] = docEntry
+
             self.app.manualAvailable.emit(lang, docEntry)
+            self.installManualSchemeHandler(docEntry)
             return docEntry
+
+    def installManualSchemeHandler(self, docEntry):
+        """
+        Install an object proxy scheme handler to be able
+        to just type 'manual:/' to access the manual from
+        the browser
+        """
+
+        handler = ObjectProxySchemeHandler(
+            self.app, IPFSPath(docEntry['Hash']))
+
+        for pName, profile in self.app.webProfiles.items():
+            profile.installHandler(SCHEME_MANUAL, handler)
+
+        # Need to keep a reference somewhere for Qt
+        self._schemeHandlers.append(handler)
 
     def browseManualPage(self, pagePath, fragment=None):
         manual = self.registry.get(self.defaultManualLang)

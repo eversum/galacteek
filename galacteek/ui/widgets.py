@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtWidgets import QTextBrowser
 
 from PyQt5.QtWebEngineWidgets import QWebEngineView
-from PyQt5.QtWebEngineWidgets import QWebEngineProfile
+from PyQt5.QtWebEngineWidgets import QWebEnginePage
 
 from PyQt5.QtCore import QTimer
 from PyQt5.QtCore import pyqtSignal
@@ -47,12 +47,6 @@ from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek import ensure
 from galacteek.dweb.markdown import markitdown
-
-from galacteek.core.schemes import SCHEME_DWEB
-from galacteek.core.schemes import SCHEME_ENS
-from galacteek.core.schemes import SCHEME_FS
-from galacteek.core.schemes import SCHEME_IPFS
-from galacteek.core.schemes import SCHEME_IPNS
 
 from .helpers import getIcon
 from .helpers import getIconFromIpfs
@@ -197,10 +191,11 @@ class IPFSPathClipboardButton(QToolButton):
 class IPFSUrlLabel(QLabel):
     def __init__(self, ipfsPath, invalidPathLabel='Invalid path', parent=None):
         super(IPFSUrlLabel, self).__init__(parent)
+        self.app = QApplication.instance()
 
         self.invalidPathMessage = invalidPathLabel
         self.path = ipfsPath
-        self.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.linkActivated.connect(self.onLinkClicked)
 
     @property
     def path(self):
@@ -211,7 +206,7 @@ class IPFSUrlLabel(QLabel):
         self._path = val
 
         if self.path and self.path.valid:
-            self.url = QUrl('dweb:' + str(self.path))
+            self.url = QUrl(self.path.ipfsUrl)
             self.setText('<a href="{url}">{url}</a>'.format(
                 url=self.url.toString()))
         else:
@@ -228,6 +223,9 @@ class IPFSUrlLabel(QLabel):
         mimedata = QMimeData()
         mimedata.setUrls([self.url])
         return mimedata
+
+    def onLinkClicked(self, urlString):
+        ensure(self.app.resourceOpener.open(self.path))
 
 
 class PopupToolButton(QToolButton, URLDragAndDropProcessor):
@@ -712,36 +710,18 @@ class IconSelector(QComboBox):
 
 
 class IPFSWebView(QWebEngineView):
-    def __init__(self, parent=None):
+    def __init__(self, webProfile=None, parent=None):
         super(IPFSWebView, self).__init__(parent=parent)
 
         self.app = QApplication.instance()
-        self.webProfile = QWebEngineProfile.defaultProfile()
-        self.installIpfsSchemeHandlers()
+        self.webProfile = webProfile if webProfile else \
+            self.app.webProfiles['ipfs']
+        self.setPage(QWebEnginePage(self.webProfile, self))
 
         self.setMinimumSize(QSize(
             self.app.desktopGeometry.width() / 8,
-            self.app.desktopGeometry.height() / 8)
-        )
-
-    def installIpfsSchemeHandlers(self):
-        # XXX Remove fs: soon
-        for scheme in [SCHEME_DWEB, SCHEME_FS]:
-            eHandler = self.webProfile.urlSchemeHandler(scheme.encode())
-            if not eHandler:
-                self.webProfile.installUrlSchemeHandler(
-                    scheme.encode(), self.app.ipfsSchemeHandler)
-
-        for scheme in [SCHEME_IPFS, SCHEME_IPNS]:
-            eHandler = self.webProfile.urlSchemeHandler(scheme.encode())
-            if not eHandler:
-                self.webProfile.installUrlSchemeHandler(
-                    scheme.encode(), self.app.dedIpfsSchemeHandler)
-
-        eHandler = self.webProfile.urlSchemeHandler(SCHEME_ENS.encode())
-        if not eHandler:
-            self.webProfile.installUrlSchemeHandler(
-                SCHEME_ENS.encode(), self.app.ensSchemeHandler)
+            self.app.desktopGeometry.height() / 8
+        ))
 
 
 class MarkdownView(IPFSWebView):
@@ -778,7 +758,7 @@ class MarkdownInputWidget(QWidget):
 
         self.textEditUser = QTextEdit(self)
         self.textEditUser.textChanged.connect(self.onEdited)
-        self.textEditMarkdown = MarkdownView(self)
+        self.textEditMarkdown = MarkdownView(parent=self)
 
         self.updateTimeoutMs = 500
         self.updateTimer = QTimer()

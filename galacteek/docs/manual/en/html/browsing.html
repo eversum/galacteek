@@ -1,0 +1,193 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Browsing &#8212; galacteek  documentation</title>
+    <link rel="stylesheet" href="_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/language_data.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Multihash pyramids" href="pyramids.html" />
+    <link rel="prev" title="Hashmarks" href="hashmarks.html" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Neuton&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nobile:regular,italic,bold,bolditalic&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+  </head><body>
+
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="pyramids.html" title="Multihash pyramids"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="hashmarks.html" title="Hashmarks"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">galacteek  documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="browsing">
+<h1>Browsing<a class="headerlink" href="#browsing" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="url-bar">
+<h2>URL bar<a class="headerlink" href="#url-bar" title="Permalink to this headline">¶</a></h2>
+<p>In the address bar you can type (or paste) a full URL, or
+type words that you want to search for in the hashmarks
+database and the visited URLs history (search results will
+pop up after a short amount of time). Hitting the <em>Escape</em> key
+will hide the results.</p>
+</div>
+<div class="section" id="supported-url-formats">
+<h2>Supported URL formats<a class="headerlink" href="#supported-url-formats" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="ipfs-and-ipns">
+<h3>ipfs:// and ipns://<a class="headerlink" href="#ipfs-and-ipns" title="Permalink to this headline">¶</a></h3>
+<p>These are the <em>native</em> URL schemes that support
+using base32-encoded CIDv1 strings as hostname
+(with the benefit of the CID becoming the URL’s
+authority). The following URL formats are supported:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ipfs</span><span class="p">:</span><span class="o">//</span><span class="p">{</span><span class="n">cidv1base32</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
+<span class="n">ipns</span><span class="p">:</span><span class="o">//</span><span class="p">{</span><span class="n">fqdn</span><span class="o">-</span><span class="k">with</span><span class="o">-</span><span class="n">dnslink</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
+</pre></div>
+</div>
+<p>Examples:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ipfs</span><span class="p">:</span><span class="o">//</span><span class="n">bafybeibp7sff6wwowsimitrxcpdoqnknyreesvtn24qrnx7gxkhqhzj2fi</span><span class="o">/</span>
+<span class="n">ipns</span><span class="p">:</span><span class="o">//</span><span class="n">ipfs</span><span class="o">.</span><span class="n">io</span><span class="o">/</span>
+</pre></div>
+</div>
+<p><em>Note</em>: the scheme handler for these URL schemes does not
+use the daemon’s HTTP gateway</p>
+</div>
+<div class="section" id="dweb">
+<h3>dweb:/<a class="headerlink" href="#dweb" title="Permalink to this headline">¶</a></h3>
+<p>This is the legacy scheme and it will be automatically used when
+accessing content rooted under CIDv0 objects.
+Because it proxies the requests to the daemon’s HTTP gateway, it
+can handle anything that the daemon supports:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dweb</span><span class="p">:</span><span class="o">/</span><span class="n">ipfs</span><span class="o">/</span><span class="p">{</span><span class="n">cidv0</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
+<span class="n">dweb</span><span class="p">:</span><span class="o">/</span><span class="n">ipfs</span><span class="o">/</span><span class="p">{</span><span class="n">cidv1b32</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
+<span class="n">dweb</span><span class="p">:</span><span class="o">/</span><span class="n">ipfs</span><span class="o">/</span><span class="p">{</span><span class="n">cidv1b58</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
+<span class="n">dweb</span><span class="p">:</span><span class="o">/</span><span class="n">ipns</span><span class="o">/</span><span class="p">{</span><span class="n">fqdn</span><span class="o">-</span><span class="k">with</span><span class="o">-</span><span class="n">dnslink</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
+<span class="n">dweb</span><span class="p">:</span><span class="o">/</span><span class="n">ipns</span><span class="o">/</span><span class="p">{</span><span class="n">libp2p</span><span class="o">-</span><span class="n">key</span><span class="o">-</span><span class="ow">in</span><span class="o">-</span><span class="n">base58</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
+</pre></div>
+</div>
+<p>Examples:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dweb</span><span class="p">:</span><span class="o">/</span><span class="n">ipfs</span><span class="o">/</span><span class="n">bafybeibp7sff6wwowsimitrxcpdoqnknyreesvtn24qrnx7gxkhqhzj2fi</span>
+<span class="n">dweb</span><span class="p">:</span><span class="o">/</span><span class="n">ipfs</span><span class="o">/</span><span class="n">QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco</span><span class="o">/</span><span class="n">wiki</span><span class="o">/</span>
+<span class="n">dweb</span><span class="p">:</span><span class="o">/</span><span class="n">ipns</span><span class="o">/</span><span class="n">QmarwvLcWm51SwhnxABxsy1cE7v1RHPMjt4VkQ3kqsrdX3</span>
+<span class="n">dweb</span><span class="p">:</span><span class="o">/</span><span class="n">ipns</span><span class="o">/</span><span class="n">awesome</span><span class="o">.</span><span class="n">ipfs</span><span class="o">.</span><span class="n">io</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="ens">
+<h3>ens://<a class="headerlink" href="#ens" title="Permalink to this headline">¶</a></h3>
+<p>There is support for accessing IPFS-hosted websites that are registered
+on the <em>Ethereum Name Service</em> (see <a class="reference external" href="https://ens.domains/">ENS</a>). Just use <strong>ens://mydomain.eth</strong>
+for example as a URL in the browser and you will be redirected to the IPFS
+website referenced on ENS for this domain.</p>
+<p>Go to <strong>ens://blog.almonit.eth</strong> to find a list of some ENS+IPFS websites.</p>
+</div>
+<div class="section" id="other">
+<h3>Other<a class="headerlink" href="#other" title="Permalink to this headline">¶</a></h3>
+<p>There is support for mapping IPFS objects to a specific URL scheme,
+allowing easy access from the URL bar to commonly-accessed resources.</p>
+<p>Right now this is only used for the manual. To access the manual from
+the URL bar, just type in <strong>manual:/</strong> (or just <strong>manual:</strong>)</p>
+<ul class="simple">
+<li><a class="reference external" href="manual:/">manual:/</a></li>
+<li><a class="reference external" href="manual:/browsing.html">manual:/browsing.html</a></li>
+</ul>
+</div>
+</div>
+<div class="section" id="web-profiles">
+<h2>Web profiles<a class="headerlink" href="#web-profiles" title="Permalink to this headline">¶</a></h2>
+<p>There are 3 distinct web profiles that can be used when accessing a
+webpage. The current profile can be changed from a browser tab by
+opening the IPFS menu and selecting a profile from the <em>Web profile</em>
+submenu.</p>
+<div class="section" id="minimal-profile">
+<h3>Minimal profile<a class="headerlink" href="#minimal-profile" title="Permalink to this headline">¶</a></h3>
+<p>This profile doesn’t include any specific scripts</p>
+</div>
+<div class="section" id="ipfs-profile">
+<h3>IPFS profile<a class="headerlink" href="#ipfs-profile" title="Permalink to this headline">¶</a></h3>
+<p>This profile adds a JS script to be able to access your IPFS node
+from <em>window.ipfs</em> in the main Javascript world</p>
+</div>
+<div class="section" id="web3-profile">
+<h3>Web3 profile<a class="headerlink" href="#web3-profile" title="Permalink to this headline">¶</a></h3>
+<p>Derives from the IPFS profile. If Ethereum is enabled, it injects
+a <em>web3.js</em> instance available as <em>window.web3</em> in the main
+Javascript world</p>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="hashmarks.html"
+                        title="previous chapter">Hashmarks</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="pyramids.html"
+                        title="next chapter">Multihash pyramids</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="pyramids.html" title="Multihash pyramids"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="hashmarks.html" title="Hashmarks"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">galacteek  documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2019, galacteek.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.8.5.
+    </div>
+  </body>
+</html>

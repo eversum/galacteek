@@ -26,6 +26,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QRegularExpression
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtCore import QDir
+from PyQt5.QtCore import QTimer
 
 from PyQt5.QtGui import QTextDocument
 from PyQt5.QtGui import QTextFormat
@@ -272,6 +273,8 @@ class TextEditorWidget(QWidget):
             self.app.tempDir.path(), self.localDirName)
         self.localDir = QDir(self.localPath)
 
+        self._previewTimer = QTimer(self)
+        self._previewTimer.timeout.connect(self.onPreviewRerender)
         self._editing = editing
         self._currentDocument = None
         self._unixDir = None
@@ -421,7 +424,18 @@ class TextEditorWidget(QWidget):
 
         self.currentDocument.modified.connect(
             functools.partial(self.saveButton.setEnabled, True))
+        self.currentDocument.contentsChanged.connect(self.onDocumentChanged)
+
         self.applyStylesheet()
+
+    def onDocumentChanged(self):
+        if self.previewWidget.isVisible():
+            self._previewTimer.stop()
+            self._previewTimer.start(1200)
+
+    def onPreviewRerender(self):
+        self.markdownPreviewUpdate()
+        self._previewTimer.stop()
 
     def showNameInput(self, view=True):
         self.nameInputLabel.setVisible(view)
@@ -496,6 +510,16 @@ class TextEditorWidget(QWidget):
         self.textEditor.setStyleSheet(defaultStyleSheet)
         return Document(name=name, text=text, parent=self, encoding=encoding)
 
+    def markdownPreviewUpdate(self):
+        textData = self.currentDocument.toPlainText()
+        pDocument = self.previewWidget.document()
+
+        try:
+            html = markitdown(textData)
+            pDocument.setHtml(html)
+        except Exception:
+            pDocument.setPlainText(textData)
+
     def showPreview(self):
         textData = self.currentDocument.toPlainText()
         newDocument = self.newDocument(text=textData)
@@ -538,14 +562,6 @@ class TextEditorWidget(QWidget):
     def onSave(self):
         if self.currentDocument.filename is None:
             self.showNameInput(True)
-
-            if 0:
-                name = self.nameInput()
-                if name:
-                    self.currentDocument.filename = name
-                else:
-                    return
-
         else:
             ensure(self.saveDocument(self.currentDocument))
 
@@ -657,7 +673,7 @@ class TextEditorWidget(QWidget):
 
     @ipfsOp
     async def saveDocument(self, ipfsop, document, offline=True):
-        text = document.toRawText()
+        text = document.toPlainText()
 
         if not document.filename:
             return

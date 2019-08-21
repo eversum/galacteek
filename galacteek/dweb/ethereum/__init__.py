@@ -15,8 +15,10 @@ from PyQt5.QtCore import pyqtSignal
 
 from galacteek import log
 from galacteek import logUser
+from galacteek import ensure
 
-from .contract import ContractWrapper
+from .contract import ContractOperator
+from galacteek.smartcontracts import getContractByName
 
 from requests.exceptions import ConnectionError
 
@@ -42,7 +44,8 @@ class EthereumController(QObject):
     ethConnected = pyqtSignal(bool)
     ethNewBlock = pyqtSignal(str)
 
-    def __init__(self, connParams, loop=None, executor=None, parent=None):
+    def __init__(self, connParams, web3=None, loop=None,
+                 executor=None, parent=None):
         super().__init__(parent)
 
         self.app = QApplication.instance()
@@ -52,10 +55,11 @@ class EthereumController(QObject):
             concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
         self._params = connParams
-        self._web3 = None
+        self._web3 = web3
         self._watchTask = None
         self._blockLatest = None
         self._stop = False
+        self._loadedContracts = {}
 
     @property
     def web3(self):
@@ -104,7 +108,9 @@ class EthereumController(QObject):
         self._stop = True
 
     async def start(self):
-        self._web3 = self.getWeb3()
+        if not self._web3:
+            self._web3 = self.getWeb3()
+
         if self.web3 is None:
             log.debug('Web3 invalid')
             return
@@ -113,7 +119,9 @@ class EthereumController(QObject):
             logUser.info('Ethereum: connected to {}'.format(
                 self.params.rpcUrl))
             self.ethConnected.emit(True)
-            self._watchTask = await self._e(self.watchTask)
+            # self._watchTask = await self._e(self.watchTask)
+            self._watchTask = ensure(self._e(self.watchTask))
+            # await self.loadContracts()
         else:
             self.ethConnected.emit(False)
 
@@ -153,5 +161,30 @@ class EthereumController(QObject):
                 address=addr,
                 abi=abi
             )
-            return ContractWrapper(self, contract)
+            return ContractOperator(self, contract)
         return await self._e(load, address, abi)
+
+    async def loadLocalContractFromAddr(self, contractName, address):
+        lContract = getContractByName(contractName)
+        if not lContract:
+            return
+
+        def load(_lContract, address):
+            # Blocking call
+            w3Contract = _lContract.web3Contract(self.web3)
+            return w3Contract(address)
+
+        contract = await self._e(load, lContract, address)
+        if contract:
+            operator = lContract.module.contractOperator(self, contract,
+                                                         address, parent=self)
+            self._loadedContracts.setdefault(contractName, {'default': None})
+            self._loadedContracts[contractName][address] = operator
+
+            if self._loadedContracts[contractName]['default'] is None:
+                self._loadedContracts[contractName]['default'] = operator
+
+            return lContract, operator
+        else:
+            log.debug('Contract invalid: {}'.format(address))
+            return None, None

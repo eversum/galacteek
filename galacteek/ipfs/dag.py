@@ -37,15 +37,121 @@ class DAGEditor(object):
         await self.dag.sync()
 
 
-class DAGPortal(QObject):
+class DAGOperations:
+    def debug(self, msg):
+        log.debug(msg)
+
+    @ipfsOp
+    async def get(self, op, path):
+        self.debug('DAG get: {}'.format(os.path.join(self.dagCid, path)))
+        try:
+            dagNode = await op.dagGet(
+                os.path.join(self.dagCid, path))
+        except aioipfs.APIError as err:
+            log.debug('DAG get: {0}. An error occured: {1}'.format(
+                path, err.message))
+            return None
+
+        if isinstance(dagNode, dict) and 'data' in dagNode and \
+                'links' in dagNode:
+            """ Try and decode the protobuf data """
+            msg = pb.decodeDagNode(dagNode['data'])
+            if not msg:
+                return
+            return msg['data']
+        else:
+            return dagNode
+
+    @ipfsOp
+    async def cat(self, op, path):
+        return await op.client.cat(
+            os.path.join(self.dagCid, path))
+
+    @ipfsOp
+    async def list(self, op, path=''):
+        data = await self.get(path)
+        if data is None:
+            return
+
+        if isinstance(data, dict):
+            return list(data.keys())
+
+    @ipfsOp
+    async def chNode(self, ipfsop, path, start=None, create=False):
+        comps = path.split('/')
+        cur = start if start else self.dagRoot
+
+        for comp in comps:
+            if comp not in cur:
+                if create:
+                    cur[comp] = {}
+                    cur = cur[comp]
+                else:
+                    return cur
+            else:
+                cur = cur[comp]
+
+        return cur
+
+    @ipfsOp
+    async def resolve(self, op, path=''):
+        return await op.dagResolve(
+            os.path.join(self.dagCid, path))
+
+    @async_generator
+    async def walk(self, op, path='', maxObjSize=0, depth=1):
+        """
+        Do not use this!
+        """
+
+        data = await self.get(path)
+        if data is None:
+            return
+
+        if isinstance(data, dict) and 'data' in data and 'links' in data:
+            """ Try and decode the protobuf data """
+            msg = pb.decodeDagNode(data['data'])
+            if not msg:
+                return
+            if maxObjSize == 0 or \
+                    (maxObjSize > 0 and msg['size'] < maxObjSize):
+                await yield_((path, DAGObj(msg['data'])))
+
+        if not data:
+            return
+
+        if isinstance(data, dict):
+            for objKey, objValue in data.items():
+                if objKey == '/':
+                    out = await op.client.cat(objValue)
+                    await yield_((path, DAGObj(out)))
+                if objKey == 'data' or objKey == 'links':
+                    continue
+                else:
+                    await yield_from_(
+                        self.walk(op, path=os.path.join(path, objKey),
+                                  maxObjSize=maxObjSize, depth=depth)
+                    )
+
+        elif isinstance(data, list):
+            for idx, obj in enumerate(data):
+                await yield_from_(
+                    self.walk(op, path=os.path.join(path, str(idx)),
+                              maxObjSize=maxObjSize)
+                )
+        elif isinstance(data, str):
+            await yield_((path, DAGObj(data)))
+
+
+class DAGPortal(QObject, DAGOperations):
     """
-    Don't ask me about the name
+    DAG portal
     """
 
     cidChanged = pyqtSignal(str)
     loaded = pyqtSignal(str)
 
-    def __init__(self, dagCid=None, dagRoot=None, offline=True,
+    def __init__(self, dagCid=None, dagRoot=None, offline=False,
                  parent=None):
         super().__init__(parent)
         self._dagCid = dagCid
@@ -108,80 +214,6 @@ class DAGPortal(QObject):
         else:
             self.dagCid = cid
 
-    @ipfsOp
-    async def get(self, op, path):
-        try:
-            dagNode = await op.dagGet(
-                os.path.join(self.dagCid, path))
-        except aioipfs.APIError as err:
-            log.debug(err.message)
-            return None
-
-        if isinstance(dagNode, dict) and 'data' in dagNode and \
-                'links' in dagNode:
-            """ Try and decode the protobuf data """
-            msg = pb.decodeDagNode(dagNode['data'])
-            if not msg:
-                return
-            return msg['data']
-        else:
-            return dagNode
-
-    @ipfsOp
-    async def cat(self, op, path):
-        return await op.client.cat(
-            os.path.join(self.dagCid, path))
-
-    @ipfsOp
-    async def list(self, op, path=''):
-        data = await self.get(path)
-        if data is None:
-            return
-
-        if isinstance(data, dict):
-            return data.keys()
-
-    @ipfsOp
-    async def resolve(self, op, path=''):
-        return await op.dagResolve(
-            os.path.join(self.dagCid, path))
-
-    @async_generator
-    async def walk(self, op, path='', maxObjSize=0, depth=1):
-        """
-        Do not use this!
-        """
-
-        data = await self.get(path)
-        if data is None:
-            return
-
-        if isinstance(data, bytes):
-            """ Protobuf data decoded by get() """
-            await yield_((path, DAGObj(data)))
-
-        elif isinstance(data, dict):
-            for objKey, objValue in data.items():
-                if objKey == '/':
-                    out = await op.client.cat(objValue)
-                    await yield_((path, DAGObj(out)))
-                if objKey == 'data' or objKey == 'links':
-                    continue
-                else:
-                    await yield_from_(
-                        self.walk(op, path=os.path.join(path, objKey),
-                                  maxObjSize=maxObjSize, depth=depth)
-                    )
-
-        elif isinstance(data, list):
-            for idx, obj in enumerate(data):
-                await yield_from_(
-                    self.walk(op, path=os.path.join(path, str(idx)),
-                              maxObjSize=maxObjSize)
-                )
-        elif isinstance(data, str):
-            await yield_((path, DAGObj(data)))
-
     async def __aenter__(self):
         if self.dagRoot is None:
             await self.load()
@@ -203,7 +235,7 @@ class DAGPortal(QObject):
             return {"/": cid['Hash']}
 
 
-class EvolvingDAG(QObject):
+class EvolvingDAG(QObject, DAGOperations):
     """
     :param str dagMetaMfsPath: the path inside the MFS for the metadata
         describing this DAG
@@ -216,7 +248,8 @@ class EvolvingDAG(QObject):
 
     keyCidLatest = 'cidlatest'
 
-    def __init__(self, dagMetaMfsPath, dagMetaHistoryMax=12, loop=None):
+    def __init__(self, dagMetaMfsPath, dagMetaHistoryMax=12, offline=False,
+                 loop=None):
         super().__init__()
 
         self.lock = asyncio.Lock()
@@ -227,6 +260,7 @@ class EvolvingDAG(QObject):
         self._dagRoot = None
         self._dagMeta = None
         self._dagCid = None
+        self._offline = offline
         self._dagMetaMaxHistoryItems = dagMetaHistoryMax
         self._dagMetaMfsPath = dagMetaMfsPath
         self.changed.connect(lambda: ensure(self.ipfsSave()))
@@ -323,7 +357,7 @@ class EvolvingDAG(QObject):
             }
             self._dagRoot = self.initDag()
             self.updateDagSchema(self.dagRoot)
-            self.changed.emit()
+            await self.ipfsSave()
             self.loaded.set_result(True)
 
         self.parser = traverseParser(self.dagRoot)
@@ -340,7 +374,8 @@ class EvolvingDAG(QObject):
             # We always PIN the latest DAG and do a pin update using the
             # previous item in the history
 
-            cid = await op.dagPut(self.dagRoot, pin=True)
+            cid = await op.dagPut(self.dagRoot, pin=True,
+                                  offline=self._offline)
             if cid is not None:
                 if prevCid is not None and prevCid not in history:
                     if len(history) > maxItems:
@@ -364,90 +399,6 @@ class EvolvingDAG(QObject):
                 return False
 
         return True
-
-    @ipfsOp
-    async def get(self, op, path):
-        self.debug('DAG get: {}'.format(os.path.join(self.dagCid, path)))
-        try:
-            dagNode = await op.dagGet(
-                os.path.join(self.dagCid, path))
-        except aioipfs.APIError as err:
-            log.debug('DAG get: {0}. An error occured: {1}'.format(
-                path, err.message))
-            return None
-
-        if isinstance(dagNode, dict) and 'data' in dagNode and \
-                'links' in dagNode:
-            """ Try and decode the protobuf data """
-            msg = pb.decodeDagNode(dagNode['data'])
-            if not msg:
-                return
-            return msg['data']
-        else:
-            return dagNode
-
-    @ipfsOp
-    async def cat(self, op, path):
-        return await op.client.cat(
-            os.path.join(self.dagCid, path))
-
-    @ipfsOp
-    async def list(self, op, path=''):
-        data = await self.get(path)
-        if data is None:
-            return
-
-        if isinstance(data, dict):
-            return list(data.keys())
-
-    @ipfsOp
-    async def resolve(self, op, path=''):
-        return await op.dagResolve(
-            os.path.join(self.dagCid, path))
-
-    @async_generator
-    async def walk(self, op, path='', maxObjSize=0, depth=1):
-        """
-        Do not use this!
-        """
-
-        data = await self.get(path)
-        if data is None:
-            return
-
-        if isinstance(data, dict) and 'data' in data and 'links' in data:
-            """ Try and decode the protobuf data """
-            msg = pb.decodeDagNode(data['data'])
-            if not msg:
-                return
-            if maxObjSize == 0 or \
-                    (maxObjSize > 0 and msg['size'] < maxObjSize):
-                await yield_((path, DAGObj(msg['data'])))
-
-        if not data:
-            return
-
-        if isinstance(data, dict):
-            for objKey, objValue in data.items():
-                if objKey == '/':
-                    out = await op.client.cat(objValue)
-                    await yield_((path, DAGObj(out)))
-                if objKey == 'data' or objKey == 'links':
-                    continue
-                else:
-                    await yield_from_(
-                        self.walk(op, path=os.path.join(path, objKey),
-                                  maxObjSize=maxObjSize, depth=depth)
-                    )
-
-        elif isinstance(data, list):
-            for idx, obj in enumerate(data):
-                await yield_from_(
-                    self.walk(op, path=os.path.join(path, str(idx)),
-                              maxObjSize=maxObjSize)
-                )
-        elif isinstance(data, str):
-            await yield_((path, DAGObj(data)))
 
     async def __aenter__(self):
         """

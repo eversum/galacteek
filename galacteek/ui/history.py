@@ -1,5 +1,4 @@
-
-from PyQt5.QtWidgets import QListView
+from PyQt5.QtWidgets import QTreeView
 from PyQt5.QtWidgets import QApplication
 
 from PyQt5.QtCore import QObject
@@ -7,9 +6,13 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtCore import Qt
 
 from PyQt5.QtGui import QStandardItemModel
-from PyQt5.QtGui import QStandardItem
+from PyQt5.QtGui import QBrush
+from PyQt5.QtGui import QColor
 
 from galacteek import ensure
+from galacteek.core.modelhelpers import UneditableItem
+
+from .i18n import iUnknown
 
 
 class URLHistory(QObject):
@@ -35,7 +38,7 @@ class URLHistory(QObject):
         return await self.db.historySearch(input)
 
 
-class HistoryMatchesWidget(QListView):
+class HistoryMatchesWidget(QTreeView):
     historyItemSelected = pyqtSignal(str)
     collapsed = pyqtSignal()
 
@@ -48,26 +51,51 @@ class HistoryMatchesWidget(QListView):
 
         self.model = QStandardItemModel()
         self.setModel(self.model)
+        self.setHeaderHidden(True)
 
     def onItemActivated(self, idx):
-        data = self.model.data(idx, Qt.EditRole)
+        idxUrl = self.model.index(idx.row(), 1, idx.parent())
+        data = self.model.data(idxUrl)
 
-        if isinstance(data, str):
+        if isinstance(data, str) and data:
             self.historyItemSelected.emit(data)
 
-    def showMatches(self, matches):
+    def showMatches(self, marks, hMatches):
         self.model.clear()
-        for match in matches:
-            if match['title']:
-                text = '{title}: {url}'.format(
-                    title=match['title'], url=match['url'])
-            else:
-                text = match['url']
+        brush = QBrush(QColor('#bfbfbf'))
 
-            item = QStandardItem(text)
-            item.setEditable(False)
+        mItem = UneditableItem('Hashmarks')
+        mItem.setBackground(brush)
+        mItemE = UneditableItem('')
+        mItemE.setBackground(brush)
+        self.model.invisibleRootItem().appendRow([mItem, mItemE])
+
+        for match in marks:
+            title = match['title'][0:64] if match['title'] else iUnknown()
+
+            itemT = UneditableItem(title)
+            item = UneditableItem(match['url'])
             item.setData(match['url'], Qt.EditRole)
-            self.model.invisibleRootItem().appendRow(item)
+
+            mItem.appendRow([itemT, item])
+
+        hItem = UneditableItem('History items')
+        hItemE = UneditableItem('')
+        hItem.setBackground(brush)
+        hItemE.setBackground(brush)
+        self.model.invisibleRootItem().appendRow([hItem, hItemE])
+
+        for match in hMatches:
+            title = match['title'][0:64] if match['title'] else iUnknown()
+            itemT = UneditableItem(title)
+
+            item = UneditableItem(match['url'])
+            item.setData(match['url'], Qt.EditRole)
+
+            hItem.appendRow([itemT, item])
+
+        self.expandAll()
+        self.resizeColumnToContents(0)
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Return:

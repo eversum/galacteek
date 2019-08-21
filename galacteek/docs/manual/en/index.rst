@@ -12,6 +12,7 @@ galacteek's manual (english)
     Settings <settings>
     Toolbars <toolbars>
     Hashmarks <hashmarks>
+    Browsing <browsing>
     Multihash Pyramids <pyramids>
     Atom feeds <atom>
     QR codes <qrcodes>

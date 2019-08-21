@@ -91,7 +91,7 @@ class ApplicationStarter:
 
     def startProcess(self, args):
         p = QProcess()
-        prog = self.args.binaryname if self.args.binaryname else args[0]
+        prog = self.args.binarypath if self.args.binarypath else args[0]
         p.setProgram(prog)
         if len(args) > 1:
             p.setArguments(args[1:])
@@ -208,11 +208,18 @@ def start():
                         help='Application Profile')
     parser.add_argument('--binary-name', default=None,
                         help='Binary name', dest='binaryname')
+    parser.add_argument('--binary-path', default=None,
+                        help='Binary path', dest='binarypath')
     parser.add_argument(
         '--monitor',
         action='store_true',
         dest='monitor',
         help='Monitor application with aiomonitor')
+    parser.add_argument(
+        '--appimage',
+        action='store_true',
+        dest='appimage',
+        help='Running from an AppImage')
     parser.add_argument(
         '--migrate',
         action='store_true',

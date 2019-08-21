@@ -70,8 +70,8 @@ class build_contracts(Command):
     def run(self):
         from web3 import Web3
         from galacteek.smartcontracts import listContracts
-        from galacteek.dweb.ethereum.contract import solCompileFile
-        from galacteek.dweb.ethereum.contract import vyperCompileFile
+        from galacteek.smartcontracts import solCompileFile
+        from galacteek.smartcontracts import vyperCompileFile
         from galacteek.dweb.ethereum.contract import contractDeploy
 
         usrcontracts = [c for c in self.contracts.split(',')] if \
@@ -238,7 +238,7 @@ setup(
     },
     entry_points={
         'gui_scripts': [
-            'galacteek = galacteek.guientrypoint:start',
+            'galacteek = galacteek.guientrypoint:start'
         ]
     },
     extras_require={

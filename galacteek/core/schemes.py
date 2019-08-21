@@ -23,8 +23,12 @@ from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import joinIpns
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.cidhelpers import ipfsRegSearchCid32
+from galacteek.ipfs.ipfsops import APIErrorDecoder
 from galacteek.dweb.render import renderTemplate
 from galacteek.dweb.enswhois import ensContentHash
+
+from galacteek.ipdapps import dappsRegisterSchemes
+
 
 from yarl import URL
 
@@ -34,9 +38,91 @@ SCHEME_FS = 'fs'
 SCHEME_IPFS = 'ipfs'
 SCHEME_ENS = 'ens'
 SCHEME_IPNS = 'ipns'
+SCHEME_GALACTEEK = 'glk'
+SCHEME_PALACE = 'palace'
+SCHEME_MANUAL = 'manual'
+
+
+# Default flags used by declareUrlScheme()
+defaultSchemeFlags = QWebEngineUrlScheme.SecureScheme | \
+    QWebEngineUrlScheme.ViewSourceAllowed
+
+# Registered URL schemes
+urlSchemes = {}
+
+
+def allUrlSchemes():
+    global urlSchemes
+    return urlSchemes
+
+
+def isSchemeRegistered(scheme):
+    global urlSchemes
+    for section, schemes in urlSchemes.items():
+        if scheme in schemes:
+            return True
+
+
+def declareUrlScheme(name,
+                     flags=defaultSchemeFlags,
+                     syntax=QWebEngineUrlScheme.Syntax.Host,
+                     defaultPort=QWebEngineUrlScheme.PortUnspecified,
+                     schemeSection='core'):
+    global urlSchemes
+    scheme = QWebEngineUrlScheme(name.encode())
+    scheme.setFlags(flags)
+    scheme.setSyntax(syntax)
+    scheme.setDefaultPort(defaultPort)
+    QWebEngineUrlScheme.registerScheme(scheme)
+    urlSchemes.setdefault(schemeSection, {})
+    urlSchemes[schemeSection][name] = scheme
+    return scheme
+
+
+def registerMiscSchemes():
+    declareUrlScheme(SCHEME_MANUAL,
+                     syntax=QWebEngineUrlScheme.Syntax.Path,
+                     schemeSection='misc'
+                     )
 
 
 def initializeSchemes():
+    name = QWebEngineUrlScheme.schemeByName(SCHEME_DWEB.encode()).name()
+    if name:
+        # initializeSchemes() already called ?
+        log.debug('initializeSchemes() already called')
+        return
+
+    declareUrlScheme(
+        SCHEME_DWEB,
+        syntax=QWebEngineUrlScheme.Syntax.Path,
+    )
+
+    declareUrlScheme(
+        SCHEME_FS,
+        syntax=QWebEngineUrlScheme.Syntax.Path,
+    )
+
+    declareUrlScheme(
+        SCHEME_IPFS,
+        syntax=QWebEngineUrlScheme.Syntax.Host
+    )
+
+    declareUrlScheme(
+        SCHEME_IPNS,
+        syntax=QWebEngineUrlScheme.Syntax.Host
+    )
+
+    declareUrlScheme(
+        SCHEME_ENS,
+        syntax=QWebEngineUrlScheme.Syntax.Host
+    )
+
+    dappsRegisterSchemes()
+    registerMiscSchemes()
+
+
+def initializeSchemesOld():
     name = QWebEngineUrlScheme.schemeByName(SCHEME_DWEB.encode()).name()
     if name:
         # initializeSchemes() already called ?
@@ -56,12 +142,16 @@ def initializeSchemes():
         QWebEngineUrlScheme.SecureScheme |
         QWebEngineUrlScheme.ViewSourceAllowed
     )
+    schemeIpfs.setSyntax(QWebEngineUrlScheme.Syntax.Host)
+    schemeIpfs.setDefaultPort(QWebEngineUrlScheme.PortUnspecified)
 
     schemeIpns = QWebEngineUrlScheme(SCHEME_IPNS.encode())
     schemeIpns.setFlags(
         QWebEngineUrlScheme.SecureScheme |
         QWebEngineUrlScheme.ViewSourceAllowed
     )
+    schemeIpns.setSyntax(QWebEngineUrlScheme.Syntax.Host)
+    schemeIpns.setDefaultPort(QWebEngineUrlScheme.PortUnspecified)
 
     schemeEns = QWebEngineUrlScheme(SCHEME_ENS.encode())
     schemeEns.setFlags(QWebEngineUrlScheme.SecureScheme)
@@ -72,19 +162,43 @@ def initializeSchemes():
     QWebEngineUrlScheme.registerScheme(schemeEns)
     QWebEngineUrlScheme.registerScheme(schemeIpns)
 
+    dappsRegisterSchemes()
+    registerMiscSchemes()
+
 
 def isIpfsUrl(url):
     if url.isValid():
-        scheme = url.scheme()
-        return scheme in [SCHEME_FS, SCHEME_DWEB, SCHEME_IPFS, SCHEME_IPNS]
+        return url.scheme() in [SCHEME_FS, SCHEME_DWEB,
+                                SCHEME_IPFS, SCHEME_IPNS]
 
 
-class ENSWhoisSchemeHandler(QWebEngineUrlSchemeHandler):
+def isNativeIpfsUrl(url):
+    if url.isValid():
+        return url.scheme() in [SCHEME_IPFS, SCHEME_IPNS]
+
+
+class BaseURLSchemeHandler(QWebEngineUrlSchemeHandler):
+    webProfileNeeded = None
+
+    def reqFailed(self, request):
+        return request.fail(QWebEngineUrlRequestJob.RequestFailed)
+
+    def urlInvalid(self, request):
+        return request.fail(QWebEngineUrlRequestJob.UrlInvalid)
+
+    def urlNotFound(self, request):
+        return request.fail(QWebEngineUrlRequestJob.UrlNotFound)
+
+    def aborted(self, request):
+        return request.fail(QWebEngineUrlRequestJob.RequestAborted)
+
+
+class ENSWhoisSchemeHandler(BaseURLSchemeHandler):
     contentReady = pyqtSignal(str, QWebEngineUrlRequestJob, str, bytes)
     domainResolved = pyqtSignal(str, IPFSPath)
 
     def __init__(self, app, parent=None):
-        QWebEngineUrlSchemeHandler.__init__(self, parent)
+        super(ENSWhoisSchemeHandler, self).__init__(parent)
 
         self.app = app
         self.requests = {}
@@ -96,14 +210,14 @@ class ENSWhoisSchemeHandler(QWebEngineUrlSchemeHandler):
     async def handleRequest(self, request):
         rUrl = request.requestUrl()
         if not rUrl.isValid():
-            return
+            return self.urlInvalid(request)
 
         domain = rUrl.host()
         uPath = rUrl.path()
 
         if not domain or len(domain) > 512:
             logUser.info('ENS: invalid domain request')
-            return
+            return self.urlInvalid(request)
 
         logUser.info('ENS: resolving {0}'.format(domain))
 
@@ -126,9 +240,9 @@ class ENSWhoisSchemeHandler(QWebEngineUrlSchemeHandler):
         ensure(self.handleRequest(self.requests[uid]))
 
 
-class DedicatedIPFSSchemeHandler(QWebEngineUrlSchemeHandler):
+class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
     """
-    Dedicated scheme handler for URLs using the ipfs://<cidv1base32>
+    Native scheme handler for URLs using the ipfs://<cidv1base32>
     or ipns://<fqdn>/.. formats
 
     We don't use the gateway at all here, making the async requests
@@ -146,14 +260,14 @@ class DedicatedIPFSSchemeHandler(QWebEngineUrlSchemeHandler):
     contentReady = pyqtSignal(str, QWebEngineUrlRequestJob, str, bytes)
 
     def __init__(self, app, parent=None):
-        QWebEngineUrlSchemeHandler.__init__(self, parent)
+        super(NativeIPFSSchemeHandler, self).__init__(parent)
 
         self.app = app
         self.requests = {}
         self.contentReady.connect(self.onContent)
 
     def debug(self, msg):
-        log.debug('Base32 scheme handler: {}'.format(msg))
+        log.debug('Native scheme handler: {}'.format(msg))
 
     def onRequestDestroyed(self, uid):
         if uid in self.requests:
@@ -232,8 +346,29 @@ class DedicatedIPFSSchemeHandler(QWebEngineUrlSchemeHandler):
         try:
             data = await client.cat(str(indexPath))
         except aioipfs.APIError as exc:
-            if exc.message.startswith('no link named'):
+            dec = APIErrorDecoder(exc)
+
+            if dec.errNoSuchLink():
                 return await self.directoryListing(request, client, path)
+
+            return self.urlInvalid(request)
+        else:
+            return data
+
+    async def renderDagListing(self, request, client, path, **kw):
+        return b'ENOTIMPLEMENTED'
+
+    async def renderDagNode(self, request, client, ipfsPath, **kw):
+        self.debug('DAG node render: {}'.format(ipfsPath))
+        indexPath = ipfsPath.child('index.html')
+
+        try:
+            data = await client.cat(str(indexPath))
+            if not data:
+                return await self.renderDagListing(request, client, ipfsPath,
+                                                   **kw)
+        except aioipfs.APIError:
+            return await self.renderDagListing(request, client, ipfsPath, **kw)
         else:
             return data
 
@@ -253,7 +388,7 @@ class DedicatedIPFSSchemeHandler(QWebEngineUrlSchemeHandler):
 
         if not rUrl.isValid():
             self.debug('Invalid URL: {}'.format(rUrl.toString()))
-            return request.fail(QWebEngineUrlRequestJob.UrlInvalid)
+            return self.urlInvalid(request)
 
         scheme = rUrl.scheme()
 
@@ -262,30 +397,50 @@ class DedicatedIPFSSchemeHandler(QWebEngineUrlSchemeHandler):
             cid = rUrl.host()
 
             if not ipfsRegSearchCid32(cid):
-                request.fail(QWebEngineUrlRequestJob.UrlInvalid)
-                return
+                return self.urlInvalid(request)
 
             ipfsPathS = joinIpfs(cid) + rUrl.path()
         elif scheme == SCHEME_IPNS:
             ipfsPathS = joinIpns(rUrl.host()) + rUrl.path()
         else:
-            return request.fail(QWebEngineUrlRequestJob.UrlInvalid)
+            return self.urlInvalid(request)
 
         ipfsPath = IPFSPath(ipfsPathS)
         if not ipfsPath.valid:
-            return request.fail(QWebEngineUrlRequestJob.UrlInvalid)
+            return self.urlInvalid(request)
 
+        return await self.fetchFromPath(ipfsop, request, ipfsPath, uid)
+
+    async def fetchFromPath(self, ipfsop, request, ipfsPath, uid, **kw):
         try:
-            data = await ipfsop.client.cat(ipfsPathS)
+            data = await ipfsop.client.cat(str(ipfsPath))
         except aioipfs.APIError as exc:
             await asyncio.sleep(0)
-            if exc.message.startswith('no link named'):
-                return request.fail(QWebEngineUrlRequestJob.UrlNotFound)
-            if exc.message == 'this dag node is a directory':
+
+            self.debug('API error ({path}): {err}'.format(
+                path=str(ipfsPath), err=exc.message)
+            )
+
+            dec = APIErrorDecoder(exc)
+
+            if dec.errNoSuchLink():
+                return self.urlNotFound(request)
+
+            if dec.errIsDirectory():
                 data = await self.renderDirectory(
                     request,
                     ipfsop.client,
-                    ipfsPathS
+                    str(ipfsPath)
+                )
+                if data:
+                    return await self.renderData(request, data, uid)
+
+            if dec.errUnknownNode():
+                # DAG / TODO
+                data = await self.renderDagNode(
+                    request,
+                    ipfsop.client,
+                    ipfsPath
                 )
                 if data:
                     return await self.renderData(request, data, uid)
@@ -305,7 +460,133 @@ class DedicatedIPFSSchemeHandler(QWebEngineUrlSchemeHandler):
         ensure(self.handleRequest(request, uid))
 
 
-class DWebSchemeHandler(QWebEngineUrlSchemeHandler):
+class ObjectProxySchemeHandler(NativeIPFSSchemeHandler):
+    """
+    This scheme handler acts as a "proxy" to an IPFS path.
+
+    For example, by mapping the url scheme 'docs' to this path:
+
+    /ipfs/bafybeihw6pfoai7wbyt5jhbiialicees3vn336fkrdmjlbheh2dqsxsmlu/
+
+    Accessing 'docs:/pdf/today.pdf' will access the IPFS object at
+
+    /ipfs/bafybeihw6pfoai7wbyt5jhbiialicees3vn336fkrdmjlbheh2dqsxsmlu/pdf/today.pdf
+    """
+
+    def __init__(self, app, ipfsPath, parent=None):
+        """
+        :param IPFSPath ipfsPath: the path to proxy to
+        """
+        super(ObjectProxySchemeHandler, self).__init__(app, parent=parent)
+
+        self.proxiedPath = ipfsPath
+
+    @ipfsOp
+    async def handleRequest(self, ipfsop, request, uid):
+        if not self.proxiedPath.valid:
+            return request.fail(QWebEngineUrlRequestJob.UrlInvalid)
+
+        rUrl = request.requestUrl()
+
+        if not rUrl.isValid():
+            return self.urlInvalid(request)
+
+        path = rUrl.path()
+        ipfsPath = self.proxiedPath.child(path)
+
+        if not ipfsPath.valid:
+            return self.urlInvalid(request)
+
+        return await self.fetchFromPath(ipfsop, request, ipfsPath, uid)
+
+
+class DAGProxySchemeHandler(NativeIPFSSchemeHandler):
+    """
+    This scheme handler acts as a "proxy" to a DAG
+    """
+
+    def __init__(self, app, parent=None):
+        super(DAGProxySchemeHandler, self).__init__(app, parent=parent)
+
+        # The DAG being proxied
+        self.proxied = None
+
+    async def getDag(self):
+        raise Exception('implement getDag()')
+
+    async def renderDagListing(self, request, client, path):
+        listing = await self.proxied.list(
+            path=path.subPath if path.subPath else '')
+        if not listing:
+            return b'ELISTING'
+
+        ctx = {}
+        ctx['path'] = str(path)
+        ctx['links'] = []
+
+        for nname in listing:
+            child = path.child(nname)
+            ctx['links'].append({
+                'name': nname,
+                'href': child.ipfsUrl
+            })
+
+        try:
+            data = await renderTemplate('ipfsdagnodelisting.html', **ctx)
+        except:
+            pass
+        else:
+            return data.encode()
+
+    @ipfsOp
+    async def handleRequest(self, ipfsop, request, uid):
+        if self.proxied is None:
+            self.proxied = await self.getDag()
+
+        if not self.proxied:
+            return request.fail(QWebEngineUrlRequestJob.UrlInvalid)
+
+        rUrl = request.requestUrl()
+
+        if not rUrl.isValid():
+            self.debug('Invalid URL: {}'.format(rUrl.toString()))
+            return self.urlInvalid(request)
+
+        path = rUrl.path()
+        ipfsPathS = joinIpfs(self.proxied.dagCid) + path
+
+        ipfsPath = IPFSPath(ipfsPathS)
+        if not ipfsPath.valid:
+            return self.urlInvalid(request)
+
+        return await self.fetchFromPath(ipfsop, request, ipfsPath, uid)
+
+
+class GalacteekSchemeHandler(DAGProxySchemeHandler):
+    @ipfsOp
+    async def getDag(self, ipfsop):
+        curProfile = ipfsop.ctx.currentProfile
+        if curProfile:
+            return curProfile.dagUser
+
+
+class DAGWatchSchemeHandler(DAGProxySchemeHandler):
+    def __init__(self, app, dappName, parent=None):
+        super(DAGWatchSchemeHandler, self).__init__(app, parent=parent)
+
+        self.name = dappName
+        self.app.towers['dags'].dappDeployedAtCid.connect(self.onDappDeployed)
+
+    def onDappDeployed(self, dag, name, cid):
+        if name == self.name:
+            self.proxied = dag
+
+    @ipfsOp
+    async def getDag(self, ipfsop):
+        return self.proxied
+
+
+class DWebSchemeHandler(BaseURLSchemeHandler):
     """
     IPFS dweb scheme handler, supporting URLs such as:
 
@@ -357,6 +638,7 @@ class DWebSchemeHandler(QWebEngineUrlSchemeHandler):
 
         path = url.path()
         if not isinstance(path, str):
+            self.urlInvalid(request)
             return
 
         log.debug(
@@ -369,3 +651,111 @@ class DWebSchemeHandler(QWebEngineUrlSchemeHandler):
                 return self.redirectIpfs(request, path, url)
             except Exception as err:
                 log.debug('Exception handling request: {}'.format(str(err)))
+
+
+class MultiDAGProxySchemeHandler(NativeIPFSSchemeHandler):
+    """
+    Proxy handler to a stack of DAGs (first DAG registered is the
+    first DAG tried).
+    """
+
+    def __init__(self, app, parent=None):
+        super(MultiDAGProxySchemeHandler, self).__init__(app, parent=parent)
+        self.proxied = []
+
+    def useDag(self, dag):
+        self.proxied.append(dag)
+
+    async def renderDagListing(self, request, client, path, **kw):
+        dag = kw.pop('dag', None)
+        assert dag is not None
+
+        listing = await dag.list(
+            path=path.subPath if path.subPath else '')
+        if not listing:
+            return b'ELISTING'
+
+        ctx = {}
+        ctx['path'] = str(path)
+        ctx['links'] = []
+
+        for nname in listing:
+            child = path.child(nname)
+            ctx['links'].append({
+                'name': nname,
+                'href': child.ipfsUrl
+            })
+
+        try:
+            data = await renderTemplate('ipfsdagnodelisting.html', **ctx)
+        except:
+            pass
+        else:
+            return data.encode()
+
+    @ipfsOp
+    async def handleRequest(self, ipfsop, request, uid):
+        if len(self.proxied) == 0:
+            return self.urlInvalid(request)
+
+        rUrl = request.requestUrl()
+
+        if not rUrl.isValid():
+            self.debug('Invalid URL: {}'.format(rUrl.toString()))
+            return self.urlInvalid(request)
+
+        path = rUrl.path()
+
+        for dag in self.proxied:
+            if not dag.dagCid:
+                continue
+
+            ipfsPathS = joinIpfs(dag.dagCid) + path
+            ipfsPath = IPFSPath(ipfsPathS)
+
+            if not ipfsPath.valid:
+                return request.fail(QWebEngineUrlRequestJob.UrlInvalid)
+
+            return await self.fetchFromPath(ipfsop, request, ipfsPath, uid,
+                                            dag=dag)
+
+    async def fetchFromPath(self, ipfsop, request, ipfsPath, uid, **kw):
+        dag = kw.pop('dag', None)
+        assert dag is not None
+
+        log.debug('Multi DAG proxy : Fetch-from-path {}'.format(ipfsPath))
+        try:
+            data = await ipfsop.client.cat(str(ipfsPath))
+        except aioipfs.APIError as exc:
+            await asyncio.sleep(0)
+
+            self.debug('API error ({path}): {err}'.format(
+                path=str(ipfsPath), err=exc.message)
+            )
+
+            dec = APIErrorDecoder(exc)
+
+            if dec.errNoSuchLink():
+                return self.urlNotFound(request)
+
+            if dec.errIsDirectory():
+                data = await self.renderDirectory(
+                    request,
+                    ipfsop.client,
+                    str(ipfsPath)
+                )
+                if data:
+                    return await self.renderData(request, data, uid)
+
+            if dec.errUnknownNode():
+                # UNK DAG / TODO
+                data = await self.renderDagNode(
+                    request,
+                    ipfsop.client,
+                    ipfsPath,
+                    dag=dag
+                )
+                if data:
+                    return await self.renderData(request, data, uid)
+        else:
+            return await self.renderData(request, data, uid)

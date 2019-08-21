@@ -15,7 +15,6 @@ from galacteek import log
 from galacteek.dweb.render import renderTemplate
 from galacteek.dweb.webscripts import ipfsClientScripts
 from galacteek.dweb.webscripts import orbitScripts
-from galacteek.dweb.webscripts import ethereumClientScripts
 
 
 class BaseHandler(QObject):
@@ -58,8 +57,9 @@ class GalacteekHandler(QObject):
 
 class BasePage(QWebEnginePage):
     def __init__(self, template, url=None, parent=None):
-        super(BasePage, self).__init__(parent)
         self.app = QApplication.instance()
+        super(BasePage, self).__init__(self.app.webProfiles['ipfs'], parent)
+
         self.template = template
         self._handlers = {}
         self.pageCtx = {}
@@ -104,13 +104,6 @@ class IPFSPage(BasePage):
         if exSc.isNull():
             scripts = self.app.scriptsIpfs
             [self.webScripts.insert(script) for script in scripts]
-
-        if self.app.settingsMgr.ethereumEnabled:
-            ethereumScripts = ethereumClientScripts(
-                self.app.getEthParams())
-            if ethereumScripts:
-                [self.webScripts.insert(script) for script in
-                 ethereumScripts]
 
 
 class OrbitPage(BasePage):
@@ -220,6 +213,10 @@ class DWebView(QWebEngineView):
         self.channel = QWebChannel()
         self.p = page
         self.show()
+
+        self.webSettings = self.settings()
+        self.webSettings.setAttribute(QWebEngineSettings.LocalStorageEnabled,
+                                      True)
 
     @property
     def p(self):

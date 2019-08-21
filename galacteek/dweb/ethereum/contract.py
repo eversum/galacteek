@@ -1,29 +1,8 @@
-import os.path
-import json
+
+from PyQt5.QtCore import QObject
+from PyQt5.QtCore import pyqtSignal
 
 from galacteek import log
-
-
-def vyperCompileFile(file_path, formats=['abi', 'bytecode']):
-    from vyper import compile_code
-    try:
-        with open(file_path, 'r') as f:
-            source = f.read()
-
-        return compile_code(source, formats)
-    except Exception as err:
-        log.debug(str(err))
-
-
-def solCompileFile(file_path):
-    from solcx import compile_source
-    try:
-        with open(file_path, 'r') as f:
-            source = f.read()
-
-        return compile_source(source)
-    except Exception as err:
-        log.debug(str(err))
 
 
 def contractDeploy(w3, contract_interface):
@@ -47,46 +26,40 @@ def contractDeploy(w3, contract_interface):
         return None
 
 
-class LocalContract:
-    def __init__(self, name, rootDir, cPath, ctype='solidity'):
-        self.name = name
-        self.rootDir = rootDir
-        self.sourcePath = cPath
-        self._deployedAddress = None
-        self._type = ctype
+class ContractOperator(QObject):
+    contractLoaded = pyqtSignal(str)
 
-    def interface(self):
-        fp = os.path.join(self.dir, 'interface.json')
-        if os.path.exists(fp):
-            with open(fp, 'rt') as fd:
-                return json.load(fd)
-
-    @property
-    def type(self):
-        return self._type
-
-    @property
-    def dir(self):
-        return self.rootDir
-
-    @property
-    def address(self):
-        return self._deployedAddress
-
-    @address.setter
-    def address(self, addr):
-        self._deployedAddress = addr
-
-    def __repr__(self):
-        return 'Local contract: {}'.format(self.sourcePath)
-
-
-class ContractWrapper:
-    def __init__(self, ctrl, contract):
+    def __init__(self, ctrl, contract, address, parent=None):
+        super(ContractOperator, self).__init__(parent)
         self.ctrl = ctrl
         self.contract = contract
+        self.address = address
 
-    async def call(self, fn, *args, **kw):
-        txhash = fn.transact()
-        receipt = self.ctrl.web3.eth.waitForTransactionReceipt(txhash)
-        return receipt
+    async def call(self, fn, *args):
+        def _callwrap(func, *args):
+            result = func(*args).call()
+            return result
+
+        return await self.ctrl._e(_callwrap, fn, *args)
+
+    async def transact(self, fn, *args):
+        def _trwrap(func, *args):
+            txHash = func(*args).transact()
+            receipt = self.ctrl.web3.eth.waitForTransactionReceipt(txHash, 180)
+            return receipt
+
+        return await self.ctrl._e(_trwrap, fn, *args)
+
+    async def callByName(self, fnName, *args, **kw):
+        fn = getattr(self.contract.functions, fnName)
+        if fn:
+            return await self.call(fn, *args)
+
+    async def callTrByName(self, fnName, *args, **kw):
+        fn = getattr(self.contract.functions, fnName)
+        if fn:
+            return await self.transact(fn, *args)
+
+    async def script(self, fn, *args, **kw):
+        r = await self.ctrl._e(fn, self.ctrl.web3, self.contract, *args, **kw)
+        return r

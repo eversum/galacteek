@@ -18,8 +18,10 @@ Browser keyboard shortcuts
 --------------------------
 
 - **Mod + b**: Bookmark current page
+- **Mod + x**: Show/hide javascript output console
 - **Mod + l**: Focus the URL zone
 - **Mod + r** or **F5**: Reload the current page
+- **Mod + F5**: Fully reload the current page (discards any cache)
 - **Mod + +**: Zoom in
 - **Mod + -**: Zoom out
 

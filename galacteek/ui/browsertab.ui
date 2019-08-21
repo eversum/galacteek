@@ -51,31 +51,6 @@
              </property>
             </widget>
            </item>
-           <item>
-            <widget class="QToolButton" name="loadFromClipboardButton">
-             <property name="text">
-              <string/>
-             </property>
-             <property name="icon">
-              <iconset resource="galacteek.qrc">
-               <normaloff>:/share/icons/clipboard.png</normaloff>:/share/icons/clipboard.png</iconset>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QToolButton" name="jsConsoleButton">
-             <property name="toolTip">
-              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Javascript messages&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-             </property>
-             <property name="text">
-              <string/>
-             </property>
-             <property name="icon">
-              <iconset resource="galacteek.qrc">
-               <normaloff>:/share/icons/terminal.png</normaloff>:/share/icons/terminal.png</iconset>
-             </property>
-            </widget>
-           </item>
           </layout>
          </item>
          <item>

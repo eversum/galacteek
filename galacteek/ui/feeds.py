@@ -42,7 +42,7 @@ class AtomFeedsView(QWidget):
         self.model = model
         self._offlineMode = False
 
-        self.webView = IPFSWebView(self)
+        self.webView = IPFSWebView(parent=self)
         self.emptyPage = EmptyPage(self)
         self.webView.setPage(self.emptyPage)
 

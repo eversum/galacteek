@@ -87,18 +87,19 @@
 
             function hideShow(category) {
                 var cat = document.getElementById(category)
+                var cat_button = document.getElementById(category + '_button')
                 var x = document.getElementById(category + '_marks')
                 if (x.style.display === "none" || !(x.style.display)) {
                     x.style.display = "block";
                     cat.setAttribute('style',
                         'border: 1px solid black; margin-left: 24px; margin-right: 24px;');
-                    cat.style.background = '#B7CDC2';
+                    cat_button.style.background = '#B7CDC2';
                 } else {
                     x.style.display = "none";
                     cat.style.border = "1px solid grey";
                     cat.setAttribute('style',
                         'border: 0px; margin-left: 12px; margin-right: 64px;');
-                    cat.style.background = '#e0e0d1';
+                    cat_button.style.background = '#e0e0d1';
                 }
             }
 
@@ -127,7 +128,8 @@
 
     {% if hcount > 0 %}
             <div class="category" id="{{ category }}">
-                <button class="catbutton" onclick="hideShow('{{ category }}');">
+                <button id="{{ category }}_button" class="catbutton"
+                        onclick="hideShow('{{ category }}');">
                     <img style="padding-right: 5px;"
                         width="16" src="qrc:///share/icons/stroke-cube.png" />{{ category }}
                 </button>

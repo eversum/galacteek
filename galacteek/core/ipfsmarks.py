@@ -357,6 +357,47 @@ class IPFSMarks(QObject):
                     _all[mpath] = mark
         return _all
 
+    def searchAllByMetadata(self, metadata):
+        # todo: deprecate searchByMetadata
+        if not isinstance(metadata, dict):
+            raise ValueError('Metadata needs to be a dictionary')
+
+        categories = self.getCategories()
+
+        title = metadata.get('title', None)
+        descr = metadata.get('description', None)
+        path = metadata.get('path', None)
+
+        def metaMatch(mark, field, regexp):
+            try:
+                if mark['metadata'][field] and re.search(
+                        regexp, mark['metadata'][field],
+                        re.IGNORECASE):
+                    return True
+            except:
+                return False
+
+        for cat in categories:
+            marks = self.getCategoryMarks(cat)
+            if not marks:
+                continue
+
+            for mPath, mark in marks.items():
+                if 'metadata' not in mark:
+                    continue
+
+                if path and path == mPath:
+                    yield IPFSHashMark.fromJson(mPath, mark)
+                    continue
+
+                if title and metaMatch(mark, 'title', title):
+                    yield IPFSHashMark.fromJson(mPath, mark)
+                    continue
+
+                if descr and metaMatch(mark, 'description', descr):
+                    yield IPFSHashMark.fromJson(mPath, mark)
+                    continue
+
     def searchByMetadata(self, metadata):
         if not isinstance(metadata, dict):
             raise ValueError('Metadata needs to be a dictionary')
