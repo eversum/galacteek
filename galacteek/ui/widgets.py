@@ -228,6 +228,23 @@ class IPFSUrlLabel(QLabel):
         ensure(self.app.resourceOpener.open(self.path))
 
 
+class LabelWithURLOpener(QLabel):
+    """
+    QLabel which opens http/https URLs in a tab.
+    Used by the 'About' dialog
+    """
+    def __init__(self, text, parent=None):
+        super(LabelWithURLOpener, self).__init__(text, parent)
+        self.app = QApplication.instance()
+        self.linkActivated.connect(self.onLinkClicked)
+
+    def onLinkClicked(self, urlString):
+        url = QUrl(urlString)
+        if url.isValid() and url.scheme() in ['http', 'https']:
+            tab = self.app.mainWindow.addBrowserTab()
+            tab.enterUrl(url)
+
+
 class PopupToolButton(QToolButton, URLDragAndDropProcessor):
     def __init__(self, icon=None, parent=None, menu=None,
                  mode=QToolButton.MenuButtonPopup, acceptDrops=False):

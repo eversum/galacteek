@@ -34,6 +34,7 @@ CFG_KEY_DLPATH = 'downloadspath'
 CFG_KEY_ALLOWHTTPBROWSING = 'httpbrowsing'
 CFG_KEY_JSAPI = 'jsapi'
 CFG_KEY_PPAPIPLUGINS = 'ppapiplugins'
+CFG_KEY_DEFAULTWEBPROFILE = 'defaultwebprofile'
 
 # History
 CFG_KEY_HISTORYENABLED = 'enabled'
@@ -95,6 +96,8 @@ def setDefaultSettings(gApp):
     sManager.setDefaultSetting(section, CFG_KEY_HOMEURL, HOME_DEFAULT)
     sManager.setDefaultSetting(section, CFG_KEY_DLPATH,
                                gApp.defaultDownloadsLocation)
+    sManager.setDefaultSetting(section, CFG_KEY_DEFAULTWEBPROFILE,
+                               'minimal')
     sManager.setDefaultTrue(section, CFG_KEY_GOTOHOME)
     sManager.setDefaultTrue(section, CFG_KEY_JSAPI)
     sManager.setDefaultTrue(section, CFG_KEY_ALLOWHTTPBROWSING)
@@ -119,7 +122,7 @@ def setDefaultSettings(gApp):
 
     section = CFG_SECTION_HISTORY
     sManager.setDefaultFalse(section, CFG_KEY_HISTORYENABLED)
-    sManager.setDefaultSetting(section, CFG_KEY_TIMEOUTURLEDIT, 1200)
+    sManager.setDefaultSetting(section, CFG_KEY_TIMEOUTURLEDIT, 1600)
 
     section = CFG_SECTION_ORBITDB
     sManager.setDefaultSetting(section, CFG_KEY_CONNECTOR_LISTENPORT, 3000)
@@ -277,3 +280,7 @@ class SettingsManager(object):
     @property
     def ethereumRpcUrl(self):
         return self.isTrue(CFG_SECTION_ETHEREUM, CFG_KEY_RPCURL)
+
+    @property
+    def defaultWebProfile(self):
+        return self.getSetting(CFG_SECTION_BROWSER, CFG_KEY_DEFAULTWEBPROFILE)

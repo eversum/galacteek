@@ -19,6 +19,12 @@ galacteek's manual (english)
     File manager <filemanager>
     Pinning <pinning>
 
+Quick-access
+============
+
+You can easily access this manual by typing 
+`manual:/ <manual:/>`_ in the address bar of the browser.
+
 About
 =====
 

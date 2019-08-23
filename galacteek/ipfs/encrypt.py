@@ -1,3 +1,4 @@
+import json
 from io import BytesIO
 
 from galacteek.ipfs.wrappers import ipfsOp
@@ -94,6 +95,16 @@ class IpfsRSAAgent:
                        'IPFS error was {1}'.format(path, err.message))
         else:
             return await self.decryptIpfsObject(data)
+
+    @ipfsOp
+    async def decryptMfsJson(self, op, path):
+        try:
+            decrypted = await self.decryptMfsFile(path)
+            if decrypted:
+                return json.loads(decrypted.decode())
+        except aioipfs.APIError as err:
+            self.debug('decryptMfsJson failed for {0}, '
+                       'IPFS error was {1}'.format(path, err.message))
 
     async def __rsaReadPrivateKey(self):
         return await asyncReadFile(self.privKeyPath)

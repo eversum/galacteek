@@ -33,6 +33,14 @@ lose access to the content that you might have published using the previous
 settings, so use with care. Use separate *application profiles* with the
 **--profile** command-line switch to keep multiple separate profiles.
 
+Ethereum settings
+-----------------
+
+In this section you can configure the Ethereum connection settings.
+These settings are used by the *web3* web profile to provide
+a web3.js *Web3* instance available as *window.web3* in the main
+Javascript world.
+
 User interface settings
 -----------------------
 
@@ -47,15 +55,16 @@ Wrap single files or directories
 If enabled, files or directories will be wrapped within a directory object
 (.dirw)
 
-Activate Javascript IPFS API
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-With this setting you can activate the Javascript API in the browser, allowing
-control of your IPFS daemon from the Javascript engine. Access to the IPFS
-daemon is done through the **window.ipfs** JavaScript variable.
-
 Enable navigation history
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If enabled, visited dweb and ENS URLs are recorded and you will get
 history search results when typing an URL.
+
+Default web profile
+^^^^^^^^^^^^^^^^^^^
+
+With this setting you can select which web profile you want enabled
+by default when you open a browser tab. This setting is set by
+default to *minimal*. If you want the IPFS Javascript API always
+enabled you should select *ipfs* here.

@@ -11,6 +11,11 @@ def scriptFromString(name, jsCode):
     return script
 
 
+ipfsInjScript = '''
+window.ipfs = window.IpfsHttpClient('{host}', '{port}');
+'''
+
+
 def ipfsClientScripts(connParams):
     scripts = []
     jsFile = QFile(':/share/js/ipfs-http-client/index.min.js')
@@ -19,23 +24,34 @@ def ipfsClientScripts(connParams):
 
     scriptJsIpfs = QWebEngineScript()
     scriptJsIpfs.setName('ipfs-http-client')
-    scriptJsIpfs.setSourceCode(jsFile.readAll().data().decode('utf-8'))
-    scriptJsIpfs.setWorldId(QWebEngineScript.MainWorld)
-    scriptJsIpfs.setInjectionPoint(QWebEngineScript.DocumentCreation)
-    scripts.append(scriptJsIpfs)
 
-    script = QWebEngineScript()
-    script.setSourceCode('''
-        window.ipfs = window.IpfsHttpClient('{host}', '{port}');
-    '''.format(
+    libCode = jsFile.readAll().data().decode('utf-8')
+    libCode += "\n"
+    libCode += ipfsInjScript.format(
         host=connParams.host,
         port=connParams.apiPort)
-    )
-    script.setWorldId(QWebEngineScript.MainWorld)
-    script.setInjectionPoint(QWebEngineScript.DocumentReady)
-    script.setRunsOnSubFrames(True)
-    scripts.append(script)
+
+    scriptJsIpfs.setSourceCode(libCode)
+    scriptJsIpfs.setWorldId(QWebEngineScript.MainWorld)
+    scriptJsIpfs.setInjectionPoint(QWebEngineScript.DocumentCreation)
+    scriptJsIpfs.setRunsOnSubFrames(True)
+    scripts.append(scriptJsIpfs)
     return scripts
+
+
+w3ScriptHttp = '''
+window.web3 = new Web3(
+    new Web3.providers.HttpProvider('{rpcurl}')
+);
+window.web3.eth.defaultAccount = window.web3.eth.accounts[0];
+'''
+
+w3ScriptWs = '''
+window.web3 = new Web3(
+    new Web3.providers.WebsocketProvider('{rpcurl}')
+);
+window.web3.eth.defaultAccount = window.web3.eth.accounts[0];
+'''
 
 
 def ethereumClientScripts(connParams):
@@ -44,38 +60,20 @@ def ethereumClientScripts(connParams):
     if not jsFile.open(QFile.ReadOnly):
         return None
 
+    libCode = jsFile.readAll().data().decode('utf-8')
+    libCode += "\n"
+
+    if connParams.provType == 'http':
+        libCode += w3ScriptHttp.format(rpcurl=connParams.rpcUrl)
+    elif connParams.provType == 'websocket':
+        libCode += w3ScriptWs.format(rpcurl=connParams.rpcUrl)
+
     scriptWeb3 = QWebEngineScript()
     scriptWeb3.setName('web3.js')
-    scriptWeb3.setSourceCode(jsFile.readAll().data().decode('utf-8'))
+    scriptWeb3.setSourceCode(libCode)
     scriptWeb3.setWorldId(QWebEngineScript.MainWorld)
     scriptWeb3.setInjectionPoint(QWebEngineScript.DocumentCreation)
     scripts.append(scriptWeb3)
-
-    script = QWebEngineScript()
-    if connParams.provType == 'http':
-        script.setSourceCode(
-            '''
-            window.web3 = new Web3(
-                new Web3.providers.HttpProvider('{rpcurl}')
-            );
-            window.web3.eth.defaultAccount = window.web3.eth.accounts[0];
-            '''.format(rpcurl=connParams.rpcUrl))
-    elif connParams.provType == 'websocket':
-        script.setSourceCode(
-            '''
-            window.web3 = new Web3(
-                new Web3.providers.WebsocketProvider('{rpcurl}')
-            );
-            window.web3.eth.defaultAccount = window.web3.eth.accounts[0];
-            '''.format(rpcurl=connParams.rpcUrl))
-    else:
-        return None
-
-    script.setWorldId(QWebEngineScript.MainWorld)
-    script.setName('web3.injector')
-    script.setInjectionPoint(QWebEngineScript.DocumentReady)
-    script.setRunsOnSubFrames(True)
-    scripts.append(script)
     return scripts
 
 

@@ -1,197 +1,198 @@
+<!DOCTYPE html>
 <html>
-    <head>
-        <link rel="stylesheet" type="text/css" href="qrc:///share/static/css/ipfs-ui.css"/>
-        <style>
-            body {
-                font: 10pt "Montserrat";
-                margin: 10px;
-            }
+  <head>
+    <link rel="stylesheet" type="text/css" href="qrc:///share/static/css/ipfs-ui.css"/>
+    <style>
+      body {
+        font: 10pt "Montserrat";
+        margin: 10px;
+      }
 
-            a {
-                padding: 2px;
-            }
+      a {
+        padding: 2px;
+      }
 
-            #local {
-                margin-top: 20px;
-                padding: 5px;
-            }
+      #local {
+        margin-top: 20px;
+        padding: 5px;
+      }
 
-            #shared {
-                margin-top: 20px;
-                padding: 5px;
-            }
+      #shared {
+        margin-top: 20px;
+        padding: 5px;
+      }
 
-            .categories {
-                padding: 10px;
-            }
+      .categories {
+        padding: 10px;
+      }
 
-            .category {
-                -webkit-box-shadow: 0 8px 6px -6px black;
-                -moz-box-shadow: 0 8px 6px -6px black;
-                box-shadow: 0 8px 6px -6px black;
-                background-color: #e0e0d1;
-                padding: 5px;
-                margin-left: 12px;
-                margin-right: 64px;
-                margin-bottom: 8px;
-                margin-top: 8px;
-                border-radius: 4px;
-            }
+      .category {
+        -webkit-box-shadow: 0 8px 6px -6px black;
+        -moz-box-shadow: 0 8px 6px -6px black;
+        box-shadow: 0 8px 6px -6px black;
+        background-color: #e0e0d1;
+        padding: 5px;
+        margin-left: 12px;
+        margin-right: 64px;
+        margin-bottom: 8px;
+        margin-top: 8px;
+        border-radius: 4px;
+      }
 
-            .marks {
-                display: none;
-                margin-left: 2px;
-            }
+      .marks {
+        display: none;
+        margin-left: 2px;
+      }
 
-            .hashmarklink {
-                icon: url("qrc:///share/icons/ipfs-logo-128-black.png");
-                width: 16;
-            }
+      .hashmarklink {
+        icon: url("qrc:///share/icons/ipfs-logo-128-black.png");
+        width: 16;
+      }
 
-            .catbutton {
-                font: 12pt "Montserrat";
-                icon: url("qrc:///share/icons/stroke-cube.png");
-                background-color: #e0e0d1;
-                background: none;
-                padding: 0;
-                border: none;
-                text-align: left;
-                width: 100%;
-            }
+      .catbutton {
+        font: 12pt "Montserrat";
+        icon: url("qrc:///share/icons/stroke-cube.png");
+        background-color: #e0e0d1;
+        background: none;
+        padding: 0;
+        border: none;
+        text-align: left;
+        width: 100%;
+      }
 
-            .catbutton:focus {
-                outline: none;
-            }
-        </style>
-    </head>
-    <body>
-        <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+      .catbutton:focus {
+        outline: none;
+      }
+    </style>
+  </head>
+  <body>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 
-        <script type="text/javascript">
-            function hideCat(category) {
-                var cat = document.getElementById(category)
-                cat.style.display = "none";
-            }
+    <script type="text/javascript">
+      function hideCat(category) {
+        var cat = document.getElementById(category)
+        cat.style.display = "none";
+      }
 
-            function showHMarks(ns) {
-                var local = document.getElementById('local');
-                var shared = document.getElementById('shared');
-                if (ns === 'local') {
-                    shared.style.display = "none";
-                    local.style.display = "block";
-                } else if (ns === 'shared') {
-                    shared.style.display = "block";
-                    local.style.display = "none";
-                }
-            }
+      function showHMarks(ns) {
+        var local = document.getElementById('local');
+        var shared = document.getElementById('shared');
+        if (ns === 'local') {
+          shared.style.display = "none";
+          local.style.display = "block";
+        } else if (ns === 'shared') {
+          shared.style.display = "block";
+          local.style.display = "none";
+        }
+      }
 
-            function hideShow(category) {
-                var cat = document.getElementById(category)
-                var cat_button = document.getElementById(category + '_button')
-                var x = document.getElementById(category + '_marks')
-                if (x.style.display === "none" || !(x.style.display)) {
-                    x.style.display = "block";
-                    cat.setAttribute('style',
-                        'border: 1px solid black; margin-left: 24px; margin-right: 24px;');
-                    cat_button.style.background = '#B7CDC2';
-                } else {
-                    x.style.display = "none";
-                    cat.style.border = "1px solid grey";
-                    cat.setAttribute('style',
-                        'border: 0px; margin-left: 12px; margin-right: 64px;');
-                    cat_button.style.background = '#e0e0d1';
-                }
-            }
+      function hideShow(category) {
+        var cat = document.getElementById(category)
+        var cat_button = document.getElementById(category + '_button')
+        var x = document.getElementById(category + '_marks')
+        if (x.style.display === "none" || !(x.style.display)) {
+          x.style.display = "block";
+          cat.setAttribute('style',
+            'border: 1px solid black; margin-left: 24px; margin-right: 24px;');
+          cat_button.style.background = '#B7CDC2';
+        } else {
+          x.style.display = "none";
+          cat.style.border = "1px solid grey";
+          cat.setAttribute('style',
+            'border: 0px; margin-left: 12px; margin-right: 64px;');
+          cat_button.style.background = '#e0e0d1';
+        }
+      }
 
-            new QWebChannel(qt.webChannelTransport, function (channel) {
-                window.hashmarks = channel.objects.hashmarks
-                window.galacteek = channel.objects.galacteek
-            });
-        </script>
+      new QWebChannel(qt.webChannelTransport, function (channel) {
+        window.hashmarks = channel.objects.hashmarks
+        window.galacteek = channel.objects.galacteek
+      });
+    </script>
 
-    <p style='text-align: left'>
-        <span>
-            <a title="Local" href="#" onclick="event.preventDefault(); showHMarks('local');">
-                <img src="qrc:///share/icons/hashmarks.png" width="32"/>
-            </a>
-        </span>
-    </p>
+  <p style='text-align: left'>
+    <span>
+      <a title="Local" href="#" onclick="event.preventDefault(); showHMarks('local');">
+        <img src="qrc:///share/icons/hashmarks.png" width="32"/>
+      </a>
+    </span>
+  </p>
 
-    <div id="local">
-        <div id="categories">
+  <div id="local">
+    <div id="categories">
 
-    {% set categories = marks.getCategories() %}
+  {% set categories = marks.getCategories() %}
 
-    {% for category in categories %}
-    {% set hashmarks = marks.getCategoryMarks(category).items() %}
-    {% set hcount = hashmarks|length %}
+  {% for category in categories %}
+  {% set hashmarks = marks.getCategoryMarks(category).items() %}
+  {% set hcount = hashmarks|length %}
 
-    {% if hcount > 0 %}
-            <div class="category" id="{{ category }}">
-                <button id="{{ category }}_button" class="catbutton"
-                        onclick="hideShow('{{ category }}');">
-                    <img style="padding-right: 5px;"
-                        width="16" src="qrc:///share/icons/stroke-cube.png" />{{ category }}
-                </button>
+  {% if hcount > 0 %}
+      <div class="category" id="{{ category }}">
+        <button id="{{ category }}_button" class="catbutton"
+            onclick="hideShow('{{ category }}');">
+          <img style="padding-right: 5px;"
+            width="16" src="qrc:///share/icons/stroke-cube.png" />{{ category }}
+        </button>
 
-                <ul class="marks" id="{{ category }}_marks" style="list-style: none">
-        {% for path, mark in hashmarks %}
-        <li>
-                <p style="text-align: left">
-            {% if mark.icon and ipfsConnParams %}
-            {% set iconpath = mark.icon|ipfspathnorm %}
-                    <img width="16" src="{{ ipfsConnParams.gatewayUrl }}/{{ iconpath }}" />
-            {% endif %}
-                    <a class="hashmarklink" title='{{ mark.metadata.description }}'
-                       href="dweb:{{path}}"
-                       onclick="event.preventDefault(); window.galacteek.openResource('{{ path }}');">{{ mark.metadata.title }}</a>
-                    <span style="float: right">
-                        <a href="#" style="margin: 2px" title="Copy object path to clipboard"
-                            onclick="event.preventDefault(); window.galacteek.copyToClipboard('{{ path }}');"><img width="16" height="16" src='qrc:///share/icons/clipboard.png'/></a>
+        <ul class="marks" id="{{ category }}_marks" style="list-style: none">
+    {% for path, mark in hashmarks %}
+    <li>
+        <p style="text-align: left">
+      {% if mark.icon and ipfsConnParams %}
+      {% set iconpath = mark.icon|ipfspathnorm %}
+          <img width="16" src="{{ ipfsConnParams.gatewayUrl }}/{{ iconpath }}" />
+      {% endif %}
+          <a class="hashmarklink" title='{{ mark.metadata.description }}'
+             href="dweb:{{path}}"
+             onclick="event.preventDefault(); window.galacteek.openResource('{{ path }}');">{{ mark.metadata.title }}</a>
+          <span style="float: right">
+            <a href="#" style="margin: 2px" title="Copy object path to clipboard"
+              onclick="event.preventDefault(); window.galacteek.copyToClipboard('{{ path }}');"><img width="16" height="16" src='qrc:///share/icons/clipboard.png'/></a>
 
-                        <a href="#" style="margin: 2px" title="Explore path"
-                           onclick="event.preventDefault(); window.galacteek.explorePath('{{ path }}');"><img width="16" height="16" src='qrc:///share/icons/folder-open-black.png'/></a>
-                        <a href="#" style="margin: 2px" title="Delete" onclick="event.preventDefault(); window.hashmarks.deleteHashmark('{{ path }}');">Delete</a>
-                    </span>
-                </p>
-            </li>
-
-        {% endfor %}
-                </ul>
-            </div>
-    {% endif %}
+            <a href="#" style="margin: 2px" title="Explore path"
+               onclick="event.preventDefault(); window.galacteek.explorePath('{{ path }}');"><img width="16" height="16" src='qrc:///share/icons/folder-open-black.png'/></a>
+            <a href="#" style="margin: 2px" title="Delete" onclick="event.preventDefault(); window.hashmarks.deleteHashmark('{{ path }}');">Delete</a>
+          </span>
+        </p>
+      </li>
 
     {% endfor %}
+        </ul>
+      </div>
+  {% endif %}
 
+  {% endfor %}
+
+    </div>
+
+    <h3>IPNS feeds</h3>
+
+    <div id="feeds">
+  {% set feeds = marks.getFeeds() %}
+  {% for feedPath, feedData in feeds %}
+      <div class="category" id="{{ feedData.name }}">
+        <button class="catbutton" onclick="hideShow('{{ feedData.name }}');">
+          <img style="padding-right: 5px;" width="16" src="qrc:///share/icons/stroke-cube.png" />{{ feedData.name }}
+        </button>
+
+        <div class="marks" id="{{ feedData.name }}_marks">
+    {% for path, mark in marks.getFeedMarks(feedPath).items() %}
+        <p style="text-align: left"><img width="16" src="qrc:///share/icons/ipfs-logo-128-black.png" />
+          <a class="hashmarklink" href="#" onclick="event.preventDefault(); window.galacteek.openResource('{{ path }}');">
+          {% if mark.metadata.title %}
+            {{ mark.metadata.title }}
+          {% else %}
+            Unknown
+          {% endif %}
+          </a>
+          <span style="float: right; width: 20%">{{ mark.tscreated|tstodate }}</span>
+        </p>
+    {% endfor %}
         </div>
-
-        <h3>IPNS feeds</h3>
-
-        <div id="feeds">
-    {% set feeds = marks.getFeeds() %}
-    {% for feedPath, feedData in feeds %}
-            <div class="category" id="{{ feedData.name }}">
-                <button class="catbutton" onclick="hideShow('{{ feedData.name }}');">
-                    <img style="padding-right: 5px;" width="16" src="qrc:///share/icons/stroke-cube.png" />{{ feedData.name }}
-                </button>
-
-                <div class="marks" id="{{ feedData.name }}_marks">
-        {% for path, mark in marks.getFeedMarks(feedPath).items() %}
-                <p style="text-align: left"><img width="16" src="qrc:///share/icons/ipfs-logo-128-black.png" />
-                    <a class="hashmarklink" href="#" onclick="event.preventDefault(); window.galacteek.openResource('{{ path }}');">
-                    {% if mark.metadata.title %}
-                        {{ mark.metadata.title }}
-                    {% else %}
-                        Unknown
-                    {% endif %}
-                    </a>
-                    <span style="float: right; width: 20%">{{ mark.tscreated|tstodate }}</span>
-                </p>
-        {% endfor %}
-                </div>
-            </div>
-        </div>
+      </div>
+    </div>
 {% endfor %}
 
-    </body>
+  </body>
 </html>

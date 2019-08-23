@@ -104,6 +104,11 @@ def iAbout():
                 galacteek@protonmail.com
             </a>
         </p>
+        <p>Authors: see
+        <a href="https://github.com/eversum/galacteek/blob/master/AUTHORS.rst">
+            AUTHORS.rst
+        </a>
+        </p>
         <p>galacteek version {0}</p>''').format(__version__)
 
 

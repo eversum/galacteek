@@ -71,6 +71,13 @@ lose access to the content that you might have published using the previous
 settings, so use with care. Use separate <em>application profiles</em> with the
 <strong>–profile</strong> command-line switch to keep multiple separate profiles.</p>
 </div>
+<div class="section" id="ethereum-settings">
+<h2>Ethereum settings<a class="headerlink" href="#ethereum-settings" title="Permalink to this headline">¶</a></h2>
+<p>In this section you can configure the Ethereum connection settings.
+These settings are used by the <em>web3</em> web profile to provide
+a web3.js <em>Web3</em> instance available as <em>window.web3</em> in the main
+Javascript world.</p>
+</div>
 <div class="section" id="user-interface-settings">
 <h2>User interface settings<a class="headerlink" href="#user-interface-settings" title="Permalink to this headline">¶</a></h2>
 <div class="section" id="hide-hashes">
@@ -82,16 +89,17 @@ settings, so use with care. Use separate <em>application profiles</em> with the
 <p>If enabled, files or directories will be wrapped within a directory object
 (.dirw)</p>
 </div>
-<div class="section" id="activate-javascript-ipfs-api">
-<h3>Activate Javascript IPFS API<a class="headerlink" href="#activate-javascript-ipfs-api" title="Permalink to this headline">¶</a></h3>
-<p>With this setting you can activate the Javascript API in the browser, allowing
-control of your IPFS daemon from the Javascript engine. Access to the IPFS
-daemon is done through the <strong>window.ipfs</strong> JavaScript variable.</p>
-</div>
 <div class="section" id="enable-navigation-history">
 <h3>Enable navigation history<a class="headerlink" href="#enable-navigation-history" title="Permalink to this headline">¶</a></h3>
 <p>If enabled, visited dweb and ENS URLs are recorded and you will get
 history search results when typing an URL.</p>
+</div>
+<div class="section" id="default-web-profile">
+<h3>Default web profile<a class="headerlink" href="#default-web-profile" title="Permalink to this headline">¶</a></h3>
+<p>With this setting you can select which web profile you want enabled
+by default when you open a browser tab. This setting is set by
+default to <em>minimal</em>. If you want the IPFS Javascript API always
+enabled you should select <em>ipfs</em> here.</p>
 </div>
 </div>
 </div>

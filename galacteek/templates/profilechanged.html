@@ -1,0 +1,33 @@
+{% extends "layouts/web3.html" %}
+
+{% block body %}
+<div>
+  <p style='text-align: left'>
+    <span>
+      <a>
+        <img src="qrc:///share/icons/galacteek.png" width="32"/>
+      </a>
+    </span>
+  </p>
+  <div style='margin-left: 20px; border: 1px solid black;
+	      background-color: lightgrey; padding: 20px; margin-right: 100px'>
+    Your web profile was changed, now using: <b>{{ webProfile }}</b>
+  <ul>
+    <li>IPFS Javascript API: <span id="ipfsapi"></span></li>
+    <li>Ethereum Javascript API: <span id="web3api"></span></li>
+  </ul>
+  <script type="text/javascript">
+    if (window.ipfs) {
+      document.getElementById('ipfsapi').innerHTML = '<b>enabled</b>';
+    } else {
+      document.getElementById('ipfsapi').innerHTML = '<b>unavailable</b>';
+    }
+    if (window.web3) {
+      document.getElementById('web3api').innerHTML = '<b>enabled</b>';
+    } else {
+      document.getElementById('web3api').innerHTML = '<b>unavailable</b>';
+    }
+  </script>
+  </div>
+</div>
+{% endblock %}

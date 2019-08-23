@@ -154,9 +154,6 @@ class IPFSPath:
     maxLength = 2048
 
     def __init__(self, input):
-        if not isinstance(input, str):
-            raise ValueError('path should be a string')
-
         self._enableBase32 = True
         self._rootCid = None
         self._rootCidV = None
@@ -284,6 +281,9 @@ class IPFSPath:
 
         :rtype bool
         """
+
+        if not isinstance(self.input, str):
+            return False
 
         if len(self.input) > self.maxLength:
             return False

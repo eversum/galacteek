@@ -50,12 +50,18 @@ from galacteek.core.schemes import SCHEME_DWEB
 from galacteek.core.schemes import SCHEME_ENS
 from galacteek.core.schemes import SCHEME_IPFS
 from galacteek.core.schemes import SCHEME_IPNS
+from galacteek.core.schemes import SCHEME_Z
 from galacteek.core.schemes import DAGProxySchemeHandler
 from galacteek.core.schemes import MultiDAGProxySchemeHandler
+
+from galacteek.core.webprofiles import WP_NAME_IPFS
+from galacteek.core.webprofiles import WP_NAME_MINIMAL
+from galacteek.core.webprofiles import WP_NAME_WEB3
 
 from galacteek.dweb.webscripts import scriptFromString
 from galacteek.dweb.page import BaseHandler
 from galacteek.dweb.page import pyqtSlot
+from galacteek.dweb.render import renderTemplate
 
 from . import ui_browsertab
 from .helpers import *
@@ -303,6 +309,11 @@ class WebView(IPFSWebView):
 
     def createWindow(self, wintype):
         log.debug('createWindow called, wintype: {}'.format(wintype))
+
+        # Disabled for now
+        if wintype == QWebEnginePage.WebBrowserTab and 0:
+            tab = self.app.mainWindow.addBrowserTab(current=False)
+            return tab.webEngineView
 
     def onViewSource(self):
         def callback(html):
@@ -615,6 +626,9 @@ class URLInputWidget(QLineEdit):
     def cancelTimer(self):
         self.editTimer.stop()
 
+    def hideMatches(self):
+        self.historyMatches.hide()
+
     def onReturnPressed(self):
         self.urlEditing = False
         self.unfocus()
@@ -741,7 +755,7 @@ class BrowserTab(GalacteekTab):
     # signals
     ipfsObjectVisited = pyqtSignal(IPFSPath)
 
-    def __init__(self, gWindow, webProfileName='ipfs', pinBrowsed=False):
+    def __init__(self, gWindow, pinBrowsed=False):
         super(BrowserTab, self).__init__(gWindow)
 
         self.browserWidget = QWidget(self)
@@ -767,8 +781,11 @@ class BrowserTab(GalacteekTab):
         self.cidInfosDisplay = CIDInfosDisplay(self.ui.cidInfoLabel,
                                                parent=self)
 
-        webProfile = self.app.webProfiles.get(webProfileName,
-                                              self.app.webProfiles['ipfs'])
+        initialProfileName = self.app.settingsMgr.defaultWebProfile
+        if initialProfileName not in self.app.availableWebProfilesNames():
+            initialProfileName = WP_NAME_MINIMAL
+
+        webProfile = self.getWebProfileByName(initialProfileName)
 
         self.webEngineView = WebView(
             self, webProfile,
@@ -825,12 +842,11 @@ class BrowserTab(GalacteekTab):
         self.webProfilesGroup.setExclusive(True)
         self.webProfilesGroup.triggered.connect(self.onWebProfileSelected)
 
-        self.webProMinAction = QAction(iWebProfileMinimal(), self)
+        self.webProMinAction = QAction(WP_NAME_MINIMAL, self)
         self.webProMinAction.setCheckable(True)
-        self.webProIpfsAction = QAction(iWebProfileIpfs(), self)
+        self.webProIpfsAction = QAction(WP_NAME_IPFS, self)
         self.webProIpfsAction.setCheckable(True)
-        self.webProIpfsAction.setChecked(True)
-        self.webProWeb3Action = QAction(iWebProfileWeb3(), self)
+        self.webProWeb3Action = QAction(WP_NAME_WEB3, self)
         self.webProWeb3Action.setCheckable(True)
 
         self.webProfilesGroup.addAction(self.webProMinAction)
@@ -839,6 +855,8 @@ class BrowserTab(GalacteekTab):
 
         for action in self.webProfilesGroup.actions():
             self.webProfilesMenu.addAction(action)
+
+        self.checkWebProfileByName(initialProfileName)
 
         self.ipfsControlMenu.addMenu(self.webProfilesMenu)
         self.ipfsControlMenu.addSeparator()
@@ -1019,32 +1037,59 @@ class BrowserTab(GalacteekTab):
             self.pinPath(path, recursive=False, notify=False)
 
     def changeWebProfileByName(self, wpName):
-        if wpName == 'minimal':
+        if self.webEngineView.webProfile.profileName == wpName:
+            log.debug('Profile {p} already set'.format(p=wpName))
+            return
+
+        self.checkWebProfileByName(wpName)
+
+    def checkWebProfileByName(self, wpName):
+        if wpName == WP_NAME_MINIMAL:
             self.webProMinAction.setChecked(True)
-        elif wpName == 'ipfs':
+        elif wpName == WP_NAME_IPFS:
             self.webProIpfsAction.setChecked(True)
-        elif wpName == 'web3':
+        elif wpName == WP_NAME_WEB3:
             self.webProWeb3Action.setChecked(True)
 
+    def getWebProfileByName(self, wpName, fallback=WP_NAME_MINIMAL):
+        return self.app.webProfiles.get(
+            wpName, self.app.webProfiles[fallback])
+
     def onWebProfileSelected(self, action):
+        if self.webEngineView.webProfile.profileName == action.text():
+            log.debug('Profile {p} already set'.format(p=action.text()))
+            return
+
         url = self.currentUrl
 
         if action is self.webProMinAction:
             self.webEngineView.changeWebProfile(
-                self.app.webProfiles['minimal']
+                self.getWebProfileByName(WP_NAME_MINIMAL)
             )
         elif action is self.webProIpfsAction:
             self.webEngineView.changeWebProfile(
-                self.app.webProfiles['ipfs']
+                self.getWebProfileByName(WP_NAME_IPFS)
             )
         elif action is self.webProWeb3Action:
             self.webEngineView.changeWebProfile(
-                self.app.webProfiles['web3']
+                self.getWebProfileByName(WP_NAME_WEB3)
             )
 
         if url:
             # Reload page
             self.enterUrl(url)
+        else:
+            async def showProfileChangedPage():
+                pName = self.webEngineView.webProfile.profileName
+                body = await renderTemplate(
+                    'profilechanged.html',
+                    webProfile=pName,
+                    title='Web profile changed to {name}'.format(name=pName)
+                )
+                self.webEngineView.webPage.setHtml(
+                    body, QUrl('z:/profilechanged.html'))
+
+            ensure(showProfileChangedPage())
 
     def onJsConsoleToggle(self, checked):
         self.jsConsoleWidget.setVisible(checked)
@@ -1214,6 +1259,9 @@ class BrowserTab(GalacteekTab):
         currentPage.history().forward()
 
     def onUrlChanged(self, url):
+        if not url.isValid() or url.scheme() in ['data', SCHEME_Z]:
+            return
+
         if url.scheme() in [SCHEME_IPFS, SCHEME_IPNS]:
             # ipfs:// or ipns://
             self.urlZone.setStyleSheet('''
@@ -1346,9 +1394,10 @@ class BrowserTab(GalacteekTab):
         self.browseFsPath(IPFSPath(joinIpns(ipnsHash)))
 
     def enterUrl(self, url):
+        self.urlZone.hideMatches()
         self.urlZone.cancelTimer()
 
-        if not url.isValid():
+        if not url.isValid() or url.scheme() in ['data', SCHEME_Z]:
             messageBox('Invalid URL: {0}'.format(url.toString()))
             return
 
@@ -1384,11 +1433,15 @@ class BrowserTab(GalacteekTab):
         self.webEngineView.load(url)
 
     def handleEditedUrl(self, inputStr):
+        self.urlZone.hideMatches()
+        self.urlZone.cancelTimer()
         self.urlZone.unfocus()
 
-        if cidhelpers.cidValid(inputStr):
-            # Raw CID in the URL zone
-            return self.browseIpfsHash(inputStr)
+        # If the address bar contains a valid CID or IPFS path, load it
+        iPath = IPFSPath(inputStr)
+
+        if iPath.valid:
+            return self.browseFsPath(iPath)
 
         url = QUrl(inputStr)
         scheme = url.scheme()

@@ -5,8 +5,11 @@ Browsing
 URL bar
 -------
 
-In the address bar you can type (or paste) a full URL, or
-type words that you want to search for in the hashmarks
+In the address bar you can type (or paste) a full URL, an
+IPFS CID or a full IPFS path (they will be loaded with the
+appropriate scheme).
+
+You can also type words that you want to search for in the hashmarks
 database and the visited URLs history (search results will
 pop up after a short amount of time). Hitting the *Escape* key
 will hide the results.
@@ -83,6 +86,10 @@ There are 3 distinct web profiles that can be used when accessing a
 webpage. The current profile can be changed from a browser tab by
 opening the IPFS menu and selecting a profile from the *Web profile*
 submenu.
+
+You can change the default web profile that will be used when opening
+a browser tab by changing the *Default web profile* setting in the *UI*
+section of the application settings.
 
 Minimal profile
 ^^^^^^^^^^^^^^^

@@ -124,8 +124,34 @@ class build_ui(Command):
     def initialize_options(self):
         self.uiforms = None
 
+        # Forms where we don't want to have automatic slots
+        # connection with connectSlotsByName()
+        self.uiforms_noSlotConnect = [
+            'galacteek/ui/browsertab.ui',
+            'galacteek/ui/files.ui'
+        ]
+
     def finalize_options(self):
         pass
+
+    def filterUic(self, uifile, uicpath):
+        if uifile in self.uiforms_noSlotConnect:
+            print('* {ui}: Removing automatic slots connection'.format(
+                ui=uifile))
+
+            with open(uicpath, 'rt') as fd:
+                code = fd.read()
+
+            nCode = re.sub(
+                r'^\s*QtCore.QMetaObject.connectSlotsByName.*\n$', '',
+                code,
+                flags=re.MULTILINE
+            )
+
+            with open(uicpath, 'wt') as fd:
+                print('* {ui}: Rewriting {path}'.format(
+                    ui=uifile, path=uicpath))
+                fd.write(nCode)
 
     def run(self):
         uifiles = []
@@ -141,10 +167,13 @@ class build_ui(Command):
             print('* Building UI form:', uifile)
             base = os.path.basename(uifile).replace('.ui', '')
             out = 'ui_{}.py'.format(base)
+            fp_out = os.path.join(uidir, out)
 
             run(['pyuic5', '--from-imports',
-                uifile,
-                '-o', os.path.join(uidir, out)])
+                 uifile,
+                 '-o', fp_out])
+
+            self.filterUic(uifile, fp_out)
 
         run(['pylupdate5', '-verbose', 'galacteek.pro'])
 
@@ -157,13 +186,14 @@ class build_ui(Command):
         for lang in ['en', 'fr']:
             if lrelease:
                 run([lrelease,
-                    os.path.join(trdir, 'galacteek_{}.ts'.format(lang)), '-qm',
-                    os.path.join(trdir, 'galacteek_{}.qm'.format(lang))])
+                     os.path.join(trdir, 'galacteek_{}.ts'.format(lang)),
+                     '-qm',
+                     os.path.join(trdir, 'galacteek_{}.qm'.format(lang))])
             else:
                 print('lrelease was not found, cannot build translation files')
 
         run(['pyrcc5', os.path.join(uidir, 'galacteek.qrc'), '-o',
-            os.path.join(uidir, 'galacteek_rc.py')])
+             os.path.join(uidir, 'galacteek_rc.py')])
 
 
 class _build(build):

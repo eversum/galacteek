@@ -189,6 +189,7 @@ class GalacteekApplication(QApplication):
         self.mainWindow = None
         self.feedFollowerTask = None
 
+        self.webProfiles = {}
         self.ipfsCtx = IPFSContext(self)
         self.peersTracker = peers.PeersTracker(self.ipfsCtx)
 
@@ -763,6 +764,9 @@ class GalacteekApplication(QApplication):
             'ipfs': IPFSProfile(parent=self),
             'web3': Web3Profile(parent=self)
         }
+
+    def availableWebProfilesNames(self):
+        return [p.profileName for n, p in self.webProfiles.items()]
 
     def initDapps(self):
         self.dappsRegistry = DappsRegistry(self.ethereum, parent=self)

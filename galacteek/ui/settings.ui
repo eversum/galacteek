@@ -21,17 +21,17 @@
    <item>
     <widget class="QTabWidget" name="tabWidget">
      <property name="currentIndex">
-      <number>1</number>
+      <number>3</number>
      </property>
      <widget class="QWidget" name="tab">
       <attribute name="title">
        <string>General</string>
       </attribute>
       <layout class="QGridLayout" name="gridLayout_4">
-       <item row="4" column="1" colspan="2">
+       <item row="5" column="1" colspan="2">
         <widget class="QLineEdit" name="downloadsLocation"/>
        </item>
-       <item row="1" column="2">
+       <item row="2" column="2">
         <spacer name="horizontalSpacer">
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
@@ -44,7 +44,7 @@
          </property>
         </spacer>
        </item>
-       <item row="0" column="0">
+       <item row="1" column="0">
         <widget class="QLabel" name="label_3">
          <property name="text">
           <string>Home:</string>
@@ -54,7 +54,7 @@
          </property>
         </widget>
        </item>
-       <item row="0" column="1" colspan="2">
+       <item row="1" column="1" colspan="2">
         <widget class="QLineEdit" name="home">
          <property name="minimumSize">
           <size>
@@ -64,14 +64,14 @@
          </property>
         </widget>
        </item>
-       <item row="1" column="1">
+       <item row="2" column="1">
         <widget class="QCheckBox" name="goToHomePageOnOpen">
          <property name="text">
           <string>Go to home page when opening a new browser tab</string>
          </property>
         </widget>
        </item>
-       <item row="6" column="1" colspan="2">
+       <item row="7" column="1" colspan="2">
         <spacer>
          <property name="orientation">
           <enum>Qt::Vertical</enum>
@@ -84,7 +84,7 @@
          </property>
         </spacer>
        </item>
-       <item row="4" column="0">
+       <item row="5" column="0">
         <widget class="QLabel" name="label_7">
          <property name="text">
           <string>Save downloads to:</string>
@@ -94,7 +94,7 @@
          </property>
         </widget>
        </item>
-       <item row="5" column="1">
+       <item row="6" column="1">
         <widget class="QPushButton" name="changeDownloadsPathButton">
          <property name="maximumSize">
           <size>
@@ -611,21 +611,25 @@
          </property>
          <layout class="QGridLayout" name="gridLayout_6">
           <item row="0" column="0">
-           <layout class="QGridLayout" name="gridLayout_3"/>
-          </item>
-          <item row="2" column="0">
-           <widget class="QCheckBox" name="jsIpfsApi">
-            <property name="text">
-             <string>Enable Javascript IPFS API</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QCheckBox" name="urlHistoryEnable">
-            <property name="text">
-             <string>Enable navigation history</string>
-            </property>
-           </widget>
+           <layout class="QGridLayout" name="gridLayout_3">
+            <item row="1" column="0">
+             <widget class="QCheckBox" name="urlHistoryEnable">
+              <property name="text">
+               <string>Enable navigation history</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="0">
+             <widget class="QLabel" name="label_12">
+              <property name="text">
+               <string>Default web profile</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QComboBox" name="comboDefaultWebProfile"/>
+            </item>
+           </layout>
           </item>
          </layout>
         </widget>

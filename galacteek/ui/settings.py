@@ -112,8 +112,20 @@ class SettingsDialog(QDialog):
             self.getS(section, CFG_KEY_DLPATH, str))
         self.setChecked(self.ui.goToHomePageOnOpen,
                         self.sManager.isTrue(section, CFG_KEY_GOTOHOME))
-        self.setChecked(self.ui.jsIpfsApi,
-                        self.sManager.isTrue(section, CFG_KEY_JSAPI))
+
+        # Default web profile combo box
+        currentDefault = self.sManager.getSetting(
+            section, CFG_KEY_DEFAULTWEBPROFILE)
+        pNameList = self.app.availableWebProfilesNames()
+
+        for pName in pNameList:
+            self.ui.comboDefaultWebProfile.insertItem(
+                self.ui.comboDefaultWebProfile.count(),
+                pName
+            )
+
+        if currentDefault and currentDefault in pNameList:
+            self.ui.comboDefaultWebProfile.setCurrentText(currentDefault)
 
         # History
         self.setChecked(self.ui.urlHistoryEnable,
@@ -179,8 +191,8 @@ class SettingsDialog(QDialog):
         self.setS(section, CFG_KEY_HOMEURL, self.ui.home.text())
         self.sManager.setBoolFrom(section, CFG_KEY_GOTOHOME,
                                   self.isChecked(self.ui.goToHomePageOnOpen))
-        self.sManager.setBoolFrom(section, CFG_KEY_JSAPI,
-                                  self.isChecked(self.ui.jsIpfsApi))
+        self.setS(section, CFG_KEY_DEFAULTWEBPROFILE,
+                  self.ui.comboDefaultWebProfile.currentText())
 
         section = CFG_SECTION_HISTORY
         self.sManager.setBoolFrom(section, CFG_KEY_HISTORYENABLED,

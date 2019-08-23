@@ -14,6 +14,11 @@ from galacteek.core.schemes import SCHEME_IPFS
 from galacteek.core.schemes import SCHEME_IPNS
 
 
+WP_NAME_MINIMAL = 'minimal'
+WP_NAME_IPFS = 'ipfs'
+WP_NAME_WEB3 = 'web3'
+
+
 class IPFSRequestInterceptor(QWebEngineUrlRequestInterceptor):
     def interceptRequest(self, info):
         url = info.requestUrl()
@@ -56,7 +61,7 @@ class BaseProfile(QWebEngineProfile):
 
 
 class MinimalProfile(BaseProfile):
-    def __init__(self, storageName='minimal', parent=None):
+    def __init__(self, storageName=WP_NAME_MINIMAL, parent=None):
         super(MinimalProfile, self).__init__(storageName, parent)
 
 
@@ -65,7 +70,7 @@ class IPFSProfile(BaseProfile):
     IPFS web profile
     """
 
-    def __init__(self, storageName='ipfs', parent=None):
+    def __init__(self, storageName=WP_NAME_IPFS, parent=None):
         super(IPFSProfile, self).__init__(storageName, parent)
 
         self.setSettings()
@@ -103,7 +108,7 @@ class Web3Profile(IPFSProfile):
     adds an injection script to provide window.web3
     """
 
-    def __init__(self, storageName='web3', parent=None):
+    def __init__(self, storageName=WP_NAME_WEB3, parent=None):
         super(Web3Profile, self).__init__(storageName, parent)
 
         self.installWeb3Scripts()

@@ -47,6 +47,7 @@ from .helpers import *
 from .widgets import ImageWidget
 from .widgets import HorizontalLine
 from .widgets import IconSelector
+from .widgets import LabelWithURLOpener
 
 from .i18n import iDoNotPin
 from .i18n import iPinSingle
@@ -679,7 +680,7 @@ class AboutDialog(QDialog):
         self.setWindowTitle('About')
 
         layout = QVBoxLayout()
-        layout.addWidget(QLabel(text, parent=self))
+        layout.addWidget(LabelWithURLOpener(text, parent=self))
         layout.addWidget(buttonBox)
 
         self.setLayout(layout)

@@ -33,11 +33,15 @@ from galacteek.ipdapps import dappsRegisterSchemes
 from yarl import URL
 
 
+# Core schemes
 SCHEME_DWEB = 'dweb'
 SCHEME_FS = 'fs'
 SCHEME_IPFS = 'ipfs'
 SCHEME_ENS = 'ens'
 SCHEME_IPNS = 'ipns'
+
+# Misc schemes
+SCHEME_Z = 'z'
 SCHEME_GALACTEEK = 'glk'
 SCHEME_PALACE = 'palace'
 SCHEME_MANUAL = 'manual'
@@ -84,12 +88,16 @@ def registerMiscSchemes():
                      syntax=QWebEngineUrlScheme.Syntax.Path,
                      schemeSection='misc'
                      )
+    declareUrlScheme(SCHEME_Z,
+                     syntax=QWebEngineUrlScheme.Syntax.Path,
+                     flags=QWebEngineUrlScheme.LocalScheme,
+                     schemeSection='misc'
+                     )
 
 
 def initializeSchemes():
     name = QWebEngineUrlScheme.schemeByName(SCHEME_DWEB.encode()).name()
     if name:
-        # initializeSchemes() already called ?
         log.debug('initializeSchemes() already called')
         return
 
