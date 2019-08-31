@@ -46,14 +46,34 @@
   <div class="section" id="pinning-content">
 <h1>Pinning content<a class="headerlink" href="#pinning-content" title="Permalink to this headline">¶</a></h1>
 <a class="reference internal image-reference" href="_images/pin.png"><img alt="_images/pin.png" src="_images/pin.png" style="width: 64px; height: 64px;" /></a>
-<p>The concept of pinning is a fundamental core feature of IPFS. By pinning a
-given resource to your node, you start serving that content to the
+<p>The concept of pinning is a fundamental core feature of IPFS. By pinning an
+object to your node, you start serving that content to the
 network, increasing its availability and resilience.</p>
 <div class="section" id="pinning-manually-in-the-browser">
 <h2>Pinning manually in the browser<a class="headerlink" href="#pinning-manually-in-the-browser" title="Permalink to this headline">¶</a></h2>
 <p>Within a browsing tab, you can manually pin a page with the <strong>PIN</strong> tool button
-at the far right, which allows single or recursive pinning. You will get a
-system tray notification when the pinning is complete.</p>
+at the far right, which allows single or recursive pinning.</p>
+<ul class="simple">
+<li><em>Pin (single)</em> will pin only the IPFS object representing
+the current page</li>
+<li><em>Pin (recursive)</em> will pin the IPFS object (current page, which
+can be a directory node) recursively</li>
+<li><em>Pin parent (recursive)</em> will pin the parent of the current object
+recursively (can be useful if you are browsing a file and want to pin
+the parent directory recursively).</li>
+<li><em>Pin page’s links</em> will pin the IPFS objects referenced in the
+current page’s HTML code</li>
+</ul>
+<p>You will get a system tray notification when the pinning is complete.</p>
+</div>
+<div class="section" id="pinning-ipfs-links-in-a-webpage">
+<h2>Pinning IPFS links in a webpage<a class="headerlink" href="#pinning-ipfs-links-in-a-webpage" title="Permalink to this headline">¶</a></h2>
+<p>If you are browsing a webpage which contains relative or absolute
+IPFS links and you want to pin those objects, select <em>PIN page’s links</em>
+from the <strong>PIN</strong> button. This will scan IPFS links contained in the
+current page and open a separate tab from which you can select single or
+recursive pinning for each link found. Once confirmed, the selected
+objects are queued for pinning.</p>
 </div>
 <div class="section" id="automatic-pinning">
 <h2>Automatic pinning<a class="headerlink" href="#automatic-pinning" title="Permalink to this headline">¶</a></h2>

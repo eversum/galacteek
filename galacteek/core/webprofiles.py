@@ -12,6 +12,7 @@ from galacteek.core.schemes import SCHEME_ENS
 from galacteek.core.schemes import SCHEME_FS
 from galacteek.core.schemes import SCHEME_IPFS
 from galacteek.core.schemes import SCHEME_IPNS
+from galacteek.core.schemes import SCHEME_Q
 
 
 WP_NAME_MINIMAL = 'minimal'
@@ -58,6 +59,7 @@ class BaseProfile(QWebEngineProfile):
             self.installHandler(scheme, self.app.nativeIpfsSchemeHandler)
 
         self.installHandler(SCHEME_ENS, self.app.ensSchemeHandler)
+        self.installHandler(SCHEME_Q, self.app.qSchemeHandler)
 
 
 class MinimalProfile(BaseProfile):

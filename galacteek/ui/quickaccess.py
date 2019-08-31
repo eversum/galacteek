@@ -183,7 +183,7 @@ class QuickAccessToolBar(QToolBar, URLDragAndDropProcessor):
         button.setToolTip('{0} ({1})'.format(
             str(ipfsPath), mimeType.type if mimeType else iUnknown()))
         button.clicked.connect(
-            lambda: ensure(self.app.resourceOpener.open(ipfsPath)))
+            lambda: ensure(self.app.resourceOpener.open(str(ipfsPath))))
         button.deleteRequest.connect(
             functools.partial(self.onDelete, button, action, str(ipfsPath)))
 
@@ -235,7 +235,7 @@ class QuickAccessToolBar(QToolBar, URLDragAndDropProcessor):
         action = self.addWidget(button)
         button.setToolTip(mark.markData['metadata'].get('title', iUnknown()))
         button.clicked.connect(
-            lambda: ensure(self.app.resourceOpener.open(ipfsPath)))
+            lambda: ensure(self.app.resourceOpener.open(str(ipfsPath))))
         button.deleteRequest.connect(
             functools.partial(self.onDelete, button, action, mPath))
 

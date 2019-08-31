@@ -64,7 +64,7 @@ class IPFSResourceOpener(QObject):
         if isinstance(pathRef, IPFSPath):
             ipfsPath = pathRef
         elif isinstance(pathRef, str):
-            ipfsPath = IPFSPath(pathRef)
+            ipfsPath = IPFSPath(pathRef, autoCidConv=True)
         else:
             raise ValueError('Invalid input value')
 

@@ -36,7 +36,6 @@ from galacteek.core.analyzer import ResourceAnalyzer
 from galacteek import ensure
 from galacteek import log
 
-from . import ui_ipfssearchinput
 from .helpers import *
 from .hashmarks import *
 from .widgets import *
@@ -77,35 +76,6 @@ class IPFSSearchButton(QToolButton):
 
     def enterEvent(self, ev):
         self.hovered.emit()
-
-
-class IPFSSearchWidget(QWidget):
-    runSearch = pyqtSignal(str)
-    hidden = pyqtSignal()
-
-    def __init__(self, parent=None):
-        super(IPFSSearchWidget, self).__init__(
-            parent, Qt.Widget | Qt.FramelessWindowHint)
-
-        self.input = ui_ipfssearchinput.Ui_SearchInput()
-        self.input.setupUi(self)
-        self.input.searchQuery.returnPressed.connect(self.onSearch)
-
-    def focus(self):
-        self.input.searchQuery.setFocus(Qt.OtherFocusReason)
-
-    def onSearch(self):
-        text = self.input.searchQuery.text()
-        self.input.searchQuery.clear()
-        self.runSearch.emit(text)
-        self.hide()
-
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Escape:
-            self.hide()
-
-    def hideEvent(self, event):
-        self.hidden.emit()
 
 
 class Highlighter(QSyntaxHighlighter):

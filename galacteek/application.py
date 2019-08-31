@@ -44,12 +44,14 @@ from galacteek.core.clipboard import ClipboardTracker
 from galacteek.core.db import SqliteDatabase
 from galacteek.core.models.atomfeeds import AtomFeedsModel
 from galacteek.core.signaltowers import DAGSignalsTower
+from galacteek.core.signaltowers import URLSchemesTower
 
 from galacteek.core.schemes import SCHEME_MANUAL
 from galacteek.core.schemes import DWebSchemeHandler
 from galacteek.core.schemes import ENSWhoisSchemeHandler
 from galacteek.core.schemes import NativeIPFSSchemeHandler
 from galacteek.core.schemes import ObjectProxySchemeHandler
+from galacteek.core.schemes import MultiObjectHostSchemeHandler
 
 from galacteek.ipfs import asyncipfsd, cidhelpers
 from galacteek.ipfs.cidhelpers import joinIpfs
@@ -462,6 +464,7 @@ class GalacteekApplication(QApplication):
         await self.ipfsCtx.setup(pubsubEnable=pubsubEnabled,
                                  pubsubHashmarksExch=hExchEnabled)
         await self.ipfsCtx.profilesInit()
+        await self.qSchemeHandler.start()
 
         self.feedFollower = FeedFollower(self, self.marksLocal)
         self.feedFollowerTask = self.task(self.feedFollower.process)
@@ -542,7 +545,6 @@ class GalacteekApplication(QApplication):
             )
 
     def getEthParams(self):
-
         mgr = self.settingsMgr
         provType = mgr.getSetting(CFG_SECTION_ETHEREUM, CFG_KEY_PROVIDERTYPE)
         rpcUrl = mgr.getSetting(CFG_SECTION_ETHEREUM, CFG_KEY_RPCURL)
@@ -581,7 +583,8 @@ class GalacteekApplication(QApplication):
 
     def setupMainObjects(self):
         self.towers = {
-            'dags': DAGSignalsTower(self)
+            'dags': DAGSignalsTower(self),
+            'schemes': URLSchemesTower(self)
         }
 
     def setupAsyncLoop(self):
@@ -775,6 +778,7 @@ class GalacteekApplication(QApplication):
         self.ipfsSchemeHandler = DWebSchemeHandler(self)
         self.ensSchemeHandler = ENSWhoisSchemeHandler(self)
         self.nativeIpfsSchemeHandler = NativeIPFSSchemeHandler(self)
+        self.qSchemeHandler = MultiObjectHostSchemeHandler(self)
 
     def subUrl(self, path):
         """ Joins the gatewayUrl and path to form a new URL """

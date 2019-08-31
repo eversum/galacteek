@@ -20,14 +20,16 @@ class TestMarks:
         [
             ('/ipfs/QmT1TPVjdZ9CRnqwyQ9WygDoRgRRibFrEyWufenu92SuUV/',
              '/ipfs/QmT1TPVjdZ9CRnqwyQ9WygDoRgRRibFrEyWufenu92SuUV/a/abcdef',
-             '/ipfs/Qma1TPVjdZ9CReqwyQ9Wvv3oRgRRi5FrEyWufenu92SuUV/www',
-             '/ipfs/Qma8TPVjdZ3CReqwyQ9Wvv3oggRRi3FrEyWufenu92SuUV/src',
+             '/ipfs/Qma1TPVjdZ9CReqwyQ9Wvv3oRgRRi5FrEyWufenu92SuUV/www/',
+             '/ipfs/Qma8TPVjdZ3CReqwyQ9Wvv3oggRRi3FrEyWufenu92SuUV/src/',
              )])
     @pytest.mark.parametrize('title', ['Broken glass'])
     def test_simpleadd(self, bmarks, path1, path2, path3, path4, title):
         assert bmarks.add(path1, title=title, tags=['dev'])
         assert bmarks.add(path1, title=title) is False
         assert bmarks.add(path2, title=title)
+
+        assert bmarks.isInCategory('general', path1) is True
 
         marks = bmarks.getCategoryMarks('general')
         for path, mark in marks.items():
@@ -37,12 +39,14 @@ class TestMarks:
         assert bmarks.add(path4, title='Src directory',
                           description='Some code',
                           category='code/src')
+        assert bmarks.isInCategory('code/src', path4) is True
+        assert bmarks.isInCategory('code/src', path1) is False
+
+        assert bmarks.find(path1) is not None
+        assert bmarks.find(path3).path == path3
 
         assert bmarks.delete(path2) is not None
         assert bmarks.find(path2) is None
-
-        assert bmarks.search(path1, tags=['not']) is None
-        assert bmarks.search(path1, tags=['dev']) is not None
 
         assert bmarks.searchByMetadata({
             'title': 'Rand.*'
@@ -55,8 +59,8 @@ class TestMarks:
 
         assert bmarks.add(path2, title=title)
 
-        path, mark = bmarks.search(path1)
-        assert mark['metadata']['title'] == title
+        mark = bmarks.find(path1)
+        assert mark.markData['metadata']['title'] == title
 
         bmarks.addCategory('tests', parent=None)
         cats = bmarks.getCategories()
@@ -71,7 +75,7 @@ class TestMarks:
         [
             ('/ipfs/QmT1TPVjdZ9CRnqwyQ9WygDoRgRRibFrEyWufenu92SuUV/',
              '/ipfs/QmT1TPVjdZ9CRnqwyQ9WygDoRgRRibFrEyWufenu92SuUV/a/abcdef',
-             '/ipfs/Qma1TPVjdZ9CReqwyQ9Wvv3oRgRRi5FrEyWufenu92SuUV/www')])
+             '/ipfs/Qma1TPVjdZ9CReqwyQ9Wvv3oRgRRi5FrEyWufenu92SuUV/www/')])
     @pytest.mark.parametrize('title', ['Smooth ride'])
     def test_merge(self, bmarks, bmarks2, path1, path2, path3, title):
         bmarks.add(path1, title=title, tags=['dev'])
@@ -79,8 +83,8 @@ class TestMarks:
         bmarks2.add(path3, category='www/other', title=title)
         bmarks.merge(bmarks2)
 
-        assert bmarks.search(path2) is not None
-        assert bmarks.search(path3) is not None
+        assert bmarks.find(path2) is not None
+        assert bmarks.find(path3) is not None
 
         bmarks2.add(path3, category='www/other', title=title)
         bmarks.dump()

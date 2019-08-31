@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtWidgets import QGridLayout
 from PyQt5.QtWidgets import QFormLayout
 
+from PyQt5.QtCore import QSize
 from PyQt5.QtCore import QFile
 from PyQt5.QtCore import QIODevice
 from PyQt5.QtCore import QCoreApplication
@@ -43,6 +44,8 @@ from . import ui_addfeeddialog
 from . import ui_ipfscidinputdialog, ui_ipfsmultiplecidinputdialog
 from . import ui_profileeditdialog
 from . import ui_donatedialog
+from . import ui_qschemecreatemapping
+
 from .helpers import *
 from .widgets import ImageWidget
 from .widgets import HorizontalLine
@@ -81,6 +84,7 @@ class AddHashmarkDialog(QDialog):
         self.ui.setupUi(self)
         self.ui.resourceLabel.setText(self.ipfsResource)
         self.ui.resourceLabel.setStyleSheet(boldLabelStyle())
+        self.ui.resourceLabel.setToolTip(self.ipfsResource)
         self.ui.newCategory.textChanged.connect(self.onNewCatChanged)
         self.ui.title.setText(title)
 
@@ -514,6 +518,18 @@ class ChooseProgramDialog(QInputDialog):
                 <b>%f</b> is replaced with the file path''')
 
 
+class AddAtomFeedDialog(QInputDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setWindowTitle('Add an Atom feed')
+        self.setInputMode(QInputDialog.TextInput)
+        self.setLabelText('Atom feed URL')
+
+    def sizeHint(self):
+        return QSize(600, 140)
+
+
 class AddMultihashPyramidDialog(QDialog):
     def __init__(self, marks, parent=None):
         super().__init__(parent)
@@ -687,3 +703,42 @@ class AboutDialog(QDialog):
 
     def accept(self):
         self.done(1)
+
+
+class QSchemeCreateMappingDialog(QDialog):
+    def __init__(self, mappedPath, parent=None):
+        super().__init__(parent)
+
+        self.app = QApplication.instance()
+        self.mappedTo = mappedPath
+
+        self.ui = ui_qschemecreatemapping.Ui_QSchemeMappingDialog()
+        self.ui.setupUi(self)
+        self.ui.buttonBox.accepted.connect(self.accept)
+        self.ui.buttonBox.rejected.connect(self.reject)
+        self.ui.mappedPath.setText(
+            '<b>{}</b>'.format(str(self.mappedTo)))
+
+        regexp = QRegExp(r"[a-z0-9]+")
+        self.ui.mappingName.setValidator(QRegExpValidator(regexp))
+
+    def accept(self):
+        name = self.ui.mappingName.text()
+        if not name:
+            return messageBox('Please provide a mapping name')
+
+        if self.app.marksLocal.qaMap(
+                name,
+                self.mappedTo,
+                ipnsResolveFrequency=self.ui.ipnsResolveFrequency.value()):
+            self.app.towers['schemes'].qMappingsChanged.emit()
+            self.done(1)
+            messageBox(
+                'You can now use the quick-access URL '
+                '<b>q://{name}</b>'.format(name=name),
+                richText=True
+            )
+        else:
+            messageBox(
+                'An error ocurred, check that a mapping does not '
+                'already exist with that name')

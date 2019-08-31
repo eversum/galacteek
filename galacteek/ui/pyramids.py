@@ -110,6 +110,8 @@ class MultihashPyramidsToolBar(QToolBar):
             getIcon('pyramid-aqua.png'),
             'Add multihash pyramid', self.onAddPyramid)
 
+        self.pyramidsControlButton.menu.addSeparator()
+
         self.pyramidsControlButton.menu.addAction(
             pyrIcon, 'Help', self.pyramidHelpMessage)
         self.addWidget(self.pyramidsControlButton)
@@ -461,7 +463,7 @@ class MultihashPyramidToolButton(PopupToolButton):
         if not isinstance(self.pyramid.latest, str) or not self.pyramidion:
             return
 
-        objPath = IPFSPath(self.pyramid.latest)
+        objPath = IPFSPath(self.pyramid.latest, autoCidConv=True)
         if objPath.valid:
             ensure(self.app.resourceOpener.open(objPath))
 
@@ -531,7 +533,7 @@ class MultihashPyramidToolButton(PopupToolButton):
             if latestMark.path is None:
                 return False
 
-            ipfsPath = IPFSPath(latestMark.path)
+            ipfsPath = IPFSPath(latestMark.path, autoCidConv=True)
             if not ipfsPath.valid:
                 self.debug('Invalid path! Cannot publish')
                 return False

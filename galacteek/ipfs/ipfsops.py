@@ -78,10 +78,12 @@ class IPFSOperator(object):
     IPFS operator, for your daily operations!
     """
 
-    def __init__(self, client, ctx=None, debug=False, offline=False):
+    def __init__(self, client, ctx=None, rsaAgent=None, debug=False,
+                 offline=False):
         self._id = uuid.uuid1()
         self._cache = {}
         self._offline = offline
+        self._rsaAgent = rsaAgent
 
         self.client = client
         self.debugInfo = debug
@@ -115,6 +117,9 @@ class IPFSOperator(object):
 
     def debug(self, msg):
         log.debug('IPFSOp({0}): {1}'.format(self.uid, msg))
+
+    def setRsaAgent(self, agent):
+        self._rsaAgent = agent
 
     @async_enterable
     async def offlineMode(self):

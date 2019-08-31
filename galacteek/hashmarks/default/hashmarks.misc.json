@@ -124,5 +124,6 @@
             }
         }
     },
-    "feeds": {}
+    "feeds": {},
+    "qamappings": []
 }

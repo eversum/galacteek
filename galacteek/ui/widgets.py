@@ -136,12 +136,12 @@ class URLDragAndDropProcessor:
                 if url.scheme() == 'file' and url.isValid():
                     self.fileDropped.emit(url)
                 else:
-                    path = IPFSPath(url.toString())
+                    path = IPFSPath(url.toString(), autoCidConv=True)
                     if path.valid:
                         self.ipfsObjectDropped.emit(path)
         elif mimeData.hasText():
             text = mimeData.text()
-            path = IPFSPath(text)
+            path = IPFSPath(text, autoCidConv=True)
 
             if path.valid:
                 self.ipfsObjectDropped.emit(path)
@@ -867,19 +867,25 @@ class AtomFeedsToolbarButton(QToolButton):
 
 
 class PageSourceWidget(QTextBrowser):
-    def __init__(self, sourceText, parent):
+    def __init__(self, parent):
         super(PageSourceWidget, self).__init__(parent)
 
+        self.app = QApplication.instance()
         self.setAcceptRichText(True)
         self.setLineWrapMode(QTextEdit.WidgetWidth)
 
+    async def showSource(self, sourceText):
         formatter = HtmlFormatter()
         cssDefs = formatter.get_style_defs()
 
         lexer = get_lexer_by_name('html')
 
+        self.document().setPlainText('Loading ...')
         try:
-            high = highlight(sourceText, lexer, formatter)
+            high = await self.app.loop.run_in_executor(
+                self.app.executor, highlight,
+                sourceText, lexer, formatter)
+
             self.document().setDefaultStyleSheet(cssDefs)
             self.document().setHtml(high)
         except:

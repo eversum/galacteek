@@ -146,6 +146,11 @@ class PinningMaster(object):
 
     @ipfsOp
     async def pin(self, op, path, recursive=False, qname='default'):
+        """
+        Pin the object referenced by ``path``
+
+        Returns a (path, statuscode, errmsg) tuple
+        """
         self.debug('Pinning object {path} to {qname} (recursive {rec})'.format(
             path=path, rec=recursive, qname=qname))
 
@@ -154,7 +159,7 @@ class PinningMaster(object):
                 # Already pinned
                 self.debug('Already pinned: {path}'.format(path=path))
                 await self.pathDelete(path)
-                return
+                return (path, 0, 'Already pinned')
 
         pItem = self.pathRegister(qname, path, recursive)
 
@@ -174,11 +179,14 @@ class PinningMaster(object):
             self.debug('Pinning error {path}: {msg}'.format(
                 path=path, msg=err.message))
             await self.pathDelete(path)
+            return (path, 1, err.message)
         except asyncio.CancelledError:
             self.debug('Pinning was cancelled for {path}'.format(path=path))
             await self.pathDelete(path)
+            return (path, 2, 'Cancelled')
         except Cancelled:
             await self.pathDelete(path)
+            return (path, 2, 'Cancelled')
         else:
             self.debug('Queue {qname}: pinning success for {path}'.format(
                 qname=qname, path=path))
@@ -192,7 +200,7 @@ class PinningMaster(object):
                 self.ipfsCtx.pinFinished.emit(path)
                 self._emitItemsCount()
 
-        return path
+            return (path, 0, 'OK')
 
     async def queue(self, path, recursive, onSuccess, qname='default'):
         """ Queue an item for processing """

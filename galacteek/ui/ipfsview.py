@@ -38,6 +38,7 @@ from galacteek.ipfs.mimetype import detectMimeType
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import cidValid
+from galacteek.ipfs.cidhelpers import cidConvertBase32
 from galacteek import ensure
 
 from .i18n import *
@@ -124,7 +125,7 @@ class IPFSNameItem(IPFSItem):
 
     @property
     def ipfsPath(self):
-        return IPFSPath(self.getFullPath())
+        return IPFSPath(self.getFullPath(), autoCidConv=True)
 
     @property
     def mimeType(self):
@@ -145,7 +146,7 @@ class IPFSNameItem(IPFSItem):
             return self.mimeType.split('/')[0]
 
     def cid(self):
-        return cidhelpers.getCID(self.entry['Hash'])
+        return cidhelpers.getCID(cidConvertBase32(self.entry['Hash']))
 
     def getFullPath(self):
         """
@@ -158,7 +159,7 @@ class IPFSNameItem(IPFSItem):
         if parentHash:
             return joinIpfs(os.path.join(parentHash, name))
         else:
-            return joinIpfs(self.entry['Hash'])
+            return joinIpfs(cidConvertBase32(self.entry['Hash']))
 
     def isRaw(self):
         return self.entry['Type'] == 0
@@ -413,7 +414,7 @@ class IPFSHashExplorerWidget(QWidget):
                 self.parentMultihashSet.emit(self.parentMultihash)
 
             self.rootHash = multihash
-            self.rootPath = IPFSPath(self.rootHash)
+            self.rootPath = IPFSPath(self.rootHash, autoCidConv=True)
             self.cid = cidhelpers.getCID(self.rootHash)
             self.initModel()
 
@@ -470,13 +471,14 @@ class IPFSHashExplorerWidget(QWidget):
 
         self.gitButton.setEnabled(False)
 
-        getRet = await ipfsop.client.get(entry['Hash'],
+        mHash = cidConvertBase32(entry['Hash'])
+        getRet = await ipfsop.client.get(mHash,
                                          dstdir=self.app.tempDir.path())
         if not getRet:
             self.gitButton.setEnabled(True)
             return messageBox('Could not fetch the git repository')
 
-        repoPath = os.path.join(self.app.tempDir.path(), entry['Hash'])
+        repoPath = os.path.join(self.app.tempDir.path(), mHash)
         try:
             repo = base.Repo(repoPath)
         except InvalidGitRepositoryError:
@@ -679,10 +681,9 @@ class IPFSHashExplorerWidget(QWidget):
             for entry in obj['Links']:
                 await op.sleep()
 
-                if entry['Hash'] in self.model.entryCache:
+                multihash = cidConvertBase32(entry['Hash'])
+                if multihash in self.model.entryCache:
                     continue
-
-                multihash = entry['Hash']
 
                 nItemName = IPFSNameItem(entry, entry['Name'], None)
 

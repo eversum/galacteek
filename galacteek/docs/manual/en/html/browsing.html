@@ -76,15 +76,32 @@ authority). The following URL formats are supported:</p>
 <span class="n">ipns</span><span class="p">:</span><span class="o">//</span><span class="n">ipfs</span><span class="o">.</span><span class="n">io</span><span class="o">/</span>
 </pre></div>
 </div>
+<p>If you use a valid base58-encoded CID (whatever the CID version)
+with the <em>ipfs://</em> URL scheme, the CID will automatically be
+upgraded (v0 to v1) if necessary and its base32 representation will
+be used in the URL. For instance, trying to access:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ipfs</span><span class="p">:</span><span class="o">//</span><span class="n">QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco</span>
+</pre></div>
+</div>
+<p>will trigger a CID upgrade and ultimately access the same object with
+its base32 representation at the following URL:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ipfs</span><span class="p">:</span><span class="o">//</span><span class="n">bafybeiemxf5abjwjbikoz4mc3a3dla6ual3jsgpdr4cjr3oz3evfyavhwq</span>
+</pre></div>
+</div>
 <p><em>Note</em>: the scheme handler for these URL schemes does not
-use the daemon’s HTTP gateway</p>
+use the <em>go-ipfs</em> daemon’s HTTP gateway</p>
 </div>
 <div class="section" id="dweb">
 <h3>dweb:/<a class="headerlink" href="#dweb" title="Permalink to this headline">¶</a></h3>
-<p>This is the legacy scheme and it will be automatically used when
-accessing content rooted under CIDv0 objects.
-Because it proxies the requests to the daemon’s HTTP gateway, it
-can handle anything that the daemon supports:</p>
+<p>This is the legacy scheme and it will automatically be used when
+accessing content rooted under CIDv0 objects.</p>
+<p>Since version <em>0.4.12</em>, automatic CID upgrade is enabled as much
+as possible, meaning that the <em>ipfs://</em> URL scheme will
+automatically be used whenever possible.
+IPNS paths using a base58 libp2p key will still be
+accessed using this scheme.</p>
+<p>Because it proxies the requests to the <em>go-ipfs</em> daemon’s HTTP
+gateway, it can handle anything that the daemon supports:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dweb</span><span class="p">:</span><span class="o">/</span><span class="n">ipfs</span><span class="o">/</span><span class="p">{</span><span class="n">cidv0</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
 <span class="n">dweb</span><span class="p">:</span><span class="o">/</span><span class="n">ipfs</span><span class="o">/</span><span class="p">{</span><span class="n">cidv1b32</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
 <span class="n">dweb</span><span class="p">:</span><span class="o">/</span><span class="n">ipfs</span><span class="o">/</span><span class="p">{</span><span class="n">cidv1b58</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
@@ -106,18 +123,30 @@ can handle anything that the daemon supports:</p>
 on the <em>Ethereum Name Service</em> (see <a class="reference external" href="https://ens.domains/">ENS</a>). Just use <strong>ens://mydomain.eth</strong>
 for example as a URL in the browser and you will be redirected to the IPFS
 website referenced on ENS for this domain.</p>
-<p>Go to <strong>ens://blog.almonit.eth</strong> to find a list of some ENS+IPFS websites.</p>
+<p>Go to <a class="reference external" href="ens://blog.almonit.eth">ens://blog.almonit.eth</a> to find a list
+of some ENS+IPFS websites.</p>
 </div>
-<div class="section" id="other">
-<h3>Other<a class="headerlink" href="#other" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="manual">
+<h3>manual:/<a class="headerlink" href="#manual" title="Permalink to this headline">¶</a></h3>
 <p>There is support for mapping IPFS objects to a specific URL scheme,
 allowing easy access from the URL bar to commonly-accessed resources.</p>
-<p>Right now this is only used for the manual. To access the manual from
+<p>This is used for instance by the manual. To access the manual from
 the URL bar, just type in <strong>manual:/</strong> (or just <strong>manual:</strong>)</p>
 <ul class="simple">
 <li><a class="reference external" href="manual:/">manual:/</a></li>
 <li><a class="reference external" href="manual:/browsing.html">manual:/browsing.html</a></li>
 </ul>
+</div>
+<div class="section" id="q">
+<h3>q://<a class="headerlink" href="#q" title="Permalink to this headline">¶</a></h3>
+<p>The <strong>q://</strong> URL scheme allows quick access to IPFS objects that
+you’ve mapped from the browser. From a browser tab, open the IPFS
+menu and select <em>Create quick-access mapping</em>. Once the object is
+mapped, it will be accessible with the <strong>q://mappingname</strong> URL,
+for instance if your mapping name is <em>docs</em>, the quick-access URL
+would be <strong>q://docs</strong></p>
+<p>If you are mapping an IPNS path, it is resolved periodically
+and the result is cached.</p>
 </div>
 </div>
 <div class="section" id="web-profiles">
@@ -141,8 +170,8 @@ from <em>window.ipfs</em> in the main Javascript world</p>
 <div class="section" id="web3-profile">
 <h3>Web3 profile<a class="headerlink" href="#web3-profile" title="Permalink to this headline">¶</a></h3>
 <p>Derives from the IPFS profile. If Ethereum is enabled, it injects
-a <em>web3.js</em> instance available as <em>window.web3</em> in the main
-Javascript world</p>
+a <em>Web3</em> instance (from the <em>web3.js</em> JS library) available as
+<em>window.web3</em> in the main Javascript world</p>
 </div>
 </div>
 </div>

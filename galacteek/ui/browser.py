@@ -1,5 +1,6 @@
 import functools
 import os.path
+import re
 
 from PyQt5.QtWidgets import QDialog
 from PyQt5.QtWidgets import QAction
@@ -46,7 +47,6 @@ from galacteek.ipfs.cidhelpers import cidValid
 from galacteek.core.analyzer import ResourceAnalyzer
 
 from galacteek.core.schemes import isSchemeRegistered
-from galacteek.core.schemes import SCHEME_DWEB
 from galacteek.core.schemes import SCHEME_ENS
 from galacteek.core.schemes import SCHEME_IPFS
 from galacteek.core.schemes import SCHEME_IPNS
@@ -62,8 +62,10 @@ from galacteek.dweb.webscripts import scriptFromString
 from galacteek.dweb.page import BaseHandler
 from galacteek.dweb.page import pyqtSlot
 from galacteek.dweb.render import renderTemplate
+from galacteek.dweb.htmlparsers import IPFSLinksParser
 
 from . import ui_browsertab
+from .pin import PinBatchWidget, PinBatchTab
 from .helpers import *
 from .dialogs import *
 from .hashmarks import *
@@ -84,6 +86,11 @@ def iOpenInTab():
 def iOpenHttpInTab():
     return QCoreApplication.translate('BrowserTabForm',
                                       'Open http/https link in new tab')
+
+
+def iOpenLinkInTab():
+    return QCoreApplication.translate('BrowserTabForm',
+                                      'Open link in new tab')
 
 
 def iOpenWith():
@@ -169,6 +176,11 @@ def iEnterIpnsDialog():
                                       'Load IPNS key dialog')
 
 
+def iCreateQaMapping():
+    return QCoreApplication.translate('BrowserTabForm',
+                                      'Create quick-access mapping')
+
+
 def iHashmarked(path):
     return QCoreApplication.translate('BrowserTabForm',
                                       'Hashmarked {0}').format(path)
@@ -182,6 +194,12 @@ def iHashmarkTitleDialog():
 def iInvalidUrl(text):
     return QCoreApplication.translate('BrowserTabForm',
                                       'Invalid URL: {0}').format(text)
+
+
+def iInvalidObjectPath(text):
+    return QCoreApplication.translate(
+        'BrowserTabForm',
+        'Invalid IPFS object path: {0}').format(text)
 
 
 def iInvalidCID(text):
@@ -235,6 +253,8 @@ class CustomWebPage (QtWebEngineWidgets.QWebEnginePage):
 
     def __init__(self, webProfile, parent):
         super(CustomWebPage, self).__init__(webProfile, parent)
+
+    def registerPageHandler(self):
         self.channel = QWebChannel()
         self.setWebChannel(self.channel)
         self.pageHandler = CurrentPageHandler(self)
@@ -242,6 +262,35 @@ class CustomWebPage (QtWebEngineWidgets.QWebEnginePage):
 
     def javaScriptConsoleMessage(self, level, message, lineNumber, sourceId):
         self.jsConsoleMessage.emit(level, message, lineNumber, sourceId)
+
+    def registerProtocolHandlerRequestedDisabled(self, request):
+        """
+        registerProtocolHandlerRequested(request) can be used to
+        handle JS 'navigator.registerProtocolHandler()' calls. If
+        we want to enable that in the future it'll be done here.
+        """
+
+        scheme = request.scheme()
+        origin = request.origin()
+
+        qRet = questionBox(
+            'registerProtocolHandler',
+            'Allow {origin} to register procotol handler for: {h} ?'.format(
+                origin=origin.toString(),
+                h=scheme
+            )
+        )
+
+        if qRet is True:
+            request.accept()
+        else:
+            request.reject()
+
+    async def render(self, tmpl, url=None, **ctx):
+        if url:
+            self.setHtml(await renderTemplate(tmpl, **ctx), url)
+        else:
+            self.setHtml(await renderTemplate(tmpl, **ctx))
 
 
 class JSConsoleWidget(QTextBrowser):
@@ -320,17 +369,19 @@ class WebView(IPFSWebView):
             if not html:
                 return
 
-            if self.browserTab.currentIpfsResource:
-                tooltip = str(self.browserTab.currentIpfsResource)
+            if self.browserTab.currentIpfsObject:
+                tooltip = str(self.browserTab.currentIpfsObject)
             else:
                 tooltip = self.page().url().toString()
 
             tab = GalacteekTab(self.app.mainWindow)
-            widget = PageSourceWidget(html, tab)
+            widget = PageSourceWidget(tab)
+            ensure(widget.showSource(html))
             tab.addToLayout(widget)
             self.app.mainWindow.registerTab(
                 tab, 'Page source',
                 current=True,
+                icon=getMimeIcon('text/html'),
                 tooltip=tooltip)
 
         self.page().toHtml(callback)
@@ -345,17 +396,29 @@ class WebView(IPFSWebView):
         log.debug('Following atom feed: {}'.format(path))
         ensure(self.app.mainWindow.atomButton.atomFeedSubscribe(str(path)))
 
-    def onLinkHovered(self, url):
-        if not isinstance(url, str):
+    def onLinkHovered(self, urlString):
+        if not isinstance(urlString, str):
             return
 
-        ipfsPath = IPFSPath(url)
+        url = QUrl(urlString)
+        if not url.isValid():
+            return
+
+        if url.isRelative() and self.browserTab.currentIpfsObject:
+            ipfsPath = self.browserTab.currentIpfsObject.child(
+                url.toString())
+        else:
+            ipfsPath = IPFSPath(urlString)
+
         if ipfsPath.valid:
             self.browserTab.ui.linkInfosLabel.setText(ipfsPath.fullPath)
-            if self.linkInfoTimer.isActive():
-                self.linkInfoTimer.stop()
+        else:
+            self.browserTab.ui.linkInfosLabel.setText(url.toString())
 
-            self.linkInfoTimer.start(2200)
+        if self.linkInfoTimer.isActive():
+            self.linkInfoTimer.stop()
+
+        self.linkInfoTimer.start(2200)
 
     def contextMenuEvent(self, event):
         # TODO: cleanup and refactoring provably
@@ -367,15 +430,15 @@ class WebView(IPFSWebView):
         mediaType = contextMenuData.mediaType()
         mediaUrl = contextMenuData.mediaUrl()
 
-        if not url.toString() or not url.isValid():
+        if not url.isValid() and not mediaUrl.isValid():
             menu = currentPage.createStandardContextMenu()
             menu.exec(event.globalPos())
             return
 
-        ipfsPath = IPFSPath(url.toString())
+        ipfsPath = IPFSPath(url.toString(), autoCidConv=True)
 
         if mediaType != QWebEngineContextMenuData.MediaTypeNone and mediaUrl:
-            mediaIpfsPath = IPFSPath(mediaUrl.toString())
+            mediaIpfsPath = IPFSPath(mediaUrl.toString(), autoCidConv=True)
         else:
             mediaIpfsPath = None
 
@@ -392,6 +455,7 @@ class WebView(IPFSWebView):
             menu.addAction(getIcon('ipfs-logo-128-black.png'),
                            iOpenInTab(),
                            functools.partial(self.openInTab, ipfsPath))
+            menu.addSeparator()
             menu.addAction(getIcon('hashmarks.png'),
                            iHashmark(),
                            functools.partial(self.hashmarkPath, str(ipfsPath)))
@@ -450,6 +514,7 @@ class WebView(IPFSWebView):
                 functools.partial(
                     self.openInTab,
                     mediaIpfsPath))
+            menu.addSeparator()
             menu.addAction(getIcon('hashmarks.png'),
                            iHashmark(),
                            functools.partial(self.hashmarkPath,
@@ -502,16 +567,23 @@ class WebView(IPFSWebView):
             menu = QMenu()
             scheme = url.scheme()
 
-            if scheme in ['http', 'https']:
+            if scheme in ['http', 'https'] and \
+                    self.app.settingsMgr.allowHttpBrowsing:
                 menu.addAction(
                     iOpenHttpInTab(),
-                    functools.partial(self.openHttpInTab, url)
+                    functools.partial(self.openUrlInTab, url)
+                )
+            elif isSchemeRegistered(scheme):
+                # Non-IPFS URL but a scheme we know
+                menu.addAction(
+                    iOpenLinkInTab(),
+                    functools.partial(self.openUrlInTab, url)
                 )
 
             menu.exec(event.globalPos())
 
     def hashmarkPath(self, path):
-        ipfsPath = IPFSPath(path)
+        ipfsPath = IPFSPath(path, autoCidConv=True)
         if ipfsPath.valid:
             addHashmark(self.browserTab.app.marksLocal,
                         ipfsPath.fullPath,
@@ -521,7 +593,7 @@ class WebView(IPFSWebView):
         tab = self.browserTab.gWindow.addBrowserTab()
         tab.browseFsPath(path)
 
-    def openHttpInTab(self, url):
+    def openUrlInTab(self, url):
         tab = self.browserTab.gWindow.addBrowserTab()
         tab.enterUrl(url)
 
@@ -599,6 +671,7 @@ class URLInputWidget(QLineEdit):
         self.setObjectName('urlZone')
         self.setMinimumWidth(400)
         self.setDragEnabled(True)
+        self.setMaxLength(1024)
 
         self.urlEditing = False
         self.urlInput = None
@@ -885,6 +958,10 @@ class BrowserTab(GalacteekTab):
         self.jsConsoleAction.setCheckable(True)
         self.jsConsoleAction.toggled.connect(self.onJsConsoleToggle)
 
+        self.mapPathAction = QAction(getIconIpfsIce(),
+                                     iCreateQaMapping(), self,
+                                     triggered=self.onCreateMapping)
+
         self.loadFromCbAction = QAction(
             getIcon('clipboard.png'),
             iBrowseCurrentClipItem(), self,
@@ -894,6 +971,8 @@ class BrowserTab(GalacteekTab):
         self.followIpnsAction.setEnabled(False)
 
         self.ipfsControlMenu.addAction(self.jsConsoleAction)
+        self.ipfsControlMenu.addSeparator()
+        self.ipfsControlMenu.addAction(self.mapPathAction)
         self.ipfsControlMenu.addSeparator()
         self.ipfsControlMenu.addAction(self.loadFromCbAction)
         self.ipfsControlMenu.addAction(self.loadIpfsCIDAction)
@@ -923,6 +1002,11 @@ class BrowserTab(GalacteekTab):
         pinMenu = QMenu()
         pinMenu.addAction(iconPin, iPinThisPage(), self.onPinSingle)
         pinMenu.addAction(iconPin, iPinRecursive(), self.onPinRecursive)
+        pinMenu.addSeparator()
+        pinMenu.addAction(iconPin, iPinRecursiveParent(),
+                          self.onPinRecursiveParent)
+        pinMenu.addSeparator()
+        pinMenu.addAction(iconPin, iPinPageLinks(), self.onPinPageLinks)
 
         self.ui.pinToolButton.setMenu(pinMenu)
         self.ui.pinToolButton.setIcon(iconPin)
@@ -949,7 +1033,7 @@ class BrowserTab(GalacteekTab):
             self.onClipboardIpfs)
         self.ipfsObjectVisited.connect(self.onPathVisited)
 
-        self._currentIpfsResource = None
+        self._currentIpfsObject = None
         self._currentUrl = None
         self.currentPageTitle = None
 
@@ -964,6 +1048,11 @@ class BrowserTab(GalacteekTab):
     @property
     def currentUrl(self):
         return self._currentUrl
+
+    @property
+    def currentUrlHasFileName(self):
+        if self.currentUrl:
+            return self.currentUrl.fileName() != ''
 
     @property
     def jsConsole(self):
@@ -990,8 +1079,8 @@ class BrowserTab(GalacteekTab):
         return self.ui.pinAllButton.isChecked()
 
     @property
-    def currentIpfsResource(self):
-        return self._currentIpfsResource
+    def currentIpfsObject(self):
+        return self._currentIpfsObject
 
     def installCustomPageScripts(self, handler, url):
         # Page-specific IPFS scripts
@@ -1094,6 +1183,12 @@ class BrowserTab(GalacteekTab):
     def onJsConsoleToggle(self, checked):
         self.jsConsoleWidget.setVisible(checked)
 
+    def onCreateMapping(self):
+        if not self.currentIpfsObject:
+            return messageBox(iNotAnIpfsResource())
+
+        runDialog(QSchemeCreateMappingDialog, self.currentIpfsObject)
+
     def onClipboardIpfs(self, pathObj):
         pass
 
@@ -1141,17 +1236,37 @@ class BrowserTab(GalacteekTab):
         page.save(path, QWebEngineDownloadItem.CompleteHtmlSaveFormat)
 
     def onHashmarkPage(self):
-        if self.currentIpfsResource and self.currentIpfsResource.valid:
+        if self.currentIpfsObject and self.currentIpfsObject.valid:
             addHashmark(self.app.marksLocal,
-                        self.currentIpfsResource.fullPath,
+                        self.currentIpfsObject.fullPath,
                         self.currentPageTitle,
                         stats=self.app.ipfsCtx.objectStats.get(
-                            self.currentIpfsResource.path, {}))
+                            self.currentIpfsObject.path, {}))
         else:
             messageBox(iNotAnIpfsResource())
 
-    def onPinSuccess(self, f):
-        self.app.systemTrayMessage('PIN', iPinSuccess(f.result()))
+    def onPinResult(self, f):
+        try:
+            path, code, msg = f.result()
+        except:
+            pass
+        else:
+            path = IPFSPath(path)
+            if not path.valid:
+                log.debug('Invalid path in pin result: {}'.format(str(path)))
+                return
+
+            if code == 0:
+                self.app.systemTrayMessage('PIN', iPinSuccess(str(path)),
+                                           timeout=2000)
+            elif code == 1:
+                self.app.systemTrayMessage('PIN', iPinError(str(path), msg),
+                                           timeout=3000)
+            elif code == 2:
+                # Cancelled, no need to notify here
+                pass
+            else:
+                log.debug('Unknown status code for pinning result')
 
     @ipfsOp
     async def pinQueuePath(self, ipfsop, path, recursive, notify):
@@ -1159,7 +1274,7 @@ class BrowserTab(GalacteekTab):
                                                                recursive))
         onSuccess = None
         if notify is True:
-            onSuccess = self.onPinSuccess
+            onSuccess = self.onPinResult
         await ipfsop.ctx.pinner.queue(path, recursive, onSuccess,
                                       qname='browser')
 
@@ -1183,16 +1298,60 @@ class BrowserTab(GalacteekTab):
             currentPage.print(printer, success)
 
     def onPinSingle(self):
-        if not self.currentIpfsResource:
+        if not self.currentIpfsObject:
             return messageBox(iNotAnIpfsResource())
 
-        self.pinPath(self.currentIpfsResource.objPath, recursive=False)
+        self.pinPath(self.currentIpfsObject.objPath, recursive=False)
 
     def onPinRecursive(self):
-        if not self.currentIpfsResource:
+        if not self.currentIpfsObject:
             return messageBox(iNotAnIpfsResource())
 
-        self.pinPath(self.currentIpfsResource.objPath, recursive=True)
+        self.pinPath(self.currentIpfsObject.objPath, recursive=True)
+
+    def onPinRecursiveParent(self):
+        if not self.currentIpfsObject:
+            return messageBox(iNotAnIpfsResource())
+
+        if self.currentUrlHasFileName:
+            parent = self.currentIpfsObject.parent()
+            self.pinPath(parent.objPath, recursive=True)
+        else:
+            self.pinPath(self.currentIpfsObject.objPath, recursive=True)
+
+    def onPinPageLinks(self):
+        if not self.currentIpfsObject:
+            return messageBox(iNotAnIpfsResource())
+
+        def htmlReady(htmlCode):
+            ensure(self.pinIpfsLinksInPage(htmlCode))
+
+        self.webEngineView.webPage.toHtml(htmlReady)
+
+    @ipfsOp
+    async def pinIpfsLinksInPage(self, ipfsop, htmlCode):
+        if not isinstance(htmlCode, str):
+            return
+
+        baseUrl = self.currentUrl.url(
+            QUrl.RemoveFilename | QUrl.RemoveFragment | QUrl.RemoveQuery)
+        basePath = IPFSPath(baseUrl)
+
+        if not basePath.valid:
+            return
+
+        # Being a potentially CPU-intensive task for large documents, run
+        # the HTML parser in the threadpool executor
+
+        parser = IPFSLinksParser(basePath)
+        await self.app.loop.run_in_executor(self.app.executor,
+                                            parser.feed, htmlCode)
+
+        tab = PinBatchTab(self.app.mainWindow)
+        bulkWidget = PinBatchWidget(basePath, parser.links, parent=tab)
+        tab.addToLayout(bulkWidget)
+        self.app.mainWindow.registerTab(tab, 'Pin batch', current=True,
+                                        icon=getIcon('pin.png'))
 
     def onBrowseCurrentClipItem(self):
         current = self.app.clipTracker.getCurrent()
@@ -1203,7 +1362,9 @@ class BrowserTab(GalacteekTab):
 
     def onLoadIpfsCID(self):
         def onValidated(d):
-            self.browseIpfsHash(d.getHash())
+            path = IPFSPath(d.getHash(), autoCidConv=True)
+            if path.valid:
+                self.browseFsPath(path)
 
         runDialog(IPFSCIDInputDialog, title=iEnterIpfsCIDDialog(),
                   accepted=onValidated)
@@ -1213,7 +1374,10 @@ class BrowserTab(GalacteekTab):
             # Open a tab for every CID
             cids = dlg.getCIDs()
             for cid in cids:
-                self.gWindow.addBrowserTab().browseIpfsHash(cid)
+                path = IPFSPath(cid, autoCidConv=True)
+                if not path.valid:
+                    continue
+                self.gWindow.addBrowserTab().browseFsPath(path)
 
         runDialog(IPFSMultipleCIDInputDialog,
                   title=iEnterIpfsCIDDialog(),
@@ -1224,12 +1388,12 @@ class BrowserTab(GalacteekTab):
                                         iEnterIpnsDialog(),
                                         iEnterIpns())
         if ok:
-            self.browseIpnsHash(text)
+            self.browseIpnsKey(text)
 
     def onFollowIpns(self):
-        if self.currentIpfsResource:
+        if self.currentIpfsObject:
             runDialog(AddFeedDialog, self.app.marksLocal,
-                      self.currentIpfsResource.objPath,
+                      self.currentIpfsObject.objPath,
                       title=iFollowIpnsDialog())
 
     def onLoadHome(self):
@@ -1271,14 +1435,14 @@ class BrowserTab(GalacteekTab):
 
             self.urlZone.clear()
             self.urlZone.insert(url.toString())
-            self._currentIpfsResource = IPFSPath(url.toString())
+            self._currentIpfsObject = IPFSPath(url.toString())
             self._currentUrl = url
-            self.ipfsObjectVisited.emit(self.currentIpfsResource)
+            self.ipfsObjectVisited.emit(self.currentIpfsObject)
             self.ui.hashmarkThisPage.setEnabled(True)
             self.ui.pinToolButton.setEnabled(True)
 
             self.followIpnsAction.setEnabled(
-                self.currentIpfsResource.isIpnsRoot)
+                self.currentIpfsObject.isIpnsRoot)
 
         elif url.authority() == self.gatewayAuthority:
             # dweb:/ with IPFS gateway's authority
@@ -1286,20 +1450,20 @@ class BrowserTab(GalacteekTab):
             urlString = url.toDisplayString(
                 QUrl.RemoveAuthority | QUrl.RemoveScheme)
 
-            self._currentIpfsResource = IPFSPath(urlString)
+            self._currentIpfsObject = IPFSPath(urlString)
 
-            if self.currentIpfsResource.valid:
+            if self.currentIpfsObject.valid:
                 log.debug('Current IPFS object: {0}'.format(
-                    repr(self.currentIpfsResource)))
+                    repr(self.currentIpfsObject)))
 
-                url = QUrl(self.currentIpfsResource.dwebUrl)
+                url = QUrl(self.currentIpfsObject.dwebUrl)
                 self.urlZone.clear()
                 self.urlZone.insert(url.toString())
 
                 self.ui.hashmarkThisPage.setEnabled(True)
                 self.ui.pinToolButton.setEnabled(True)
 
-                self.ipfsObjectVisited.emit(self.currentIpfsResource)
+                self.ipfsObjectVisited.emit(self.currentIpfsObject)
 
                 self._currentUrl = url
             else:
@@ -1307,9 +1471,9 @@ class BrowserTab(GalacteekTab):
 
             # Activate the follow action if this is a root IPNS address
             self.followIpnsAction.setEnabled(
-                self.currentIpfsResource.isIpnsRoot)
+                self.currentIpfsObject.isIpnsRoot)
         else:
-            self._currentIpfsResource = None
+            self._currentIpfsObject = None
             self.urlZone.clear()
             self.urlZone.insert(url.toString())
             self._currentUrl = url
@@ -1341,9 +1505,7 @@ class BrowserTab(GalacteekTab):
 
         if self.currentPageTitle != iNoTitle() and self.currentUrl and \
                 self.currentUrl.isValid():
-            # Only record those schemes in the history
-            if self.currentUrl.scheme() in [SCHEME_DWEB, SCHEME_IPFS,
-                                            SCHEME_IPNS]:
+            if isSchemeRegistered(self.currentUrl.scheme()):
                 self.history.record(self.currentUrl.toString(),
                                     self.currentPageTitle)
 
@@ -1376,21 +1538,25 @@ class BrowserTab(GalacteekTab):
                 }''')
 
     def browseFsPath(self, path):
-        if isinstance(path, str):
-            self.enterUrl(QUrl('{0}:{1}'.format(SCHEME_DWEB, path)))
-        elif isinstance(path, IPFSPath):
-            if path.valid:
-                self.enterUrl(QUrl(path.ipfsUrl))
+        def _handle(iPath):
+            if iPath.valid:
+                self.enterUrl(QUrl(iPath.ipfsUrl))
             else:
-                messageBox(iInvalidUrl(path.fullPath))
+                messageBox(iInvalidObjectPath(iPath.fullPath))
+
+        if isinstance(path, str):
+            ipfsPath = IPFSPath(path, autoCidConv=True)
+            return _handle(ipfsPath)
+        elif isinstance(path, IPFSPath):
+            return _handle(path)
 
     def browseIpfsHash(self, ipfsHash):
         if not cidhelpers.cidValid(ipfsHash):
             return messageBox(iInvalidCID(ipfsHash))
 
-        self.browseFsPath(IPFSPath(joinIpfs(ipfsHash)))
+        self.browseFsPath(IPFSPath(joinIpfs(ipfsHash), autoCidConv=True))
 
-    def browseIpnsHash(self, ipnsHash):
+    def browseIpnsKey(self, ipnsHash):
         self.browseFsPath(IPFSPath(joinIpns(ipnsHash)))
 
     def enterUrl(self, url):
@@ -1437,13 +1603,49 @@ class BrowserTab(GalacteekTab):
         self.urlZone.cancelTimer()
         self.urlZone.unfocus()
 
-        # If the address bar contains a valid CID or IPFS path, load it
-        iPath = IPFSPath(inputStr)
+        #
+        # Handle seamless upgrade of CIDv0, suggested by @lidel
+        #
+        # If the user uses the native scheme (ipfs://) but passes
+        # a base58-encoded CID as host (whatever the version),
+        # convert it to base32 with cidhelpers.cidConvertBase32()
+        # and replace the old CID in the URL
+        #
+        # https://github.com/eversum/galacteek/issues/5
+        #
 
-        if iPath.valid:
-            return self.browseFsPath(iPath)
+        if inputStr.startswith('ipfs://'):
+            # Home run
+            match = cidhelpers.ipfsDedSearchPath58(inputStr)
+            if match:
+                rootcid = match.group('rootcid')
+                if rootcid and re.search('[A-Z]', rootcid):
+                    # Has uppercase characters .. Either CIDv0
+                    # or base58-encoded CIDv1
+                    # If the conversion to base32 is successfull,
+                    # replace the base58-encoded CID in the URL with
+                    # the base32-encoded CIDv1
+
+                    multihash = cidhelpers.cidConvertBase32(rootcid)
+                    if multihash:
+                        inputStr = re.sub(rootcid, multihash, inputStr,
+                                          count=1)
+                    else:
+                        return messageBox(iInvalidCID(rootcid))
+            else:
+                return messageBox(iInvalidUrl(inputStr))
 
         url = QUrl(inputStr)
+        if not url.isValid() or not url.scheme():
+            # Invalid URL or no scheme given
+            # If the address bar contains a valid CID or IPFS path, load it
+            iPath = IPFSPath(inputStr, autoCidConv=True)
+
+            if iPath.valid:
+                return self.browseFsPath(iPath)
+            else:
+                return messageBox(iInvalidUrl(inputStr))
+
         scheme = url.scheme()
 
         if isSchemeRegistered(scheme):

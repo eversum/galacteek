@@ -656,6 +656,7 @@ class UserProfile(QObject):
             self.rsaAgent = IpfsRSAAgent(self.rsaExec,
                                          self.rsaPubKey,
                                          self.rsaPrivKeyPath)
+            op.setRsaAgent(self.rsaAgent)
 
             self.userLogInfo('Loading user information')
             self.userInfo = UserInfos(self.pathUserInfo, self.rsaAgent)

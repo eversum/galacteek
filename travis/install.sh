@@ -5,14 +5,13 @@ set -e
 
 PIP=pip3
 PYTHONEX=python3
-SOLIDITY_VERSION=0.5.0
 
 mkdir -p $HOME/bin
 
 if [ "$TRAVIS_OS_NAME" = "linux" ]; then
 	PYTHONEX=python3.6
-	wget https://dist.ipfs.io/go-ipfs/v0.4.21/go-ipfs_v0.4.21_linux-amd64.tar.gz
-	tar -C $HOME -xzvf go-ipfs_v0.4.21_linux-amd64.tar.gz
+	wget https://dist.ipfs.io/go-ipfs/v0.4.22/go-ipfs_v0.4.22_linux-amd64.tar.gz
+	tar -C $HOME -xzvf go-ipfs_v0.4.22_linux-amd64.tar.gz
 
 	export DISPLAY=":99.0"
 	/sbin/start-stop-daemon --start --quiet --pidfile /tmp/custom_xvfb_99.pid --make-pidfile --background --exec /usr/bin/Xvfb -- :99 -screen 0 1920x1200x24 -ac +extension GLX +render -noreset
@@ -22,8 +21,8 @@ if [ "$TRAVIS_OS_NAME" = "linux" ]; then
 fi
 
 if [ "$TRAVIS_OS_NAME" = "osx" ]; then
-	wget https://dist.ipfs.io/go-ipfs/v0.4.21/go-ipfs_v0.4.21_darwin-amd64.tar.gz
-	tar -C $HOME -xzvf go-ipfs_v0.4.21_darwin-amd64.tar.gz
+	wget https://dist.ipfs.io/go-ipfs/v0.4.22/go-ipfs_v0.4.22_darwin-amd64.tar.gz
+	tar -C $HOME -xzvf go-ipfs_v0.4.22_darwin-amd64.tar.gz
 fi
 
 mv $HOME/go-ipfs/ipfs $HOME/bin

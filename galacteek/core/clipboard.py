@@ -219,7 +219,7 @@ class ClipboardTracker(QObject):
 
         text = text.strip().rstrip('/')
 
-        path = IPFSPath(text)
+        path = IPFSPath(text, autoCidConv=True)
         if path.valid:
             self.clipboardPathProcessed.emit(path)
         else:
@@ -276,7 +276,7 @@ class ClipboardTracker(QObject):
         if len(matches) > 0:
             latest = matches[-1]
             if isinstance(latest, str):
-                item._resolvedPath = IPFSPath(latest)
+                item._resolvedPath = IPFSPath(latest, autoCidConv=True)
                 item.ipnsNameResolved.emit(item.resolvedPath)
                 return item.resolvedPath
 

@@ -73,7 +73,7 @@ async def fetchGoIpfsWrapper(app, timeout=60 * 10):
 async def fetchGoIpfsDist(app):
     async for msg in distipfsfetch.distIpfsExtract(
             dstdir=app.ipfsBinLocation, software='go-ipfs',
-            executable='ipfs', version='0.4.21', loop=app.loop,
+            executable='ipfs', version='0.4.22', loop=app.loop,
             sslverify=app.sslverify):
         try:
             code, text = msg

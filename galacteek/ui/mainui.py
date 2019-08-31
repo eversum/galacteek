@@ -658,7 +658,7 @@ class MainWindow(QMainWindow):
         self.app.urlHistory.clear()
 
     def onHashmarkClicked(self, path, title):
-        ipfsPath = IPFSPath(path)
+        ipfsPath = IPFSPath(path, autoCidConv=True)
 
         if ipfsPath.valid:
             ensure(self.app.resourceOpener.open(ipfsPath))
@@ -979,7 +979,7 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).keyPressEvent(event)
 
     def explore(self, multihash):
-        ipfsPath = IPFSPath(multihash)
+        ipfsPath = IPFSPath(multihash, autoCidConv=True)
         if ipfsPath.valid:
             ensure(self.exploreIpfsPath(ipfsPath))
         else:

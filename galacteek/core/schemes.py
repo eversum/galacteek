@@ -3,6 +3,7 @@ import uuid
 import aioipfs
 import functools
 import asyncio
+from datetime import datetime
 
 from PyQt5.QtWebEngineCore import QWebEngineUrlSchemeHandler
 from PyQt5.QtWebEngineCore import QWebEngineUrlScheme
@@ -42,6 +43,7 @@ SCHEME_IPNS = 'ipns'
 
 # Misc schemes
 SCHEME_Z = 'z'
+SCHEME_Q = 'q'
 SCHEME_GALACTEEK = 'glk'
 SCHEME_PALACE = 'palace'
 SCHEME_MANUAL = 'manual'
@@ -92,6 +94,11 @@ def registerMiscSchemes():
                      syntax=QWebEngineUrlScheme.Syntax.Path,
                      flags=QWebEngineUrlScheme.LocalScheme,
                      schemeSection='misc'
+                     )
+    declareUrlScheme(SCHEME_Q,
+                     syntax=QWebEngineUrlScheme.Syntax.Host,
+                     flags=QWebEngineUrlScheme.LocalScheme,
+                     schemeSection='core'
                      )
 
 
@@ -234,8 +241,8 @@ class ENSWhoisSchemeHandler(BaseURLSchemeHandler):
             self.domainResolved.emit(domain, path)
             sPath = path.child(uPath) if uPath else path
             logUser.info('ENS: {domain} resolved to {res}'.format(
-                domain=domain, res=sPath.dwebUrl))
-            return request.redirect(QUrl(sPath.dwebUrl))
+                domain=domain, res=sPath.ipfsUrl))
+            return request.redirect(QUrl(sPath.ipfsUrl))
         else:
             logUser.info('ENS: {domain} resolve failed'.format(
                 domain=domain))
@@ -337,8 +344,12 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
                 ctx['links'] += obj.get('Links', [])
 
         for lnk in ctx['links']:
-            child = currentIpfsPath.child(lnk['Name'])
-            lnk['href'] = child.ipfsUrl
+            lType = lnk.get('Type')
+
+            if lType == 1:
+                lnk['href'] = lnk['Name'] + '/'
+            else:
+                lnk['href'] = lnk['Name']
 
         try:
             data = await renderTemplate('ipfsdirlisting.html', **ctx)
@@ -399,17 +410,20 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
             return self.urlInvalid(request)
 
         scheme = rUrl.scheme()
+        host = rUrl.host()
+
+        if not host:
+            return self.urlInvalid(request)
 
         if scheme == SCHEME_IPFS:
             # hostname = base32-encoded CID
-            cid = rUrl.host()
 
-            if not ipfsRegSearchCid32(cid):
+            if not ipfsRegSearchCid32(host):
                 return self.urlInvalid(request)
 
-            ipfsPathS = joinIpfs(cid) + rUrl.path()
+            ipfsPathS = joinIpfs(host) + rUrl.path()
         elif scheme == SCHEME_IPNS:
-            ipfsPathS = joinIpns(rUrl.host()) + rUrl.path()
+            ipfsPathS = joinIpns(host) + rUrl.path()
         else:
             return self.urlInvalid(request)
 
@@ -501,6 +515,102 @@ class ObjectProxySchemeHandler(NativeIPFSSchemeHandler):
 
         path = rUrl.path()
         ipfsPath = self.proxiedPath.child(path)
+
+        if not ipfsPath.valid:
+            return self.urlInvalid(request)
+
+        return await self.fetchFromPath(ipfsop, request, ipfsPath, uid)
+
+
+class MultiObjectHostSchemeHandler(NativeIPFSSchemeHandler):
+    """
+    Somehow similar to ObjectProxySchemeHandler, but this handler
+    is host-based, the host being the name of a user-defined
+    name-to-ipfs-path mapping. Used by the q:// scheme.
+    A URL would look like this (with foo being the mapping name)::
+
+        q://foo/src/luser.c
+
+    If the mapped object is an IPNS path, it's periodically
+    resolved and the result is cached.
+    """
+
+    def __init__(self, app, parent=None):
+        super(MultiObjectHostSchemeHandler, self).__init__(app, parent=parent)
+
+        self.app.towers['schemes'].qMappingsChanged.connect(
+            self.onMappingsChanged)
+
+        self.lock = asyncio.Lock()
+        self.mappings = {}
+        self._resolverTask = None
+
+    def onMappingsChanged(self):
+        ensure(self.updateMappings())
+
+    async def updateMappings(self):
+        mappings = self.app.marksLocal.qaGetMappings()
+        for mapping in mappings:
+            if mapping.name in self.mappings:
+                continue
+
+            with await self.lock:
+                self.mappings[mapping.name] = {
+                    'path': IPFSPath(mapping.path),
+                    'rfrequency': mapping.ipnsFreq,
+                    'rcache': None,
+                    'rlast': None
+                }
+
+    async def start(self, **kw):
+        if not self._resolverTask:
+            self._resolverTask = ensure(self.mappingsResolver())
+
+        await self.updateMappings()
+
+    @ipfsOp
+    async def mappingsResolver(self, ipfsop):
+        while True:
+            with await self.lock:
+                for name, m in self.mappings.items():
+                    now = datetime.now()
+                    path = m['path']
+
+                    if not path.isIpns:
+                        continue
+
+                    if not m['rlast'] or \
+                            (now - m['rlast']).seconds > m['rfrequency']:
+                        resolved = await path.resolve(ipfsop, noCache=True)
+                        if resolved:
+                            m['rcache'] = IPFSPath(resolved)
+                            m['rlast'] = now
+
+            await asyncio.sleep(60)
+
+    @ipfsOp
+    async def handleRequest(self, ipfsop, request, uid):
+        rUrl = request.requestUrl()
+
+        if not rUrl.isValid() or not rUrl.host():
+            return self.urlInvalid(request)
+
+        host = rUrl.host()
+
+        if host not in self.mappings:
+            return self.urlNotFound(request)
+
+        mapping = self.mappings[host]
+        rCached = mapping['rcache']
+        mappedTo = mapping['path']
+
+        usedPath = rCached if rCached and rCached.valid else mappedTo
+
+        if not usedPath.valid:
+            return self.urlInvalid(request)
+
+        path = rUrl.path()
+        ipfsPath = usedPath.child(path)
 
         if not ipfsPath.valid:
             return self.urlInvalid(request)

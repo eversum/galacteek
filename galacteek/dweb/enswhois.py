@@ -35,7 +35,8 @@ async def ensContentHash(domain, sslverify=True, timeout=8):
                         match = re.search(
                             'ipfs://(?P<cid>[A-Za-z0-9]+)$', addr)
                         if match:
-                            return IPFSPath(match.group('cid'))
+                            return IPFSPath(match.group('cid'),
+                                            autoCidConv=True)
     except asyncio.TimeoutError:
         return None
     except Exception:

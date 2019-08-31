@@ -130,9 +130,11 @@ class MFSNameItem(MFSItem):
     def fullPath(self):
         parentHash = self.parentHash
         if parentHash:
-            return joinIpfs(os.path.join(parentHash, self.entry['Name']))
+            fp = joinIpfs(os.path.join(parentHash, self.entry['Name']))
         else:
-            return joinIpfs(self.entry['Hash'])
+            fp = joinIpfs(self.entry['Hash'])
+
+        return fp + '/' if self.isDir() else fp
 
     def isFile(self):
         return self.entry['Type'] == 0

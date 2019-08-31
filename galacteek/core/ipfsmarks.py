@@ -12,6 +12,7 @@ import aiofiles
 
 from galacteek import log
 from galacteek.ipfs.cidhelpers import IPFSPath
+from galacteek.ipfs.cidhelpers import normpPreserve
 
 from PyQt5.QtCore import pyqtSignal, QObject
 
@@ -26,10 +27,6 @@ class MarksEncoder(json.JSONEncoder):
 marksKey = '_marks'
 pyramidsKey = '_pyramids'
 pyramidsMarksKey = '_pyramidmarks'
-
-
-def rSlash(path):
-    return path.rstrip('/')
 
 
 def categoryValid(category):
@@ -70,8 +67,6 @@ class IPFSHashMark(collections.UserDict):
              numlinks=None, icon=None, pinSingle=False, pinRecursive=False):
         if datecreated is None:
             datecreated = datetime.now().isoformat()
-
-        path = rSlash(path)
 
         mData = IPFSHashMark({
             path: {
@@ -181,6 +176,42 @@ class MultihashPyramid(collections.UserDict):
         return pyramid
 
 
+class QuickAccessMapping(collections.UserDict):
+    """
+    Mapping for the q:// scheme
+    """
+
+    @property
+    def name(self):
+        return self.data['name']
+
+    @property
+    def title(self):
+        return self.data['title']
+
+    @property
+    def path(self):
+        return self.data['mappedto']
+
+    @property
+    def ipnsFreq(self):
+        return self.data['ipnsresolvefreq']
+
+    @staticmethod
+    def make(name, ipfsMPath, title=None,
+             ipnsResolveFrequency=3600):
+        datecreated = datetime.now().isoformat()
+        mapping = QuickAccessMapping({
+            'name': name,
+            'mappedto': str(ipfsMPath),
+            'ipnsresolvefreq': ipnsResolveFrequency,
+            'datecreated': datecreated,
+            'hotkey': None,
+            'title': title if title else name
+        })
+        return mapping
+
+
 class IPFSMarks(QObject):
     changed = pyqtSignal()
     markDeleted = pyqtSignal(str)
@@ -234,12 +265,17 @@ class IPFSMarks(QObject):
     def _rootFeeds(self):
         return self._root['feeds']
 
+    @property
+    def _rootQMappings(self):
+        return self._root['qamappings']
+
     def skeleton(self):
         return {
             'ipfsmarks': {
                 'categories': {}
             },
-            'feeds': {}
+            'feeds': {},
+            'qamappings': []
         }
 
     def load(self):
@@ -248,6 +284,9 @@ class IPFSMarks(QObject):
         try:
             with open(self.path, 'rt') as fd:
                 marks = json.load(fd)
+
+            if 'qamappings' not in marks:
+                marks['qamappings'] = []
             return marks
         except Exception:
             marks = collections.OrderedDict()
@@ -345,7 +384,15 @@ class IPFSMarks(QObject):
     def isInCategory(self, category, path):
         sec = self.enterCategory(category)
         if sec:
-            return path in sec[marksKey]
+            spath = path.rstrip('/')
+            return spath in sec[marksKey] or spath + '/' in sec[marksKey]
+
+    def getCategoryMark(self, marks, path):
+        slashed = path + '/'
+        if path in marks:
+            return IPFSHashMark.fromJson(path, marks[path])
+        elif slashed in marks:
+            return IPFSHashMark.fromJson(slashed, marks[slashed])
 
     def getAll(self, share=False):
         cats = self.getCategories()
@@ -436,12 +483,12 @@ class IPFSMarks(QObject):
 
         return None
 
-    def find(self, bpath, category=None, delete=False):
-        ipfsPath = IPFSPath(bpath)
+    def find(self, mpath, category=None, delete=False):
+        ipfsPath = IPFSPath(normpPreserve(mpath))
         if not ipfsPath.valid:
             return
 
-        path = rSlash(bpath)
+        path = ipfsPath.fullPath
         categories = self.getCategories()
 
         for cat in categories:
@@ -457,42 +504,9 @@ class IPFSMarks(QObject):
                     del marks[path]
                     self.markDeleted.emit(path)
                     self.changed.emit()
-                    continue
-
-                return IPFSHashMark.fromJson(path, marks[path])
-
-    def search(
-            self,
-            bpath,
-            category=None,
-            tags=[],
-            delete=False):
-        path = rSlash(bpath)
-        categories = self.getCategories()
-
-        for cat in categories:
-            if category and cat != category:
-                continue
-
-            marks = self.getCategoryMarks(cat)
-            if not marks:
-                continue
-
-            if path in marks.keys():
-                if delete is True:
-                    del marks[path]
-                    self.markDeleted.emit(path)
-                    self.changed.emit()
                     return True
 
-                tagsOk = True
-                m = marks[path]
-                for stag in tags:
-                    if stag not in m['tags']:
-                        tagsOk = False
-
-                if tagsOk:
-                    return (path, marks[path])
+                return self.getCategoryMark(marks, path)
 
     def insertMark(self, mark, category):
         # Insert a mark in given category, checking of already existing mark
@@ -528,19 +542,23 @@ class IPFSMarks(QObject):
         self.changed.emit()
         return True
 
-    def add(self, bpath, title=None, category='general', share=False, tags=[],
+    def add(self, mpath, title=None, category='general', share=False, tags=[],
             description=None, icon=None, pinSingle=False, pinRecursive=False):
-        if not bpath:
-            return None
+        if not mpath:
+            return False
 
-        path = rSlash(bpath)
+        iPath = IPFSPath(normpPreserve(mpath))
+        if not iPath.valid:
+            return False
+
+        path = str(iPath)
 
         sec = self.enterCategory(category, create=True)
 
         if not sec:
             return False
 
-        if self.search(path):
+        if self.find(path):
             # We already have stored a mark with this path
             return False
 
@@ -561,7 +579,7 @@ class IPFSMarks(QObject):
         return True
 
     def delete(self, path):
-        return self.search(path, delete=True)
+        return self.find(path, delete=True)
 
     def merge(self, oMarks, share=None, reset=False):
         count = 0
@@ -593,10 +611,11 @@ class IPFSMarks(QObject):
             return
 
         feedsSec = self._rootFeeds
-        ipnsp = rSlash(ipnsp)
+        ipnsp = normpPreserve(ipnsp)
 
         if ipnsp in feedsSec:
             return
+
         feedsSec[ipnsp] = {
             'name': name,
             'active': active,
@@ -639,9 +658,6 @@ class IPFSMarks(QObject):
 
     def dump(self):
         print(self.serialize(sys.stdout))
-
-    def norm(self, path):
-        return path.rstrip('/')
 
     def pyramidPathFormat(self, category, name):
         return os.path.join(category, name)
@@ -725,7 +741,6 @@ class IPFSMarks(QObject):
             self.changed.emit()
 
     def pyramidAdd(self, pyramidPath, path):
-        path = self.norm(path)
         sec, category, name = self.pyramidAccess(pyramidPath)
 
         if not sec:
@@ -800,3 +815,18 @@ class IPFSMarks(QObject):
             for name, pyramid in pyramids.items():
                 await asyncio.sleep(0)
                 self.pyramidConfigured.emit(self.pyramidPathFormat(cat, name))
+
+    def qaMap(self, name, mappedTo, title=None, ipnsResolveFrequency=3600):
+        for m in self.qaGetMappings():
+            if m.name == name:
+                return False
+
+        mapping = QuickAccessMapping.make(
+            name, mappedTo, title=title,
+            ipnsResolveFrequency=ipnsResolveFrequency)
+        self._rootQMappings.append(mapping.data)
+        self.changed.emit()
+        return True
+
+    def qaGetMappings(self):
+        return [QuickAccessMapping(m) for m in copy.copy(self._rootQMappings)]

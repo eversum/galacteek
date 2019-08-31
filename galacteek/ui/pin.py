@@ -1,6 +1,11 @@
+import functools
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QCoreApplication
+
 from PyQt5.QtWidgets import QTreeView
+from PyQt5.QtWidgets import QCheckBox
+from PyQt5.QtWidgets import QTableWidgetItem
 from PyQt5.QtWidgets import QLineEdit
 from PyQt5.QtWidgets import QPushButton
 from PyQt5.QtWidgets import QVBoxLayout
@@ -8,17 +13,21 @@ from PyQt5.QtWidgets import QHBoxLayout
 from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QHeaderView
 from PyQt5.QtWidgets import QToolButton
+from PyQt5.QtWidgets import QWidget
+
 from PyQt5.QtGui import QStandardItemModel
 from PyQt5.QtGui import QBrush
 from PyQt5.QtGui import QColor
 
-from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek import ensure
+from galacteek.ipfs.cidhelpers import IPFSPath
+from galacteek.ipfs import ipfsOp
 from galacteek.core.modelhelpers import UneditableItem
 from galacteek.core.modelhelpers import modelSearch
 
 from .widgets import GalacteekTab
 
+from .ui_batchpinlist import Ui_BatchPinList
 from .helpers import messageBox
 
 from .i18n import iPath
@@ -27,6 +36,8 @@ from .i18n import iUnknown
 from .i18n import iPinned
 from .i18n import iPinning
 from .i18n import iPin
+from .i18n import iPinSingle
+from .i18n import iPinRecursive
 from .i18n import iCancel
 from .i18n import iInvalidInput
 
@@ -187,3 +198,113 @@ class PinStatusWidget(GalacteekTab):
             items['itemProgress'].setText(str(nodesProcessed))
 
         self.resort()
+
+
+class PinBatchTab(GalacteekTab):
+    pass
+
+
+class PinBatchWidget(QWidget):
+    def __init__(self, basePath, pathList, parent=None):
+        super(PinBatchWidget, self).__init__(parent)
+
+        self.basePath = basePath
+        self.pathList = pathList
+
+        self.ui = Ui_BatchPinList()
+        self.ui.setupUi(self)
+
+        self.ui.labelBasePath.setText(
+            'Base IPFS path: <b>{p}</b>'.format(p=str(self.basePath)))
+
+        horizHeader = self.ui.tableWidget.horizontalHeader()
+        horizHeader.sectionClicked.connect(self.onHorizSectionClicked)
+        horizHeader.setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.ui.tableWidget.setHorizontalHeaderLabels(
+            [iPath(), iPinSingle(), iPinRecursive()])
+
+        self.ui.tableWidget.verticalHeader().hide()
+        self.ui.tableWidget.setRowCount(len(self.pathList))
+
+        self.ui.proceedButton.clicked.connect(self.onPinObjects)
+        self.insertItems()
+
+    def insertItems(self):
+        added = []
+        for path in self.pathList:
+            if path.objPath in added:
+                continue
+
+            curRow = len(added)
+
+            if len(path.objPath) > 92:
+                text = path.objPath[0:92] + '...'
+            else:
+                text = path.objPath
+
+            pItem = QTableWidgetItem(text)
+
+            pItem.setData(Qt.UserRole, path.objPath)
+            pItem.setToolTip(path.objPath)
+            pItem.setFlags(
+                Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+            checkBoxS = QCheckBox(self)
+
+            checkBoxR = QCheckBox(self)
+
+            self.ui.tableWidget.setItem(curRow, 0, pItem)
+            self.ui.tableWidget.setCellWidget(curRow, 1, checkBoxS)
+            self.ui.tableWidget.setCellWidget(curRow, 2, checkBoxR)
+
+            checkBoxS.stateChanged.connect(
+                functools.partial(self.pinSingleChecked, pItem.row()))
+            checkBoxR.stateChanged.connect(
+                functools.partial(self.pinRecursiveChecked, pItem.row()))
+            checkBoxS.setCheckState(Qt.Checked)
+            added.append(path.objPath)
+
+        self.ui.tableWidget.setRowCount(len(added))
+
+    def onHorizSectionClicked(self, section):
+        if section == 1 or section == 2:
+            for row in range(self.ui.tableWidget.rowCount()):
+                item = self.ui.tableWidget.cellWidget(row, section)
+                if item:
+                    item.setCheckState(Qt.Checked)
+
+    def pinSingleChecked(self, row, state):
+        adjacent = self.ui.tableWidget.cellWidget(row, 2)
+        if adjacent and state == Qt.Checked:
+            adjacent.setCheckState(Qt.Unchecked)
+
+    def pinRecursiveChecked(self, row, state):
+        adjacent = self.ui.tableWidget.cellWidget(row, 1)
+        if adjacent and state == Qt.Checked:
+            adjacent.setCheckState(Qt.Unchecked)
+
+    def onPinObjects(self):
+        self.ui.proceedButton.setText(iPinning() + ' ...')
+        self.ui.proceedButton.setEnabled(False)
+        ensure(self.pinSelectedObjects())
+
+    @ipfsOp
+    async def pinSelectedObjects(self, ipfsop):
+        for row in range(self.ui.tableWidget.rowCount()):
+            pItem = self.ui.tableWidget.item(row, 0)
+            pSingleBox = self.ui.tableWidget.cellWidget(row, 1)
+            pRecBox = self.ui.tableWidget.cellWidget(row, 2)
+
+            path = pItem.data(Qt.UserRole)
+            if not path:
+                await ipfsop.sleep()
+                continue
+
+            if pSingleBox.isChecked() or pRecBox.isChecked():
+                await ipfsop.ctx.pin(
+                    path, recursive=pRecBox.isChecked(),
+                    qname='browser-batch')
+                pItem.setFlags(Qt.NoItemFlags)
+                pSingleBox.setEnabled(False)
+                pRecBox.setEnabled(False)
+
+            await ipfsop.sleep(0.2)

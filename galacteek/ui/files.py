@@ -502,7 +502,7 @@ class FileManager(QWidget):
 
         nameItem = self.model.getNameItemFromIdx(idx)
         dataHash = self.model.getHashFromIdx(idx)
-        ipfsPath = joinIpfs(dataHash)
+        ipfsPath = nameItem.fullPath
         menu = QMenu()
 
         def explore(multihash):
@@ -531,7 +531,7 @@ class FileManager(QWidget):
             menu.addAction(getIcon('clipboard.png'),
                            iCopyPathToClipboard(),
                            functools.partial(self.app.setClipboardText,
-                                             nameItem.fullPath))
+                                             ipfsPath))
         menu.addSeparator()
         menu.addAction(getIconIpfs64(), iDhtProvide(), functools.partial(
             self.onDhtProvide, dataHash, False))
@@ -545,12 +545,11 @@ class FileManager(QWidget):
                                          nameItem.entry['Name']))
         menu.addAction(getIconIpfs64(),
                        iBrowseFile(),
-                       functools.partial(self.browse, dataHash))
+                       functools.partial(self.browse, ipfsPath))
         menu.addAction(getIcon('open.png'),
                        iOpen(),
                        functools.partial(ensure, self.app.resourceOpener.open(
-                                         joinIpfs(dataHash))
-                                         ))
+                           ipfsPath)))
         if nameItem.isFile():
             menu.addAction(getIcon('text-editor.png'),
                            'Edit',

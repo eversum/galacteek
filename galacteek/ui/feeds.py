@@ -18,9 +18,11 @@ from galacteek.core.models.atomfeeds import AtomFeedItem
 from galacteek.dweb.page import BasePage
 
 from . import ui_atomfeeds
+from .dialogs import AddAtomFeedDialog
 from .widgets import GalacteekTab
 from .widgets import IPFSWebView
-from .helpers import inputText
+from .helpers import messageBox
+from .helpers import runDialog
 
 
 class EmptyPage(BasePage):
@@ -105,9 +107,16 @@ class AtomFeedsView(QWidget):
             feedItem.feedId))
 
     def onAddFeed(self):
-        url = inputText(label='Atom Feed URL')
-        if url:
+        def urlAccepted(dlg):
+            url = dlg.textValue()
+            qUrl = QUrl(url)
+
+            if not qUrl.isValid() or not qUrl.scheme():
+                return messageBox('Invalid URL')
+
             ensure(self.app.mainWindow.atomButton.atomFeedSubscribe(url))
+
+        runDialog(AddAtomFeedDialog, accepted=urlAccepted)
 
     def onEntryAdded(self, entryItem):
         if entryItem.entry.status == entryItem.entry.ENTRY_STATUS_NEW:

@@ -218,4 +218,4 @@ class KeysTab(GalacteekTab):
     def onItemDoubleClicked(self, index):
         # Browse IPNS key associated with current item on double-click
         keyHash = self.model.data(self.model.index(index.row(), 1))
-        self.gWindow.addBrowserTab().browseIpnsHash(keyHash)
+        self.gWindow.addBrowserTab().browseIpnsKey(keyHash)

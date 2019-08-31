@@ -92,6 +92,12 @@ def iPinSuccess(path):
         '{0} was pinned successfully').format(path)
 
 
+def iPinError(path, errmsg):
+    return QCoreApplication.translate(
+        'GalacteekWindow',
+        'Error pinning {0}: {1}').format(path, errmsg)
+
+
 def iManual():
     return QCoreApplication.translate('GalacteekWindow', 'Manual')
 
@@ -294,6 +300,19 @@ def iPinSingle():
 
 def iPinRecursive():
     return QCoreApplication.translate('GalacteekWindow', 'Pin (recursive)')
+
+
+def iPinRecursiveParent():
+    return QCoreApplication.translate('GalacteekWindow',
+                                      'Pin parent (recursive)')
+
+
+def iPinPageLinks():
+    return QCoreApplication.translate('GalacteekWindow', "Pin page's links")
+
+
+def iBatchPin():
+    return QCoreApplication.translate('GalacteekWindow', 'Batch pin')
 
 
 def iDoNotPin():

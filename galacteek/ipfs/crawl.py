@@ -32,7 +32,8 @@ class TitleParser(HTMLParser):
         self.data += data
 
     def getTitle(self):
-        return self.title
+        if self.title:
+            return self.title.strip()
 
 
 def runTitleParser(data):

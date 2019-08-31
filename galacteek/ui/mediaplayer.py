@@ -148,7 +148,7 @@ class MediaPlayerTab(GalacteekTab):
         self.uipList.setupUi(self.pListWidget)
         self.uipList.savePlaylistButton.clicked.connect(self.onSavePlaylist)
         self.uipList.loadPlaylistButton.setPopupMode(
-            QToolButton.MenuButtonPopup)
+            QToolButton.InstantPopup)
         self.uipList.loadPlaylistButton.setMenu(self.playlistsMenu)
 
         self.clipMenu = QMenu()

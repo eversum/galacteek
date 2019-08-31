@@ -6,6 +6,7 @@ SOURCES = galacteek/application.py \
 	galacteek/ui/dag.py \
 	galacteek/ui/dialogs.py \
 	galacteek/ui/downloads.py \
+	galacteek/ui/feeds.py \
 	galacteek/ui/files.py \
 	galacteek/ui/hashmarks.py \
 	galacteek/ui/helpers.py \
@@ -30,17 +31,20 @@ FORMS += galacteek/ui/addkeydialog.ui \
 	galacteek/ui/addhashmarkdialog.ui \
 	galacteek/ui/addfeeddialog.ui \
 	galacteek/ui/atomfeeds.ui \
-	galacteek/ui/browsertab.ui\
+	galacteek/ui/browsertab.ui \
+	galacteek/ui/chatroom.ui \
 	galacteek/ui/dagview.ui \
 	galacteek/ui/donatedialog.ui \
 	galacteek/ui/files.ui\
 	galacteek/ui/ipfscidinputdialog.ui \
 	galacteek/ui/ipfsinfos.ui \
-	galacteek/ui/ipfssearchw.ui \
-	galacteek/ui/ipfssearchwresults.ui \
 	galacteek/ui/ipfsmultiplecidinputdialog.ui \
 	galacteek/ui/keys.ui\
 	galacteek/ui/mediaplaylist.ui \
+	galacteek/ui/profileeditdialog.ui \
+	galacteek/ui/peersmgr.ui \
+	galacteek/ui/batchpinlist.ui \
+	galacteek/ui/qschemecreatemapping.ui \
 	galacteek/ui/settings.ui
 
 TRANSLATIONS = share/translations/galacteek_en.ts \

@@ -173,9 +173,12 @@ def getHomePath():
     return pList[0] if len(pList) > 0 else os.getenv('HOME')
 
 
-def messageBox(message, title=None):
+def messageBox(message, richText=False, title=None):
     msgBox = QMessageBox()
     msgBox.setText(message)
+
+    if richText:
+        msgBox.setTextFormat(Qt.RichText)
 
     if title:
         msgBox.setWindowTitle(title)
@@ -184,8 +187,8 @@ def messageBox(message, title=None):
     return msgBox.exec_()
 
 
-def questionBox(title, text):
-    box = QMessageBox.question(None, title, text)
+def questionBox(title, text, parent=None):
+    box = QMessageBox.question(parent, title, text)
     return box == QMessageBox.Yes
 
 

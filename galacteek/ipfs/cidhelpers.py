@@ -1,14 +1,59 @@
+import re
+import os.path
+import os
 import aioipfs
 
 from PyQt5.QtCore import QUrl
 
 from galacteek import log
 from galacteek.ipfs.cid import make_cid
+from galacteek.ipfs.cid import BaseCID
 from galacteek.ipfs.stat import StatInfo
 
 import multihash
-import re
-import os.path
+
+
+def normp(path):
+    sep = '/'
+    final = path.endswith(sep)
+    normed = os.path.normpath(path)
+
+    if final:
+        return normed + sep
+
+    return normed
+
+
+def normpPreserve(path, preserveTrailing=True):
+    """
+    Like os.path.normpath but preserves trailing slash by default
+    and couldn't care less about normalizing ..
+    """
+    path = os.fspath(path)
+
+    sep = '/'
+    empty = ''
+    dot = '.'
+
+    if path == empty:
+        return dot
+
+    initial_slashes = path.startswith(sep)
+    final_slashes = path.endswith(sep)
+
+    comps = path.split(sep)
+    new_comps = []
+    for comp in comps:
+        if comp in (empty, dot):
+            continue
+        new_comps.append(comp)
+    comps = new_comps
+    path = sep.join(comps)
+    if initial_slashes:
+        path = sep + path
+    if final_slashes and preserveTrailing:
+        path = path + sep
+    return path or dot
 
 
 def joinIpfs(path):
@@ -87,29 +132,60 @@ def getCID(hashstring):
         return None
 
 
+def cidUpgrade(cid):
+    """
+    Converts a cid.CIDv0 instance to a cid.CIDv1
+    """
+    if issubclass(cid.__class__, BaseCID) and cid.version == 0:
+        return cid.to_v1()
+
+
 def cidConvertBase32(multihash):
     """
-    Convert a base58-encoded CIDv1 to base32
+    Convert a base58-encoded CID to a base32 string
 
+    If it's a CIDv0, it's upgraded to CIDv1 first
+
+    :param str multihash: The multihash string
     :rtype: str
     """
 
     cid = getCID(multihash)
-    if not cid or cid.version != 1:
+    if not cid:
         return None
+
+    if cid.version == 0:
+        if not cidValid(cid):
+            return None
+
+        cid = cidUpgrade(cid)
+        if not cid:
+            log.debug('Impossible to convert CIDv0: {}'.format(
+                multihash))
+            return None
+
     return cid.encode('base32').decode()
 
 
-def cidValid(cidstring):
+def cidValid(cid):
     """
-    Check if cidstring is a valid IPFS CID
+    Check if the passed argument is a valid IPFS CID
 
-    :param str cidstring: the CID to validate
+    :param cidstring: the CID to validate, can be a string or a BaseCID
     :return: if the value is a valid CID or not
     :rtype: bool
     """
 
-    c = getCID(cidstring)
+    if cid is None:
+        return False
+
+    if isinstance(cid, str):
+        c = getCID(cid)
+    elif issubclass(cid.__class__, BaseCID):
+        c = cid
+    else:
+        return False
+
     if c is None:
         return False
     if c.version == 0:
@@ -127,17 +203,22 @@ def cidValid(cidstring):
 
 
 ipfsPathRe = re.compile(
-    r'^(\s*)?(?:fs:(\/*)|ipfs:|dweb:(\/*)?|https?://[a-zA-Z0-9:.-]*)?(?P<fullpath>/ipfs/(?P<rootcid>[a-zA-Z0-9]{46,59})\/?(?P<subpath>[a-zA-Z0-9<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[a-zA-Z0-9\-\+\_\.\/]{1,256})?$',  # noqa
-    flags=re.MULTILINE)
+    r'^(\s*)?(?:fs:(\/*)|ipfs:|dweb:(\/*)?|https?://[\w:.-]*)?(?P<fullpath>/ipfs/(?P<rootcid>[a-zA-Z0-9]{46,59})\/?(?P<subpath>[\w<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[\w\-\+\_\.\/]{1,256})?$',  # noqa
+    flags=re.MULTILINE | re.UNICODE)
 
 # For ipfs://<cid-base32>
 ipfsPathDedRe = re.compile(
-    r'^(\s*)?(?:ipfs://)(?P<fullpath>(?P<rootcid>[a-z2-7]{59})\/?(?P<subpath>[a-zA-Z0-9<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[a-zA-Z0-9\-\+\_\.\/]{1,256})?$',  # noqa
-    flags=re.MULTILINE)
+    r'^(\s*)?(?:ipfs://)(?P<fullpath>(?P<rootcid>[a-z2-7]{59})\/?(?P<subpath>[\w<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[\w\-\+\_\.\/]{1,256})?$',  # noqa
+    flags=re.MULTILINE | re.UNICODE)
+
+# For rewriting (unlawful) ipfs://<cidv0> or ipfs://<cidv1-base58> to base32
+ipfsPathDedRe58 = re.compile(
+    r'^(\s*)?(?:ipfs://)(?P<fullpath>(?P<rootcid>[a-zA-Z0-9]{46,59})\/?(?P<subpath>[\w<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[\w\-\+\_\.\/]{1,256})?$',  # noqa
+    flags=re.MULTILINE | re.UNICODE)
 
 ipnsPathDedRe = re.compile(
-    r'^(\s*)?(?:ipns://)(?P<fullpath>(?P<fqdn>[A-Za-z.-]{1,128})\/?(?P<subpath>[a-zA-Z0-9<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[a-zA-Z0-9\-\+\_\.\/]{1,256})?$',  # noqa
-    flags=re.MULTILINE)
+    r'^(\s*)?(?:ipns://)(?P<fullpath>(?P<fqdn>[\w.-]{1,128})\/?(?P<subpath>[\w<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[\w\-\+\_\.\/]{1,256})?$',  # noqa
+    flags=re.MULTILINE | re.UNICODE)
 
 ipfsCidRe = re.compile(
     r'^(\s*)?(?P<cid>[a-zA-Z0-9]{46,59})$', flags=re.MULTILINE)
@@ -146,15 +227,16 @@ ipfsCid32Re = re.compile(
     r'^(\s*)?(?P<cid>[a-z2-7]{59})$', flags=re.MULTILINE)
 
 ipnsPathRe = re.compile(
-    r'^(\s*)?(?:fs:(\/*)|ipfs:|dweb:(\/*)?|https?://[a-zA-Z0-9:.-]*)?(?P<fullpath>/ipns/(?P<fqdn>[a-zA-Z0-9.-]{1,128})\/?(?P<subpath>[a-zA-Z0-9<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[a-zA-Z0-9\+\-\_\.\/]{1,256})?$',  # noqa
-    flags=re.MULTILINE)
+    r'^(\s*)?(?:fs:(\/*)|ipfs:|dweb:(\/*)?|https?://[\w:.-]*)?(?P<fullpath>/ipns/(?P<fqdn>[\w.-]{1,128})\/?(?P<subpath>[\w<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[\w\+\-\_\.\/]{1,256})?$',  # noqa
+    flags=re.MULTILINE | re.UNICODE)
 
 
 class IPFSPath:
-    maxLength = 2048
+    maxLength = 1024
 
-    def __init__(self, input):
+    def __init__(self, input, autoCidConv=False):
         self._enableBase32 = True
+        self._autoCidConv = autoCidConv
         self._rootCid = None
         self._rootCidV = None
         self._rootCidUseB32 = False
@@ -165,6 +247,10 @@ class IPFSPath:
         self._scheme = None
         self._resolvedMultihash = None
         self._valid = self.__analyze()
+
+    @property
+    def autoCidConv(self):
+        return self._autoCidConv
 
     @property
     def input(self):
@@ -384,25 +470,43 @@ class IPFSPath:
         else:
             return False
 
+        if self._autoCidConv:
+            # Automatic V0-to-V1 conversion
+            if self.rootCid.version == 0:
+                self._rootCid = cidUpgrade(self._rootCid)
+
         if self.rootCid.version == 1 and self._enableBase32:
             # rootCidRepr will convert it to base32
             self._rootCidUseB32 = True
 
         return True
 
-    def child(self, path):
+    def child(self, path, normalize=False):
         if not isinstance(path, str):
             raise ValueError('Need string')
 
-        return IPFSPath(os.path.join(self.objPath, path.strip('/')))
+        if self.subPath is None and (path == '..' or path.startswith('../')):
+            # Not crossing the /{ipfs,ipns} NS
+            return self
 
-    async def resolve(self, ipfsop):
+        if normalize:
+            cPath = normp(path)
+            return IPFSPath(normp(
+                os.path.join(self.objPath, cPath.lstrip('/'))))
+        else:
+            cPath = normpPreserve(path)
+            return IPFSPath(os.path.join(self.objPath, cPath.lstrip('/')))
+
+    def parent(self):
+        return self.child('../', normalize=True)
+
+    async def resolve(self, ipfsop, noCache=False):
         """
         Resolve this object's path to a multihash
         """
 
         timeout = 15
-        if self.resolvedMultihash:
+        if self.resolvedMultihash and noCache is False:
             # Return cached value
             return self.resolvedMultihash
 
@@ -453,6 +557,13 @@ def ipfsRegSearchPath(text):
 def ipfsDedSearchPath(text):
     # search for the dedicated ipfs:// scheme
     return ipfsPathDedRe.match(text)
+
+
+def ipfsDedSearchPath58(text):
+    # Like ipfsDedSearchPath() but allows any type of CID (including
+    # CIDv0) as root CID. Only used to be able to extract the root CID
+    # and replace it with the base32 version
+    return ipfsPathDedRe58.match(text)
 
 
 def ipfsRegSearchCid(text):

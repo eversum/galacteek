@@ -69,5 +69,6 @@
             }
         }
     },
-    "feeds": {}
+    "feeds": {},
+    "qamappings": []
 }

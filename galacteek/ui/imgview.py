@@ -27,6 +27,8 @@ from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.cidhelpers import IPFSPath
 
 from .widgets import GalacteekTab
+from .widgets import IPFSUrlLabel
+from .widgets import IPFSPathClipboardButton
 from .helpers import getIcon
 from .helpers import messageBox
 from .clipboard import iCopyToClipboard
@@ -70,7 +72,12 @@ class ImageViewerTab(GalacteekTab):
         self.fitWindow.setToolTip('Fit to window')
         self.fitWindow.setIcon(getIcon('expand.png'))
 
+        self.pathLabel = IPFSUrlLabel(None)
+        self.pathClipB = IPFSPathClipboardButton(None)
+
         layout = QHBoxLayout()
+        layout.addWidget(self.pathLabel, 0, Qt.AlignLeft)
+        layout.addWidget(self.pathClipB, 0, Qt.AlignLeft)
         layout.addItem(
             QSpacerItem(10, 10, QSizePolicy.Expanding, QSizePolicy.Minimum))
         layout.addWidget(self.pinButton, 0, Qt.AlignLeft)
@@ -95,6 +102,8 @@ class ImageViewerTab(GalacteekTab):
 
     def onImageLoaded(self, path):
         self.pinButton.setEnabled(True)
+        self.pathLabel.path = path
+        self.pathClipB.path = path
 
     def onQrCodesListed(self, urls):
         # Create the scroll area and fix maximum height
@@ -162,7 +171,7 @@ class ImageViewerTab(GalacteekTab):
 
 
 class ImageView(QScrollArea):
-    imageLoaded = pyqtSignal(str)
+    imageLoaded = pyqtSignal(IPFSPath)
     qrCodesPresent = pyqtSignal(list)
 
     def __init__(self, parent=None):
@@ -269,7 +278,7 @@ class ImageView(QScrollArea):
 
             self.currentImgPath = IPFSPath(imgPath)
 
-            self.imageLoaded.emit(imgPath)
+            self.imageLoaded.emit(self.currentImgPath)
 
             if self.qrDecoder:
                 # See if we have any QR codes in the image
