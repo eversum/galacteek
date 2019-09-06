@@ -15,6 +15,14 @@ Selecting the working directory
 The path selector menu lets you select the current working directory. *Home* is
 the default directory.
 
+The *Temporary* and *Encrypted files* folders are by default in *offline*
+mode.
+
+Adding files in the *Encrypted files* folder will self-encrypt them with
+your profile's RSA key (only you will be able to open them). When you open
+an encrypted file it is first decrypted into an (unpinned, unannounced) IPFS
+file object which will later on be garbage-collected by the daemon.
+
 Importing your files using the files selection dialogs
 ------------------------------------------------------
 

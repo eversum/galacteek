@@ -159,6 +159,8 @@ class FileManager(QWidget):
         self.ui.localFileManagerSwitch.setCheckable(True)
 
         # Connect the various buttons
+        self.ui.helpButton.clicked.connect(
+            lambda: self.app.manuals.browseManualPage('filemanager.html'))
         self.ui.addFileButton.clicked.connect(self.onAddFilesClicked)
         self.ui.addDirectoryButton.clicked.connect(self.onAddDirClicked)
         self.ui.refreshButton.clicked.connect(self.onRefreshClicked)
@@ -182,37 +184,8 @@ class FileManager(QWidget):
         self.ui.treeFiles.expanded.connect(self.onExpanded)
         self.ui.treeFiles.collapsed.connect(self.onCollapsed)
 
-        # Path selector
-        self.ui.pathSelector.setObjectName('fmanagerPathSelector')
-        self.ui.pathSelector.insertItem(0, getIcon('go-home.png'), 'Home')
-        self.ui.pathSelector.insertSeparator(1)
-        self.ui.pathSelector.insertItem(2, getMimeIcon('image/x-generic'),
-                                        iImages())
-        self.ui.pathSelector.insertItem(3, getIcon('folder-pictures.png'),
-                                        iPictures())
-        self.ui.pathSelector.insertItem(4, getIcon('folder-videos.png'),
-                                        iVideos())
-        self.ui.pathSelector.insertItem(5, getIcon('folder-music.png'),
-                                        iMusic())
-        self.ui.pathSelector.insertSeparator(6)
-        self.ui.pathSelector.insertItem(7, getIcon('code-fork.png'), iCode())
-        self.ui.pathSelector.insertItem(8, getIcon('folder-documents.png'),
-                                        iDocuments())
-        self.ui.pathSelector.insertSeparator(9)
-        self.ui.pathSelector.insertItem(10, getMimeIcon('text/html'),
-                                        iWebPages())
-        self.ui.pathSelector.insertItem(11, getIcon('distributed.png'),
-                                        iDWebApps())
-        self.ui.pathSelector.insertSeparator(12)
-        self.ui.pathSelector.insertItem(13, getIcon('ipfs-qrcode.png'),
-                                        iQrCodes())
-        self.ui.pathSelector.insertSeparator(14)
-        self.ui.pathSelector.insertItem(15, getIcon('folder-temp.png'),
-                                        iTemporaryFiles())
-        self.ui.pathSelector.activated.connect(self.onPathSelector)
-
-        if self.app.system == 'Linux':
-            self.ui.pathSelector.setIconSize(QSize(24, 24))
+        # Path selector setup
+        self.setupPathSelector()
 
         self.ui.comboIconSize.addItem('Small')
         self.ui.comboIconSize.addItem('Medium')
@@ -238,9 +211,6 @@ class FileManager(QWidget):
         self.ui.treeFiles.setSortingEnabled(True)
         self.ui.treeFiles.sortByColumn(0, Qt.AscendingOrder)
         self.ui.treeFiles.setIconSize(QSize(16, 16))
-
-        if self.app.settingsMgr.hideHashes:
-            self.ui.treeFiles.hideColumn(2)
 
         self.iconFolder = getIcon('folder-open.png')
         self.iconFile = getIcon('file.png')
@@ -274,6 +244,15 @@ class FileManager(QWidget):
     @property
     def busy(self):
         return self.status == self.statusBusy
+
+    @property
+    def rscOpenTryDecrypt(self):
+        return self.displayedItem is self.model.itemEncrypted or \
+            self.displayedItem is self.model.itemQrCodes
+
+    @property
+    def inEncryptedFolder(self):
+        return self.displayedItem is self.model.itemEncrypted
 
     def createFileManager(self):
         self.fManagerModel = QFileSystemModel()
@@ -311,6 +290,44 @@ class FileManager(QWidget):
 
         self.localTree.hide()
         self.ui.hLayoutBrowser.insertWidget(0, self.localTree)
+
+    def setupPathSelector(self):
+        def c():
+            return self.ui.pathSelector.count()
+
+        self.ui.pathSelector.setObjectName('fmanagerPathSelector')
+        self.ui.pathSelector.insertItem(c(), getIcon('go-home.png'), 'Home')
+        self.ui.pathSelector.insertSeparator(c())
+        self.ui.pathSelector.insertItem(c(), getMimeIcon('image/x-generic'),
+                                        iImages())
+        self.ui.pathSelector.insertItem(c(), getIcon('folder-pictures.png'),
+                                        iPictures())
+        self.ui.pathSelector.insertItem(c(), getIcon('folder-videos.png'),
+                                        iVideos())
+        self.ui.pathSelector.insertItem(c(), getIcon('folder-music.png'),
+                                        iMusic())
+        self.ui.pathSelector.insertSeparator(c())
+        self.ui.pathSelector.insertItem(c(), getIcon('code-fork.png'), iCode())
+        self.ui.pathSelector.insertItem(c(), getIcon('folder-documents.png'),
+                                        iDocuments())
+        self.ui.pathSelector.insertSeparator(c())
+        self.ui.pathSelector.insertItem(c(), getMimeIcon('text/html'),
+                                        iWebPages())
+        self.ui.pathSelector.insertItem(c(), getIcon('distributed.png'),
+                                        iDWebApps())
+        self.ui.pathSelector.insertSeparator(c())
+        self.ui.pathSelector.insertItem(c(), getIcon('ipfs-qrcode.png'),
+                                        iQrCodes())
+        self.ui.pathSelector.insertSeparator(c())
+        self.ui.pathSelector.insertItem(c(), getIcon('folder-temp.png'),
+                                        iTemporaryFiles())
+        self.ui.pathSelector.insertSeparator(c())
+        self.ui.pathSelector.insertItem(c(), getIcon('key-diago.png'),
+                                        iEncryptedFiles())
+        self.ui.pathSelector.activated.connect(self.onPathSelector)
+
+        if self.app.system == 'Linux':
+            self.ui.pathSelector.setIconSize(QSize(24, 24))
 
     def setupModel(self):
         if self.profile is None:
@@ -352,6 +369,9 @@ class FileManager(QWidget):
                     self.ui.offlineButton,
                     self.ui.searchFiles]:
             btn.setEnabled(flag)
+
+        if self.displayedItem is self.model.itemEncrypted:
+            self.ui.addDirectoryButton.setEnabled(False)
 
     def currentItem(self):
         currentIdx = self.ui.treeFiles.currentIndex()
@@ -481,6 +501,11 @@ class FileManager(QWidget):
             self.changeDisplayItem(self.model.itemQrCodes)
         elif text == iTemporaryFiles():
             self.changeDisplayItem(self.model.itemTemporary)
+        elif text == iEncryptedFiles():
+            self.changeDisplayItem(self.model.itemEncrypted)
+
+        if self.app.settingsMgr.hideHashes:
+            self.ui.treeFiles.hideColumn(2)
 
     def changeDisplayItem(self, item):
         self.displayedItem = item
@@ -490,6 +515,9 @@ class FileManager(QWidget):
 
         if isinstance(item, MFSRootItem):
             self.displayedItemChanged.emit(item)
+
+        if self.app.settingsMgr.hideHashes:
+            self.ui.treeFiles.hideColumn(2)
 
     def onContextMenuVoid(self, point):
         menu = QMenu()
@@ -549,7 +577,8 @@ class FileManager(QWidget):
         menu.addAction(getIcon('open.png'),
                        iOpen(),
                        functools.partial(ensure, self.app.resourceOpener.open(
-                           ipfsPath)))
+                           ipfsPath, openingFrom='filemanager',
+                           tryDecrypt=self.rscOpenTryDecrypt)))
         if nameItem.isFile():
             menu.addAction(getIcon('text-editor.png'),
                            'Edit',
@@ -644,7 +673,11 @@ class FileManager(QWidget):
                 # preserving the real file name
                 finalPath = joinIpfs(os.path.join(parentHash, fileName))
 
-            ensure(resourceOpener.open(finalPath))
+            ensure(resourceOpener.open(
+                finalPath,
+                openingFrom='filemanager',
+                tryDecrypt=self.rscOpenTryDecrypt
+            ))
 
         elif nameItem.isDir():
             self.app.task(self.listFiles, item.path, parentItem=item,
@@ -711,8 +744,9 @@ class FileManager(QWidget):
         return self.app.task(self.addFiles, path, parent)
 
     def scheduleAddDirectory(self, path):
-        if self.busy:
+        if self.busy or self.inEncryptedFolder:
             return
+
         return self.app.task(self.addDirectory, path)
 
     def scheduleUnlink(self, item, multihash):
@@ -877,8 +911,40 @@ class FileManager(QWidget):
                 await modelhelpers.modelDeleteAsync(self.model, multihash)
 
     @ipfsOp
+    async def addFilesSelfEncrypt(self, op, files, parent):
+        self.enableButtons(flag=False)
+        self.status = self.statusBusy
+
+        async def onEntry(entry):
+            self.statusAdded(entry['Name'])
+
+        count = 0
+
+        for file in files:
+            await op.sleep()
+            root = await op.addFileEncrypted(file)
+
+            if root is None:
+                self.statusSet(iFileImportError())
+                continue
+
+            base = os.path.basename(file)
+
+            await self.linkEntry(op, root, parent, base)
+            count += 1
+
+        self.statusSet(iImportedCount(count))
+        self.enableButtons()
+        self.status = self.statusReady
+        self.updateTree()
+        return True
+
+    @ipfsOp
     async def addFiles(self, op, files, parent):
         """ Add every file with an optional wrapper directory """
+
+        if self.displayedItem is self.model.itemEncrypted and op.rsaAgent:
+            return await self.addFilesSelfEncrypt(files, parent)
 
         wrapEnabled = self.app.settingsMgr.isTrue(
             CFG_SECTION_UI, CFG_KEY_WRAPSINGLEFILES)

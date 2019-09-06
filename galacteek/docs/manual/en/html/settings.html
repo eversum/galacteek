@@ -66,6 +66,11 @@ size in gigabytes.</p>
 <p>The <strong>Routing mode</strong> setting lets you choose between <em>dht</em> (the default)
 or <em>dhtclient</em>.  Using <em>dhtclient</em> can significantly reduce CPU usage, but
 your node will not act as a full DHT node on the network.</p>
+<p>The <strong>Pubsub routing</strong> setting lets you choose the pubsub routing protocol.
+The <em>gossipsub</em> protocol is potentially more bandwidth-efficient than
+floodsub and is backwards-compatible with the default <em>floodsub</em> protocol.</p>
+<p>The <strong>IPNS over pubsub</strong> setting enables the publishing of IPNS records
+over pubsub. This is an experimental feature.</p>
 <p><strong>Note</strong>: switching from a local to custom daemon (or vice versa) will make you
 lose access to the content that you might have published using the previous
 settings, so use with care. Use separate <em>application profiles</em> with the

@@ -1,385 +1,385 @@
 <html>
-    <head>
-        <link rel="stylesheet" type="text/css" href="qrc:///share/static/css/ipfs-ui.css"/>
-        <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+  <head>
+    <link rel="stylesheet" type="text/css" href="qrc:///share/static/css/ipfs-ui.css"/>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 
-        <style>
-            body {
-                font: 11pt "Montserrat";
-            }
+    <style>
+      body {
+        font: 11pt "Montserrat";
+      }
 
-            label {
-                  position: absolute;
-                  top: 36.66667px;
-                  color: rgba(255, 255, 255, 0.5);
-                  font: 400 36.66667px Roboto;
-                  cursor: text;
-                  transition: .25s ease;
-                }
+      label {
+          position: absolute;
+          top: 36.66667px;
+          color: rgba(255, 255, 255, 0.5);
+          font: 400 36.66667px Roboto;
+          cursor: text;
+          transition: .25s ease;
+      }
 
-            form {
-                padding: 10px;
-            }
+      form {
+        padding: 10px;
+      }
 
-            input {
-                 font: 14pt "Montserrat";
-            }
+      input {
+         font: 14pt "Montserrat";
+      }
 
-            div#results {
-                margin-left: 20px;
-                margin-right: 20px;
-            }
+      div#results {
+        margin-left: 20px;
+        margin-right: 20px;
+      }
 
-            input[type=text] {
-                 font: 14pt "Montserrat";
-                  background-color: #C3D7DF;
-                  background-image: url('qrc:///share/icons/ipfs-cube-64.png');
-                  background-position: 10px 10px; 
-                  background-size: 32px 32px; 
-                  background-repeat: no-repeat;
-                  padding-left: 40px;
-                  border: 1px solid #4a9ea1;
-                  border-radius: 4px;
-                  width: 42%;
-                  height: 50px;
-                  margin: 8px 0;
-                  padding-left: 50px;
-                  box-sizing: border-box;
-            }
+      input[type=text] {
+         font: 14pt "Montserrat";
+          background-color: #C3D7DF;
+          background-image: url('qrc:///share/icons/ipfs-cube-64.png');
+          background-position: 10px 10px; 
+          background-size: 32px 32px; 
+          background-repeat: no-repeat;
+          padding-left: 40px;
+          border: 1px solid #4a9ea1;
+          border-radius: 4px;
+          width: 42%;
+          height: 50px;
+          margin: 8px 0;
+          padding-left: 50px;
+          box-sizing: border-box;
+      }
 
-            input[type=text]:focus {
-                  background-color: lightblue;
-            }
+      input[type=text]:focus {
+          background-color: lightblue;
+      }
 
-            input[type=button], input[type=submit], input[type=reset] {
-                  background-color: #C3D7DF;
-                  border: 1px solid #4a9ea1;
-                  padding: 8px 8px;
-                  text-decoration: none;
-                  margin: 4px 2px;
-                  cursor: pointer;
-            }
+      input[type=button], input[type=submit], input[type=reset] {
+          background-color: #C3D7DF;
+          border: 1px solid #4a9ea1;
+          padding: 8px 8px;
+          text-decoration: none;
+          margin: 4px 2px;
+          cursor: pointer;
+      }
 
-            select {
-              padding: 4px 4px;
-              border: none;
-              border-radius: 4px;
-            }
+      select {
+        padding: 4px 4px;
+        border: none;
+        border-radius: 4px;
+      }
 
-            .grayout {
-                opacity: 0.6; /* Real browsers */
-                filter: alpha(opacity = 60); /* MSIE */
-            }
+      .grayout {
+        opacity: 0.6; /* Real browsers */
+        filter: alpha(opacity = 60); /* MSIE */
+      }
 
-            .container {
-                  display: grid;
-                  grid-template-columns: 3fr 1fr 1fr;
-            }
+      .container {
+          display: grid;
+          grid-template-columns: 3fr 1fr 1fr;
+      }
 
-            ul {
-                list-style-type: none;
-                margin: 0;
-                padding: 0;
-                overflow: hidden;
-            }
+      ul {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
 
-            .textpreview {
-                margin-left: 10px;
-                margin-top: 10px;
-                background-color: #66d9ff;
-                border: 1px solid black;
-                padding: 5px;
-                display: none;
-            }
+      .textpreview {
+        margin-left: 10px;
+        margin-top: 10px;
+        background-color: #66d9ff;
+        border: 1px solid black;
+        padding: 5px;
+        display: none;
+      }
 
-            .hitdescr {
-                margin-left: 10px;
-            }
+      .hitdescr {
+        margin-left: 10px;
+      }
 
-            .hit {
-                -webkit-box-shadow: 0 8px 6px -6px black;
-                -moz-box-shadow: 0 8px 6px -6px black;
-                box-shadow: 0 8px 6px -6px black;
-                background-color: #e0e0d1;
-                padding: 8px;
-                margin: 12px;
-                border-radius: 4px;
-            }
+      .hit {
+        -webkit-box-shadow: 0 8px 6px -6px black;
+        -moz-box-shadow: 0 8px 6px -6px black;
+        box-shadow: 0 8px 6px -6px black;
+        background-color: #e0e0d1;
+        padding: 8px;
+        margin: 12px;
+        border-radius: 4px;
+      }
 
-            .unavailable {
-                -webkit-box-shadow: 0 8px 6px -6px black;
-                -moz-box-shadow: 0 8px 6px -6px black;
-                box-shadow: 0 8px 6px -6px black;
-                opacity: 0.6; /* Real browsers */
-                filter: alpha(opacity = 60); /* MSIE */
-                text-align: right;
-            }
-            pre {
-                white-space: pre-wrap;
-                white-space: -moz-pre-wrap;
-                white-space: -pre-wrap;
-                white-space: -o-pre-wrap;
-                word-wrap: break-word;
-            }
-            .loader {
-                border: 16px solid #f3f3f3; /* Light grey */
-                border-top: 16px solid #3498db; /* Blue */
-                border-radius: 50%;
-                width: 40px;
-                height: 40px;
-                animation: spin 2s linear infinite;
-            }
+      .unavailable {
+        -webkit-box-shadow: 0 8px 6px -6px black;
+        -moz-box-shadow: 0 8px 6px -6px black;
+        box-shadow: 0 8px 6px -6px black;
+        opacity: 0.6; /* Real browsers */
+        filter: alpha(opacity = 60); /* MSIE */
+        text-align: right;
+      }
 
-            @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-            }
-        </style>
+      pre {
+        white-space: pre-wrap;
+        white-space: -moz-pre-wrap;
+        white-space: -pre-wrap;
+        white-space: -o-pre-wrap;
+        word-wrap: break-word;
+      }
 
-        <script type="text/javascript">
-            function renderHit(hit, div) {
-                markup = `
-        <p style="text-align: left">
-            <a style="margin-right: 15px" href="dweb:${hit.path}" onclick='event.preventDefault(); window.openIpfs("${hit.path}")' >${hit.title}</a>
-            <a href="#" onclick='event.preventDefault(); window.hashmark("${hit.path}")'><img src="qrc:///share/icons/star-navy.png" width="16" height="16"/></a>
-            <a href="#" onclick='event.preventDefault(); window.ipfssearch.pinObject("${hit.path }")'><img src="qrc:///share/icons/pin.png" width="16" height="16"/></a>
-            <a href="#" onclick='event.preventDefault(); window.ipfssearch.clipboardInput("${hit.path}")'><img src="qrc:///share/icons/clipboard.png" width="16" height="16"/></a>
+      .loader {
+        border: 16px solid #f3f3f3; /* Light grey */
+        border-top: 16px solid #3498db; /* Blue */
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 2s linear infinite;
+      }
 
-            `;
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
 
-                if (hit['type'] == 'directory') {
-                    markup += `
-                <a href="#" onclick='event.preventDefault(); window.exploreIpfs("${hit.path}")'><img src="qrc:///share/icons/folder-open-black.png" width="16" height="16"/></a>
-                `;
-                }
+    <script type="text/javascript">
+      function renderHit(hit, div) {
+        markup = `
+    <p style="text-align: left">
+      <a style="margin-right: 15px" href="dweb:${hit.path}" onclick='event.preventDefault(); window.openIpfs("${hit.path}")' >${hit.title}</a>
+      <a href="#" onclick='event.preventDefault(); window.hashmark("${hit.path}")'><img src="qrc:///share/icons/star-navy.png" width="16" height="16"/></a>
+      <a href="#" onclick='event.preventDefault(); window.ipfssearch.pinObject("${hit.path }")'><img src="qrc:///share/icons/pin.png" width="16" height="16"/></a>
+      <a href="#" onclick='event.preventDefault(); window.ipfssearch.clipboardInput("${hit.path}")'><img src="qrc:///share/icons/clipboard.png" width="16" height="16"/></a>
 
-                markup += `
-                <span style="float: right; width: 30%">
-                    Content type: <b>${ hit.mimetype }</b> Size: <b>${ hit.sizeformatted }</b>
-                </span>`;
+      `;
 
-                markup += '</p>';
+        if (hit['type'] == 'directory') {
+          markup += `
+        <a href="#" onclick='event.preventDefault(); window.exploreIpfs("${hit.path}")'><img src="qrc:///share/icons/folder-open-black.png" width="16" height="16"/></a>
+        `;
+        }
 
-                /* Description */
-                markup += `<div id="${hit.hash}_description" class="hitdescr">`;
+        markup += `
+        <span style="float: right; width: 30%">
+          Content type: <b>${ hit.mimetype }</b> Size: <b>${ hit.sizeformatted }</b>
+        </span>`;
 
-                if (hit['description']) {
-                    markup += `<p>${hit.description}</p>`;
-                } else {
-                    markup += `<p>No description available for this result</p>`;
-                }
+        markup += '</p>';
 
-                markup += '</div>';
+        /* Description */
+        markup += `<div id="${hit.hash}_description" class="hitdescr">`;
 
-                if (hit['mimetype'].startsWith('image')) {
-                    markup += `
-                <a href="#" onclick='event.preventDefault(); window.openIpfs("${hit.path}")'>
-                <img id="img" src="{{ ipfsConnParams.gatewayUrl }}/${hit.path}" width="20%"></img>
-                </a>`;
-                }
+        if (hit['description']) {
+          markup += `<p>${hit.description}</p>`;
+        } else {
+          markup += `<p>No description available for this result</p>`;
+        }
 
-                if (hit['mimetype'].startsWith('text')) {
-                    markup += `
-                <button onclick="previewFile('${hit.hash}');">Preview</button>
-                <div id="${hit.hash}_preview" class="textpreview">
-                    <pre id="${hit.hash}_text"></pre>
-                </div>
-                    `;
-                }
+        markup += '</div>';
 
-                div.innerHTML = markup;
-            }
+        if (hit['mimetype'].startsWith('image')) {
+          markup += `
+        <a href="#" onclick='event.preventDefault(); window.openIpfs("${hit.path}")'>
+        <img id="img" src="{{ ipfsConnParams.gatewayUrl }}/${hit.path}" width="20%"></img>
+        </a>`;
+        }
 
-            function previewFile(hash) {
-                preview = document.getElementById(hash + "_preview")
-                raw = document.getElementById(hash + "_text")
-                fetched = document.getElementById(hash + "_fetched")
-
-                if (!fetched) {
-                    window.ipfs.cat(hash, function (err, file) {
-                        if (!raw || err) {
-                            raw.innerHTML = 'IPFS fetch error'
-                            throw err
-                        } else {
-                            document.createElement("p", hash + "_fetched")
-                            raw.innerHTML = ''
-                            try {
-                                var tNode = document.createTextNode(file.toString('utf8'))
-                                raw.appendChild(tNode)
-                            } catch(err) {
-                                raw.innerHTML = 'Decoding error'
-                                throw err
-                            }
-                        }
-                    })
-                }
-
-                if (preview.style.display === 'none' || !(preview.style.display)) {
-                    preview.style.display = 'block'
-                } else {
-                    preview.style.display = 'none'
-                }
-            }
-
-            new QWebChannel(qt.webChannelTransport, function (channel) {
-                window.galacteek = channel.objects.galacteek;
-                window.ipfssearch = channel.objects.ipfssearch;
-
-                document.getElementById('searchquery').focus()
-
-                window.ipfssearch.filtersChanged.connect(function() {
-                    document.getElementById('results').innerHTML = ''
-                    channel.objects.ipfssearch.search()
-                })
-
-                window.ipfssearch.resultReady.connect(function(cid, hit) {
-                    var resDiv = document.getElementById('results')
-                    var elem = document.createElement("div", cid);
-                    elem.setAttribute('id', cid);
-                    elem.setAttribute('class', 'grayout');
-                    elem.setAttribute('disabled', 'true');
-                    elem.style.display = 'none';
-                    renderHit(hit, elem);
-                    resDiv.appendChild(elem);
-                });
-
-                window.ipfssearch.clear.connect(function() {
-                    var div = document.getElementById('results')
-                    while(div.firstChild){
-                        div.removeChild(div.firstChild);
-                    }
-                })
-
-                window.ipfssearch.objectStatAvailable.connect(function(cid, stat, hit) {
-                    var element = document.getElementById(cid)
-                    if (element) {
-                        element.style.display = 'block'
-                        element.setAttribute('class', 'hit')
-                    }
-                    document.getElementById('controls_b').style.display = 'flex'
-                });
-
-                window.ipfssearch.searchTimeout.connect(function(timeout) {
-                    document.getElementById('loading').style.display = 'none'
-                })
-
-                window.ipfssearch.searchError.connect(function() {
-                    document.getElementById('loading').style.display = 'none'
-                })
-
-                window.ipfssearch.resetForm.connect(function() {
-                    document.getElementById('searchquery').value = ''
-                    document.getElementById('contenttype').value = 'all'
-                    document.getElementById('controls').style.display = 'none'
-                    document.getElementById('controls_b').style.display = 'none'
-                    document.getElementById('loading').style.display = 'none'
-                    document.getElementById('searchquery').focus()
-                })
-
-                window.ipfssearch.vPageStatus.connect(function(vPageCur, vPageLast) {
-                    var ctrl = document.getElementById('controls')
-                    var ctrlb = document.getElementById('controls_b')
-                    var prev = document.getElementById('pageprev')
-                    var prevb = document.getElementById('pageprev_b')
-                    var next = document.getElementById('pagenext')
-                    var nextb = document.getElementById('pagenext_b')
-                    var pageinfo = document.getElementById('pageinfo')
-
-                    pageinfo.innerHTML = `Page ${vPageCur} / ${vPageLast}`
-                    pageinfo.style.display = 'block'
-
-                    ctrl.style.display = 'flex'
-
-                    document.getElementById('loading').style.display = 'none'
-
-                    if (vPageCur == 1) {
-                        prev.style.display = 'none'
-                        prevb.style.display = 'none'
-                    } else {
-                        prev.style.display = 'block'
-                        prevb.style.display = 'block'
-                    }
-                    if (vPageCur < vPageLast) {
-                        next.style.display = 'block'
-                        nextb.style.display = 'block'
-                    } else {
-                        next.style.display = 'none'
-                        nextb.style.display = 'none'
-                    }
-                })
-            })
-
-            window.openIpfs = function (path) {
-                window.ipfssearch.openLink(path);
-            }
-
-            window.hashmark = function (path) {
-                window.ipfssearch.hashmark(path);
-            }
-
-            window.exploreIpfs = function (path) {
-                window.ipfssearch.explore(path);
-            }
-
-            window.runSearch = function () {
-                document.getElementById('controls').style.display = 'none'
-                document.getElementById('controls_b').style.display = 'none'
-                query = document.getElementById('searchquery').value
-                type = document.getElementById('contenttype').value
-
-                document.getElementById('loading').style.display = 'block'
-
-                window.ipfssearch.search(query, type)
-            }
-
-            window.previousPage = function () {
-                document.getElementById('controls_b').style.display = 'none'
-                document.getElementById('controls').style.display = 'none'
-                document.getElementById('loading').style.display = 'block'
-                window.ipfssearch.previousPage()
-            }
-
-            window.nextPage = function () {
-                document.getElementById('controls_b').style.display = 'none'
-                document.getElementById('controls').style.display = 'none'
-                document.getElementById('loading').style.display = 'block'
-                window.ipfssearch.nextPage()
-            }
-        </script>
-    </head>
-    <body>
-        <div width="100%" class="container">
-            <div style="float: left; width='40%'">
-                <form onsubmit="window.runSearch();">
-                    <input type="text" name="query" id="searchquery" width="300"/>
-                    <select name="contenttype" id="contenttype">
-                      <option value="all">All</option>
-                      <option value="images">Images</option>
-                      <option value="music">Music</option>
-                      <option value="videos">Videos</option>
-                      <option value="text">Text</option>
-                    </select>
-                    <input type="submit" name="searchbtn" value="Search" width="300"/>
-                </form>
-            </div>
-            <div id="loading" class="loader" style="float: right; display: none;">
-            </div>
+        if (hit['mimetype'].startsWith('text')) {
+          markup += `
+        <button onclick="previewFile('${hit.hash}');">Preview</button>
+        <div id="${hit.hash}_preview" class="textpreview">
+          <pre id="${hit.hash}_text"></pre>
         </div>
+          `;
+        }
 
-        <br style="clear: left;"/>
+        div.innerHTML = markup;
+      }
 
-        <div width="100%" id="controls" style="display: none">
-            <a style="margin-right: 10px" href="#" id="pageprev" onclick="window.previousPage();">Previous page</a>
-            <span id="pageinfo"></span>
-            <a style="margin-left: 10px" href="#" id="pagenext" onclick="window.nextPage();">Next page</a>
-        </div>
+      function previewFile(hash) {
+        preview = document.getElementById(hash + "_preview")
+        raw = document.getElementById(hash + "_text")
+        fetched = document.getElementById(hash + "_fetched")
 
-        <div id="results">
-        </div>
+        if (!fetched) {
+          window.ipfs.cat(hash, function (err, file) {
+            if (!raw || err) {
+              raw.innerHTML = 'IPFS fetch error'
+              throw err
+            } else {
+              document.createElement("p", hash + "_fetched")
+              raw.innerHTML = ''
+              try {
+                var tNode = document.createTextNode(file.toString('utf8'))
+                raw.appendChild(tNode)
+              } catch(err) {
+                raw.innerHTML = 'Decoding error'
+                throw err
+              }
+            }
+          })
+        }
 
-        <div width="100%" id="controls_b" style="display: none">
-            <a style="margin-right: 10px" href="#" id="pageprev_b" onclick="window.previousPage();">Previous page</a>
-            <a style="margin-left: 10px" href="#" id="pagenext_b" onclick="window.nextPage();">Next page</a>
-        </div>
-    </body>
+        if (preview.style.display === 'none' || !(preview.style.display)) {
+          preview.style.display = 'block'
+        } else {
+          preview.style.display = 'none'
+        }
+      }
+
+      new QWebChannel(qt.webChannelTransport, function (channel) {
+        window.galacteek = channel.objects.galacteek;
+        window.ipfssearch = channel.objects.ipfssearch;
+
+        document.getElementById('searchquery').focus()
+
+        window.ipfssearch.filtersChanged.connect(function() {
+          document.getElementById('results').innerHTML = ''
+          channel.objects.ipfssearch.search()
+        })
+
+        window.ipfssearch.resultReady.connect(function(cid, hit) {
+          var resDiv = document.getElementById('results')
+          var elem = document.createElement("div", cid);
+          elem.setAttribute('id', cid);
+          elem.setAttribute('class', 'grayout');
+          renderHit(hit, elem);
+          resDiv.appendChild(elem);
+        });
+
+        window.ipfssearch.clear.connect(function() {
+          var div = document.getElementById('results')
+          while(div.firstChild){
+            div.removeChild(div.firstChild);
+          }
+        })
+
+        window.ipfssearch.objectStatAvailable.connect(function(cid, stat, hit) {
+          var element = document.getElementById(cid)
+          if (element) {
+            element.style.display = 'block'
+            element.setAttribute('class', 'hit')
+          }
+          document.getElementById('controls_b').style.display = 'flex'
+        });
+
+        window.ipfssearch.searchTimeout.connect(function(timeout) {
+          document.getElementById('loading').style.display = 'none'
+        })
+
+        window.ipfssearch.searchError.connect(function() {
+          document.getElementById('loading').style.display = 'none'
+        })
+
+        window.ipfssearch.resetForm.connect(function() {
+          document.getElementById('searchquery').value = ''
+          document.getElementById('contenttype').value = 'all'
+          document.getElementById('controls').style.display = 'none'
+          document.getElementById('controls_b').style.display = 'none'
+          document.getElementById('loading').style.display = 'none'
+          document.getElementById('searchquery').focus()
+        })
+
+        window.ipfssearch.vPageStatus.connect(function(vPageCur, vPageLast) {
+          var ctrl = document.getElementById('controls')
+          var ctrlb = document.getElementById('controls_b')
+          var prev = document.getElementById('pageprev')
+          var prevb = document.getElementById('pageprev_b')
+          var next = document.getElementById('pagenext')
+          var nextb = document.getElementById('pagenext_b')
+          var pageinfo = document.getElementById('pageinfo')
+
+          pageinfo.innerHTML = `Page ${vPageCur} / ${vPageLast}`
+          pageinfo.style.display = 'block'
+
+          ctrl.style.display = 'flex'
+
+          document.getElementById('loading').style.display = 'none'
+
+          if (vPageCur == 1) {
+            prev.style.display = 'none'
+            prevb.style.display = 'none'
+          } else {
+            prev.style.display = 'block'
+            prevb.style.display = 'block'
+          }
+          if (vPageCur < vPageLast) {
+            next.style.display = 'block'
+            nextb.style.display = 'block'
+          } else {
+            next.style.display = 'none'
+            nextb.style.display = 'none'
+          }
+        })
+      })
+
+      window.openIpfs = function (path) {
+        window.ipfssearch.openLink(path);
+      }
+
+      window.hashmark = function (path) {
+        window.ipfssearch.hashmark(path);
+      }
+
+      window.exploreIpfs = function (path) {
+        window.ipfssearch.explore(path);
+      }
+
+      window.runSearch = function () {
+        document.getElementById('controls').style.display = 'none'
+        document.getElementById('controls_b').style.display = 'none'
+        query = document.getElementById('searchquery').value
+        type = document.getElementById('contenttype').value
+
+        document.getElementById('loading').style.display = 'block'
+
+        window.ipfssearch.search(query, type)
+      }
+
+      window.previousPage = function () {
+        document.getElementById('controls_b').style.display = 'none'
+        document.getElementById('controls').style.display = 'none'
+        document.getElementById('loading').style.display = 'block'
+        window.ipfssearch.previousPage()
+      }
+
+      window.nextPage = function () {
+        document.getElementById('controls_b').style.display = 'none'
+        document.getElementById('controls').style.display = 'none'
+        document.getElementById('loading').style.display = 'block'
+        window.ipfssearch.nextPage()
+      }
+    </script>
+  </head>
+  <body>
+    <div width="100%" class="container">
+      <div style="float: left; width='40%'">
+        <form onsubmit="window.runSearch();">
+          <input type="text" name="query" id="searchquery" width="300"/>
+          <select name="contenttype" id="contenttype">
+            <option value="all">All</option>
+            <option value="images">Images</option>
+            <option value="music">Music</option>
+            <option value="videos">Videos</option>
+            <option value="text">Text</option>
+          </select>
+          <input type="submit" name="searchbtn" value="Search" width="300"/>
+        </form>
+      </div>
+      <div id="loading" class="loader" style="float: right; display: none;">
+      </div>
+    </div>
+
+    <br style="clear: left;"/>
+
+    <div width="100%" id="controls" style="display: none">
+      <a style="margin-right: 10px" href="#" id="pageprev" onclick="window.previousPage();">Previous page</a>
+      <span id="pageinfo"></span>
+      <a style="margin-left: 10px" href="#" id="pagenext" onclick="window.nextPage();">Next page</a>
+    </div>
+
+    <div id="results">
+    </div>
+
+    <div width="100%" id="controls_b" style="display: none">
+      <a style="margin-right: 10px" href="#" id="pageprev_b" onclick="window.previousPage();">Previous page</a>
+      <a style="margin-left: 10px" href="#" id="pagenext_b" onclick="window.nextPage();">Next page</a>
+    </div>
+  </body>
 </html>

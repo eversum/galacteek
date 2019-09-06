@@ -18,6 +18,7 @@ CFG_KEY_APIPORT = 'apiport'
 CFG_KEY_SWARMPORT = 'swarmport'
 CFG_KEY_HTTPGWPORT = 'httpgwport'
 CFG_KEY_HTTPGWWRITABLE = 'httpgwwritable'
+CFG_KEY_NAMESYS_PUBSUB = 'namesyspubsub'
 CFG_KEY_PUBSUB_ROUTER = 'pubsub_router'
 CFG_KEY_HOST = 'host'
 CFG_KEY_SWARMLOWWATER = 'swarm_lowwater'
@@ -67,7 +68,8 @@ S_GOTOHOME = (CFG_SECTION_BROWSER, CFG_KEY_GOTOHOME)
 S_DOWNLOADS_PATH = (CFG_SECTION_BROWSER, CFG_KEY_DLPATH)
 
 # Default homepage
-HOME_DEFAULT = 'dweb:/ipfs/QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco/wiki/'  # noqa
+HOME_DEFAULT = \
+    'ipfs://bafybeiemxf5abjwjbikoz4mc3a3dla6ual3jsgpdr4cjr3oz3evfyavhwq/wiki/'
 
 ROUTER_TYPE_FLOOD = 'floodsub'
 ROUTER_TYPE_GOSSIP = 'gossipsub'
@@ -90,6 +92,7 @@ def setDefaultSettings(gApp):
     sManager.setDefaultSetting(section, CFG_KEY_NICE, 20)
     sManager.setDefaultTrue(section, CFG_KEY_CORS)
     sManager.setDefaultTrue(section, CFG_KEY_ENABLED)
+    sManager.setDefaultFalse(section, CFG_KEY_NAMESYS_PUBSUB)
     sManager.setDefaultFalse(section, CFG_KEY_HTTPGWWRITABLE)
 
     section = CFG_SECTION_BROWSER

@@ -28,6 +28,13 @@ The **Routing mode** setting lets you choose between *dht* (the default)
 or *dhtclient*.  Using *dhtclient* can significantly reduce CPU usage, but
 your node will not act as a full DHT node on the network.
 
+The **Pubsub routing** setting lets you choose the pubsub routing protocol.
+The *gossipsub* protocol is potentially more bandwidth-efficient than
+floodsub and is backwards-compatible with the default *floodsub* protocol.
+
+The **IPNS over pubsub** setting enables the publishing of IPNS records
+over pubsub. This is an experimental feature.
+
 **Note**: switching from a local to custom daemon (or vice versa) will make you
 lose access to the content that you might have published using the previous
 settings, so use with care. Use separate *application profiles* with the

@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QHeaderView
 from PyQt5.QtWidgets import QToolButton
 from PyQt5.QtWidgets import QWidget
+from PyQt5.QtWidgets import QAbstractItemView
 
 from PyQt5.QtGui import QStandardItemModel
 from PyQt5.QtGui import QBrush
@@ -36,6 +37,7 @@ from .i18n import iUnknown
 from .i18n import iPinned
 from .i18n import iPinning
 from .i18n import iPin
+from .i18n import iDoNotPin
 from .i18n import iPinSingle
 from .i18n import iPinRecursive
 from .i18n import iCancel
@@ -205,11 +207,17 @@ class PinBatchTab(GalacteekTab):
 
 
 class PinBatchWidget(QWidget):
+    COL_PATH = 0
+    COL_NOPIN = 1
+    COL_SPIN = 2
+    COL_RPIN = 3
+
     def __init__(self, basePath, pathList, parent=None):
         super(PinBatchWidget, self).__init__(parent)
 
         self.basePath = basePath
         self.pathList = pathList
+        self._pinTask = None
 
         self.ui = Ui_BatchPinList()
         self.ui.setupUi(self)
@@ -221,12 +229,14 @@ class PinBatchWidget(QWidget):
         horizHeader.sectionClicked.connect(self.onHorizSectionClicked)
         horizHeader.setSectionResizeMode(QHeaderView.ResizeToContents)
         self.ui.tableWidget.setHorizontalHeaderLabels(
-            [iPath(), iPinSingle(), iPinRecursive()])
+            [iPath(), iDoNotPin(), iPinSingle(), iPinRecursive()])
 
         self.ui.tableWidget.verticalHeader().hide()
         self.ui.tableWidget.setRowCount(len(self.pathList))
 
         self.ui.proceedButton.clicked.connect(self.onPinObjects)
+        self.ui.cancelButton.clicked.connect(self.onCancel)
+        self.ui.cancelButton.hide()
         self.insertItems()
 
     def insertItems(self):
@@ -248,14 +258,19 @@ class PinBatchWidget(QWidget):
             pItem.setToolTip(path.objPath)
             pItem.setFlags(
                 Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-            checkBoxS = QCheckBox(self)
 
+            checkBoxN = QCheckBox(self)
+            checkBoxS = QCheckBox(self)
             checkBoxR = QCheckBox(self)
 
-            self.ui.tableWidget.setItem(curRow, 0, pItem)
-            self.ui.tableWidget.setCellWidget(curRow, 1, checkBoxS)
-            self.ui.tableWidget.setCellWidget(curRow, 2, checkBoxR)
+            self.ui.tableWidget.setItem(curRow, self.COL_PATH, pItem)
+            self.ui.tableWidget.setCellWidget(
+                curRow, self.COL_NOPIN, checkBoxN)
+            self.ui.tableWidget.setCellWidget(curRow, self.COL_SPIN, checkBoxS)
+            self.ui.tableWidget.setCellWidget(curRow, self.COL_RPIN, checkBoxR)
 
+            checkBoxN.stateChanged.connect(
+                functools.partial(self.noPinChecked, pItem.row()))
             checkBoxS.stateChanged.connect(
                 functools.partial(self.pinSingleChecked, pItem.row()))
             checkBoxR.stateChanged.connect(
@@ -266,45 +281,71 @@ class PinBatchWidget(QWidget):
         self.ui.tableWidget.setRowCount(len(added))
 
     def onHorizSectionClicked(self, section):
-        if section == 1 or section == 2:
+        if section in [self.COL_NOPIN, self.COL_SPIN, self.COL_RPIN]:
             for row in range(self.ui.tableWidget.rowCount()):
                 item = self.ui.tableWidget.cellWidget(row, section)
                 if item:
                     item.setCheckState(Qt.Checked)
 
-    def pinSingleChecked(self, row, state):
-        adjacent = self.ui.tableWidget.cellWidget(row, 2)
+    def disableAdjacent(self, row, col, state):
+        adjacent = self.ui.tableWidget.cellWidget(row, col)
         if adjacent and state == Qt.Checked:
             adjacent.setCheckState(Qt.Unchecked)
 
+    def noPinChecked(self, row, state):
+        self.disableAdjacent(row, self.COL_SPIN, state)
+        self.disableAdjacent(row, self.COL_RPIN, state)
+
+    def pinSingleChecked(self, row, state):
+        self.disableAdjacent(row, self.COL_NOPIN, state)
+        self.disableAdjacent(row, self.COL_RPIN, state)
+
     def pinRecursiveChecked(self, row, state):
-        adjacent = self.ui.tableWidget.cellWidget(row, 1)
-        if adjacent and state == Qt.Checked:
-            adjacent.setCheckState(Qt.Unchecked)
+        self.disableAdjacent(row, self.COL_NOPIN, state)
+        self.disableAdjacent(row, self.COL_SPIN, state)
 
     def onPinObjects(self):
         self.ui.proceedButton.setText(iPinning() + ' ...')
         self.ui.proceedButton.setEnabled(False)
-        ensure(self.pinSelectedObjects())
+        self._pinTask = ensure(self.pinSelectedObjects(),
+                               futcallback=self.onPinFinished)
+        self.ui.cancelButton.show()
+
+    def onPinFinished(self, future):
+        self.ui.cancelButton.hide()
+        self.ui.proceedButton.setText('Done')
+
+    def onCancel(self):
+        if self._pinTask:
+            self._pinTask.cancel()
+
+        self.parentWidget().close()
 
     @ipfsOp
     async def pinSelectedObjects(self, ipfsop):
+        def disableRow(pItem, *boxes):
+            pItem.setFlags(Qt.NoItemFlags)
+            [box.setEnabled(False) for box in boxes]
+
         for row in range(self.ui.tableWidget.rowCount()):
-            pItem = self.ui.tableWidget.item(row, 0)
-            pSingleBox = self.ui.tableWidget.cellWidget(row, 1)
-            pRecBox = self.ui.tableWidget.cellWidget(row, 2)
+            pItem = self.ui.tableWidget.item(row, self.COL_PATH)
+            noPinBox = self.ui.tableWidget.cellWidget(row, self.COL_NOPIN)
+            pSingleBox = self.ui.tableWidget.cellWidget(row, self.COL_SPIN)
+            pRecBox = self.ui.tableWidget.cellWidget(row, self.COL_RPIN)
+
+            self.ui.tableWidget.scrollToItem(
+                pItem, QAbstractItemView.PositionAtCenter)
 
             path = pItem.data(Qt.UserRole)
-            if not path:
-                await ipfsop.sleep()
+            if not path or noPinBox.isChecked():
+                await ipfsop.sleep(0.3)
+                disableRow(pItem, noPinBox, pSingleBox, pRecBox)
                 continue
 
             if pSingleBox.isChecked() or pRecBox.isChecked():
                 await ipfsop.ctx.pin(
                     path, recursive=pRecBox.isChecked(),
                     qname='browser-batch')
-                pItem.setFlags(Qt.NoItemFlags)
-                pSingleBox.setEnabled(False)
-                pRecBox.setEnabled(False)
+                disableRow(pItem, noPinBox, pSingleBox, pRecBox)
 
             await ipfsop.sleep(0.2)

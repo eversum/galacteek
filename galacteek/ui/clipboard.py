@@ -58,6 +58,7 @@ from .i18n import iUnknown
 from .i18n import iDagViewer
 from .i18n import iHashmark
 from .i18n import iIpfsQrEncode
+from .i18n import iHelp
 
 
 def iClipboardEmpty():
@@ -269,6 +270,10 @@ class ClipboardManager(PopupToolButton):
     def initHistoryMenu(self):
         self.menu.clear()
 
+        self.menu.addAction(getIcon('help.png'),
+                            iHelp(),
+                            self.onHelp)
+        self.menu.addSeparator()
         self.menu.addMenu(self.qrMenu)
 
         self.menu.addSeparator()
@@ -278,6 +283,9 @@ class ClipboardManager(PopupToolButton):
         self.menu.addMenu(self.itSwitchMenu)
 
         self.menu.addSeparator()
+
+    def onHelp(self):
+        self.app.manuals.browseManualPage('clipboard.html')
 
     def onHistoryClear(self):
         self.initHistoryMenu()
@@ -289,7 +297,11 @@ class ClipboardManager(PopupToolButton):
 
         if item:
             if action.text() == iClipItemOpen():
-                ensure(self.rscOpener.open(item.ipfsPath, item.mimeType))
+                ensure(self.rscOpener.open(
+                    item.ipfsPath,
+                    mimeType=item.mimeType,
+                    openingFrom='clipboardmgr'
+                ))
             elif action.text() == iClipItemSetCurrent():
                 self.tracker.current = item
             elif action.text() == iClipItemRemove():
@@ -723,7 +735,11 @@ class ClipboardItemButton(PopupToolButton):
 
     def onOpen(self):
         if self.item:
-            ensure(self.rscOpener.open(self.item.ipfsPath, self.item.mimeType))
+            ensure(self.rscOpener.open(
+                self.item.ipfsPath,
+                mimeType=self.item.mimeType,
+                openingFrom='clipboardmgr'
+            ))
 
     def onExplore(self):
         if self.item and self.item.cid:

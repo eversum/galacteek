@@ -127,7 +127,7 @@ class AsyncIPFSDaemon(object):
                  gatewayport=DEFAULT_GWPORT, initRepo=True,
                  swarmLowWater=10, swarmHighWater=20, nice=20,
                  pubsubEnable=False, noBootstrap=False, corsEnable=True,
-                 pubsubRouter='floodsub',
+                 pubsubRouter='floodsub', namesysPubsub=False,
                  p2pStreams=False, migrateRepo=False, routingMode='dht',
                  gwWritable=False, storageMax=20, debug=False, loop=None):
 
@@ -143,6 +143,7 @@ class AsyncIPFSDaemon(object):
         self.swarmHighWater = swarmHighWater
         self.storageMax = storageMax
         self.initRepo = initRepo
+        self.namesysPubsub = namesysPubsub
         self.pubsubEnable = pubsubEnable
         self.pubsubRouter = pubsubRouter
         self.corsEnable = corsEnable
@@ -165,6 +166,10 @@ class AsyncIPFSDaemon(object):
                 not os.path.isdir(os.path.join(self.repopath, 'datastore')):
             # Pretty sure this is an empty repository path
             await shell('ipfs init')
+
+        apifile = os.path.join(self.repopath, 'api')
+        if os.path.exists(apifile):
+            os.unlink(apifile)
 
         # Change the addresses/ports we listen on
         await ipfsConfig(self.goIpfsPath, 'Addresses.API',
@@ -190,7 +195,11 @@ class AsyncIPFSDaemon(object):
                          '60s')
 
         await ipfsConfig(self.goIpfsPath, 'Routing.Type', self.routingMode)
-        await ipfsConfig(self.goIpfsPath, 'Pubsub.Router', self.pubsubRouter)
+
+        if self.pubsubRouter in ['floodsub', 'gossipsub']:
+            await ipfsConfig(self.goIpfsPath, 'Pubsub.Router',
+                             self.pubsubRouter)
+
         await ipfsConfigJson(self.goIpfsPath,
                              'Swarm.DisableBandwidthMetrics', 'true')
 
@@ -234,6 +243,9 @@ class AsyncIPFSDaemon(object):
 
         if self.pubsubEnable:
             args.append('--enable-pubsub-experiment')
+
+        if self.namesysPubsub:
+            args.append('--enable-namesys-pubsub')
 
         if self.migrateRepo:
             args.append('--migrate')

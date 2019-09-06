@@ -35,7 +35,10 @@ from PyQt5.QtWebEngineCore import QWebEngineUrlRequestInterceptor
 
 from PyQt5.QtGui import QKeySequence
 
-from galacteek import log, ensure
+from galacteek import log
+from galacteek import logUser
+from galacteek import ensure
+
 from galacteek.ipfs.wrappers import *
 from galacteek.ipfs import cidhelpers
 from galacteek.ipfs import megabytes
@@ -931,9 +934,9 @@ class BrowserTab(GalacteekTab):
 
         self.checkWebProfileByName(initialProfileName)
 
-        self.ipfsControlMenu.addMenu(self.webProfilesMenu)
-        self.ipfsControlMenu.addSeparator()
-
+        self.browserHelpAction = QAction(getIcon('help.png'),
+                                         iHelp(), self,
+                                         triggered=self.onShowBrowserHelp)
         self.loadIpfsCIDAction = QAction(getIconIpfsIce(),
                                          iBrowseIpfsCID(), self,
                                          triggered=self.onLoadIpfsCID)
@@ -969,6 +972,11 @@ class BrowserTab(GalacteekTab):
         )
 
         self.followIpnsAction.setEnabled(False)
+
+        self.ipfsControlMenu.addAction(self.browserHelpAction)
+        self.ipfsControlMenu.addSeparator()
+        self.ipfsControlMenu.addMenu(self.webProfilesMenu)
+        self.ipfsControlMenu.addSeparator()
 
         self.ipfsControlMenu.addAction(self.jsConsoleAction)
         self.ipfsControlMenu.addSeparator()
@@ -1180,6 +1188,9 @@ class BrowserTab(GalacteekTab):
 
             ensure(showProfileChangedPage())
 
+    def onShowBrowserHelp(self):
+        self.app.manuals.browseManualPage('browsing.html')
+
     def onJsConsoleToggle(self, checked):
         self.jsConsoleWidget.setVisible(checked)
 
@@ -1324,6 +1335,7 @@ class BrowserTab(GalacteekTab):
             return messageBox(iNotAnIpfsResource())
 
         def htmlReady(htmlCode):
+            logUser.info('Scanning links in page ...')
             ensure(self.pinIpfsLinksInPage(htmlCode))
 
         self.webEngineView.webPage.toHtml(htmlReady)

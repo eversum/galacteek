@@ -27,6 +27,17 @@
           <enum>QLayout::SetFixedSize</enum>
          </property>
          <item>
+          <widget class="QPushButton" name="helpButton">
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset resource="galacteek.qrc">
+             <normaloff>:/share/icons/help.png</normaloff>:/share/icons/help.png</iconset>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QComboBox" name="pathSelector"/>
          </item>
          <item>

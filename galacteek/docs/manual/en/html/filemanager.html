@@ -56,6 +56,12 @@ filemanager for importing content in the IPFS repository.</p>
 <h2>Selecting the working directory<a class="headerlink" href="#selecting-the-working-directory" title="Permalink to this headline">¶</a></h2>
 <p>The path selector menu lets you select the current working directory. <em>Home</em> is
 the default directory.</p>
+<p>The <em>Temporary</em> and <em>Encrypted files</em> folders are by default in <em>offline</em>
+mode.</p>
+<p>Adding files in the <em>Encrypted files</em> folder will self-encrypt them with
+your profile’s RSA key (only you will be able to open them). When you open
+an encrypted file it is first decrypted into an (unpinned, unannounced) IPFS
+file object which will later on be garbage-collected by the daemon.</p>
 </div>
 <div class="section" id="importing-your-files-using-the-files-selection-dialogs">
 <h2>Importing your files using the files selection dialogs<a class="headerlink" href="#importing-your-files-using-the-files-selection-dialogs" title="Permalink to this headline">¶</a></h2>

@@ -1,6 +1,7 @@
 import os
 import os.path
 import asyncio
+import functools
 import aioipfs
 
 from PyQt5.QtWidgets import QApplication
@@ -27,8 +28,10 @@ from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.cidhelpers import shortPathRepr
 
 from .textedit import TextEditorTab
+from .dialogs import ResourceOpenConfirmDialog
 from .helpers import getMimeIcon
 from .helpers import messageBox
+from .helpers import runDialog
 from .imgview import ImageViewerTab
 
 
@@ -43,18 +46,28 @@ def iResourceCannotOpen(path):
 class IPFSResourceOpener(QObject):
     objectOpened = pyqtSignal(IPFSPath)
 
+    # Emitted by the opener when we want to show a dialog for confirmation
+    needUserConfirm = pyqtSignal(IPFSPath, MIMEType, bool)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.app = QApplication.instance()
         self.setObjectName('resourceOpener')
 
+        self.needUserConfirm.connect(self.onNeedUserConfirm)
+
     @ipfsOp
-    async def open(self, ipfsop, pathRef, mimeType=None):
+    async def open(self, ipfsop, pathRef,
+                   mimeType=None,
+                   openingFrom=None,
+                   tryDecrypt=False,
+                   fromEncrypted=False,
+                   burnAfterReading=False):
         """
         Open the resource referenced by rscPath according
         to its MIME type
 
-        :param pathRef: IPFS path (can be str or IPFSPath)
+        :param pathRef: IPFS object's path (can be str or IPFSPath)
         :param MIMEType mimeType: MIME type
         """
 
@@ -100,18 +113,15 @@ class IPFSResourceOpener(QObject):
         else:
             return messageBox(iResourceCannotOpen(rscPath))
 
-        if mimeType.type == 'application/octet-stream':
+        if mimeType.type == 'application/octet-stream' and not fromEncrypted:
             # Try to decode it with our key if it's a small file
-            logUser.info('{path} ({type}): RSA-encoded data! Trying ..'.format(
-                path=rscPath, type=str(mimeType)))
-
             if statInfo is None:
                 statInfo = StatInfo(await ipfsop.objStat(rscPath, timeout=5))
 
             profile = ipfsop.ctx.currentProfile
-            if profile and statInfo.valid and statInfo.dataSmallerThan(
-                    megabytes(8)):
-                data = await ipfsop.catObject(ipfsPath.objPath, timeout=5)
+            if profile and statInfo.valid and \
+                    (statInfo.dataSmallerThan(megabytes(8)) or tryDecrypt):
+                data = await ipfsop.catObject(ipfsPath.objPath, timeout=30)
                 if not data:
                     # XXX
                     return
@@ -128,9 +138,10 @@ class IPFSResourceOpener(QObject):
 
                     logUser.info('{path}: RSA OK'.format(path=rscPath))
 
-                    # This one won't be announced
-                    entry = await ipfsop.client.add_bytes(decrypted,
-                                                          offline=True)
+                    # This one won't be announced or pinned
+                    entry = await ipfsop.addBytes(decrypted,
+                                                  offline=True,
+                                                  pin=False)
                     if not entry:
                         logUser.info(
                             '{path}: cannot import decrypted file'.format(
@@ -138,7 +149,12 @@ class IPFSResourceOpener(QObject):
                         return
 
                     # Open the decrypted file
-                    ensure(self.open(entry['Hash']))
+                    return ensure(self.open(entry['Hash'],
+                                            fromEncrypted=True,
+                                            burnAfterReading=True))
+                else:
+                    logUser.debug(
+                        '{path}: decryption impossible'.format(path=rscPath))
 
         elif mimeType.isText:
             tab = TextEditorTab(parent=self.app.mainWindow)
@@ -191,8 +207,18 @@ class IPFSResourceOpener(QObject):
             self.objectOpened.emit(ipfsPath)
             return self.app.mainWindow.addBrowserTab().browseFsPath(ipfsPath)
 
-        logUser.info('{path} ({type}): unhandled resource type'.format(
-            path=rscPath, type=str(mimeType)))
+        if openingFrom in ['filemanager', 'qa']:
+            self.needUserConfirm.emit(ipfsPath, mimeType, True)
+        else:
+            self.needUserConfirm.emit(ipfsPath, mimeType, False)
+
+    def onNeedUserConfirm(self, ipfsPath, mimeType, secureFlag):
+        runDialog(ResourceOpenConfirmDialog, ipfsPath, mimeType, secureFlag,
+                  accepted=functools.partial(self.onOpenConfirmed, ipfsPath,
+                                             mimeType))
+
+    def onOpenConfirmed(self, iPath, mType, dlg):
+        return ensure(self.openWithSystemDefault(str(iPath)))
 
     @ipfsOp
     async def openBlock(self, ipfsop, pathRef, mimeType=None):

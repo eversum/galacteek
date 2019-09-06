@@ -416,6 +416,8 @@ class TextEditorWidget(QWidget):
                 self.highlighter = PythonSyntaxHighlighter(
                     self.currentDocument)
                 self.tabReplaceButton.setChecked(True)
+            if self.currentDocument.filename.endswith('.md'):
+                self.previewButton.setChecked(True)
         else:
             self.highlighter = None
 
@@ -624,7 +626,7 @@ class TextEditorWidget(QWidget):
             self.filesView.setMaximumWidth(self.width() / 3)
             self.textHLayout.addWidget(self.filesView)
             self.fsViewButton.setEnabled(True)
-            self.fsViewButton.setChecked(True)
+            self.filesView.hide()
         else:
             if self.filesView.rootHash != cid:
                 self.filesView.parentHash = None

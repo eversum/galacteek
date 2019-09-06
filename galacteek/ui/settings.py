@@ -21,6 +21,9 @@ class SettingsDialog(QDialog):
         self.ui.changeDownloadsPathButton.clicked.connect(
             self.onChangeDownloadsPath)
 
+        self.ui.pubsubRoutingMode.insertItem(0, ROUTER_TYPE_FLOOD)
+        self.ui.pubsubRoutingMode.insertItem(1, ROUTER_TYPE_GOSSIP)
+
         self.ui.language.insertItem(0, iLangEnglish())
 
         self.ui.swarmMaxConns.valueChanged.connect(self.onSwarmMaxConns)
@@ -92,8 +95,12 @@ class SettingsDialog(QDialog):
             self.getS(section, CFG_KEY_STORAGEMAX, int))
         self.ui.routingMode.setCurrentText(
             self.getS(section, CFG_KEY_ROUTINGMODE, str))
+        self.ui.pubsubRoutingMode.setCurrentText(
+            self.getS(section, CFG_KEY_PUBSUB_ROUTER, str))
         self.setChecked(self.ui.writableHttpGw,
                         self.sManager.isTrue(section, CFG_KEY_HTTPGWWRITABLE))
+        self.setChecked(self.ui.namesysPubsub,
+                        self.sManager.isTrue(section, CFG_KEY_NAMESYS_PUBSUB))
 
         # IPFS connection
         section = CFG_SECTION_IPFSCONN1
@@ -179,8 +186,12 @@ class SettingsDialog(QDialog):
         self.setS(section, CFG_KEY_STORAGEMAX, self.ui.storageMax.text())
         self.setS(section, CFG_KEY_ROUTINGMODE,
                   self.ui.routingMode.currentText())
+        self.setS(section, CFG_KEY_PUBSUB_ROUTER,
+                  self.ui.pubsubRoutingMode.currentText())
         self.sManager.setBoolFrom(section, CFG_KEY_HTTPGWWRITABLE,
                                   self.isChecked(self.ui.writableHttpGw))
+        self.sManager.setBoolFrom(section, CFG_KEY_NAMESYS_PUBSUB,
+                                  self.isChecked(self.ui.namesysPubsub))
 
         section = CFG_SECTION_IPFSCONN1
         self.setS(section, CFG_KEY_HOST, self.ui.customIpfsHost.text())

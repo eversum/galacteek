@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QDialog
 from PyQt5.QtWidgets import QComboBox
 from PyQt5.QtWidgets import QInputDialog
+from PyQt5.QtWidgets import QToolButton
 from PyQt5.QtWidgets import QDialogButtonBox
 from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QLineEdit
@@ -170,7 +171,7 @@ class AddHashmarkDialog(QDialog):
             return messageBox('Description is too long')
 
         if len(newCat) > 0:
-            category = re.sub('//', '', newCat)
+            category = cidhelpers.normp(newCat)
         else:
             category = self.ui.category.currentText()
 
@@ -742,3 +743,61 @@ class QSchemeCreateMappingDialog(QDialog):
             messageBox(
                 'An error ocurred, check that a mapping does not '
                 'already exist with that name')
+
+
+class ResourceOpenConfirmDialog(QDialog):
+    message = '''
+    <p>IPFS object with path <b>{p}</b> (Content type: <b>{mtype}</b>)
+    could not be opened.</p>
+
+    <p>
+    Open with system's default application ?
+    </p>
+    '''
+
+    def __init__(self, rscPath, mType, secureEnv, parent=None):
+        super().__init__(parent)
+
+        self.rscPath = rscPath
+        self.setWindowTitle('Open resource')
+
+        buttonBox = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
+            self
+        )
+        buttonBox.accepted.connect(self.accept)
+        buttonBox.rejected.connect(self.reject)
+
+        layout = QVBoxLayout()
+
+        label = QLabel(self.message.format(
+            p=str(rscPath), mtype=mType.type))
+        label.setMaximumWidth(600)
+        label.setWordWrap(True)
+
+        layout.addWidget(label)
+
+        okButton = buttonBox.button(QDialogButtonBox.Ok)
+
+        if not secureEnv:
+            okButton.setEnabled(False)
+            ignButton = QToolButton(self)
+            ignButton.setCheckable(True)
+            ignButton.setText('Let me open it anyway')
+            ignButton.toggled.connect(
+                lambda state: okButton.setEnabled(state))
+
+            wLabel = QLabel(
+                '<p style="color: red"> '
+                'You are trying to open this object '
+                'from an insecure environment.'
+                '</font>')
+            layout.addWidget(wLabel)
+            layout.addWidget(ignButton)
+
+        layout.addWidget(buttonBox)
+
+        self.setLayout(layout)
+
+    def accept(self):
+        self.done(1)

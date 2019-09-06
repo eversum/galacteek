@@ -1,15 +1,18 @@
+import io
 import os.path
+import os
 import json
 import tempfile
 import uuid
+import aiofiles
 
-from async_generator import async_generator, yield_
 import async_timeout
 
 from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import stripIpfs
 from galacteek.core.asynclib import async_enterable
 from galacteek import log
+from galacteek import logUser
 
 import aioipfs
 import asyncio
@@ -105,6 +108,10 @@ class IPFSOperator(object):
     @property
     def uid(self):
         return self._id
+
+    @property
+    def rsaAgent(self):
+        return self._rsaAgent
 
     @property
     def logwatch(self):
@@ -206,9 +213,10 @@ class IPFSOperator(object):
             self.debug(err.message)
             return None
 
-    async def filesMkdir(self, path, parents=True):
+    async def filesMkdir(self, path, parents=True, cidversion=1):
         try:
-            await self.client.files.mkdir(path, parents=parents)
+            await self.client.files.mkdir(
+                path, parents=parents, cid_version=cidversion)
         except aioipfs.APIError as err:
             self.debug(err.message)
             return None
@@ -240,12 +248,13 @@ class IPFSOperator(object):
             return None
 
     async def filesWrite(self, path, data, create=False, truncate=False,
-                         offset=-1, count=-1):
+                         offset=-1, count=-1, cidversion=1):
         try:
             await self.client.files.write(
                 path, data,
                 create=create, truncate=truncate,
-                offset=offset, count=count
+                offset=offset, count=count,
+                cid_version=cidversion
             )
         except aioipfs.APIError as err:
             self.debug('filesWrite error {}'.format(err.message))
@@ -429,7 +438,6 @@ class IPFSOperator(object):
         else:
             return resolved
 
-    @async_generator
     async def nameResolveStream(self, path, count=3, timeout='20s'):
         try:
             async for nentry in self.client.name.resolve_stream(
@@ -438,13 +446,11 @@ class IPFSOperator(object):
                     stream=True,
                     dht_record_count=count,
                     dht_timeout=timeout):
-                await yield_(nentry)
+                yield nentry
         except asyncio.TimeoutError:
             self.debug('streamed resolve timeout for {0}'.format(path))
-            return None
         except aioipfs.APIError as e:
             self.debug('streamed resolve error: {}'.format(e.message))
-            return None
 
     async def purge(self, hashRef, rungc=False):
         """ Unpins an object and optionally runs the garbage collector """
@@ -458,6 +464,12 @@ class IPFSOperator(object):
             return False
         else:
             self.debug('purge OK: {}'.format(hashRef))
+
+    async def gCollect(self, quiet=True):
+        """
+        Run a garbage collector sweep
+        """
+        return await self.client.repo.gc(quiet=quiet)
 
     async def isPinned(self, hashRef):
         """
@@ -528,7 +540,6 @@ class IPFSOperator(object):
             self.debug('pinUpdate success: {}'.format(result))
             return result
 
-    @async_generator
     async def list(self, path, resolve_type=True):
         """
         Lists objects in a given path and yields them
@@ -540,7 +551,7 @@ class IPFSOperator(object):
 
             for obj in objects:
                 await self.sleep()
-                await yield_(obj)
+                yield obj
         except BaseException:
             pass
 
@@ -579,8 +590,9 @@ class IPFSOperator(object):
                       callback=None, cidversion=1, offline=False,
                       hidden=False, only_hash=False):
         """
-        Add files from path in the repo, and returns the top-level entry (the
-        root directory), optionally wrapping it with a directory object
+        Add files from ``path`` in the repo, and returns the top-level
+        entry (the root directory), optionally wrapping it with a
+        directory object
 
         :param str path: the path to the directory/file to import
         :param bool wrap: add a wrapping directory
@@ -610,6 +622,31 @@ class IPFSOperator(object):
             return None
         else:
             return added
+
+    async def addFileEncrypted(self, path):
+        basename = os.path.basename(path)
+        buffSize = 262144
+        readTotal = 0
+        whole = io.BytesIO()
+
+        try:
+            async with aiofiles.open(path, 'rb') as fd:
+                while True:
+                    buff = await fd.read(buffSize)
+                    if not buff:
+                        break
+                    await self.sleep()
+                    readTotal += len(buff)
+                    logUser.info('{n} (enc): read {count} bytes'.format(
+                        n=basename, count=readTotal))
+                    whole.write(buff)
+        except:
+            self.debug('Error occured while encrypting {path}'.format(
+                path=path))
+        else:
+            whole.seek(0, 0)
+            logUser.info('{n}: encrypting'.format(n=basename))
+            return await self.rsaAgent.storeSelf(whole)
 
     async def addBytes(self, data, cidversion=1, **kw):
         try:
@@ -794,7 +831,6 @@ class IPFSOperator(object):
         except aioipfs.APIError:
             return False
 
-    @async_generator
     async def pingWrapper(self, peer, count=3):
         """
         Peer ping async generator, used internally by the operator for specific
@@ -819,7 +855,7 @@ class IPFSOperator(object):
                 peer=peer, time=pTime, text=pText,
                 success='OK' if pSuccess is True else 'ERR'))
 
-            await yield_((pTime, pSuccess, pText.strip()))
+            yield (pTime, pSuccess, pText.strip())
 
     async def pingLowest(self, peer, count=3):
         """

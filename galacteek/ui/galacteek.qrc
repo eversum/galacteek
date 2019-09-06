@@ -1,5 +1,6 @@
 <RCC>
   <qresource>
+    <file>../../share/icons/help.png</file>
     <file>../../share/icons/blockchain1.png</file>
     <file>../../share/icons/blockchain2.png</file>
     <file>../../share/js/web3.min.js</file>

@@ -43,6 +43,10 @@ def iItemsInPinningQueue(items):
         'Items in pinning queue: {}'.format(items))
 
 
+def iHelp():
+    return QCoreApplication.translate('GalacteekWindow', 'Help')
+
+
 def iUnknown():
     return QCoreApplication.translate('GalacteekWindow', 'Unknown')
 
@@ -415,6 +419,10 @@ def iImages():
 
 def iTemporaryFiles():
     return QCoreApplication.translate('FileManagerForm', 'Temporary')
+
+
+def iEncryptedFiles():
+    return QCoreApplication.translate('FileManagerForm', 'Encrypted files')
 
 
 def iVideos():

@@ -234,7 +234,8 @@ def runDialog(cls, *args, **kw):
     if title:
         dlgW.setWindowTitle(title)
     if accepted:
-        dlgW.accepted.connect(onAccept)
+        dlgW.accepted.connect(functools.partial(accepted, dlgW))
+
     dlgW.show()
     dlgW.exec_()
     return dlgW

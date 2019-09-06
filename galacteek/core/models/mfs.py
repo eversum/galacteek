@@ -185,6 +185,9 @@ class MFSItemModel(QStandardItemModel):
         self.itemTemporary = MFSRootItem(iTemporaryFiles(),
                                          alwaysOffline=True,
                                          path=profile.pathTmp)
+        self.itemEncrypted = MFSRootItem(iEncryptedFiles(),
+                                         alwaysOffline=True,
+                                         path=profile.pathEncryptedFiles)
 
         self.itemRoot.appendRows([
             self.itemHome,
@@ -197,7 +200,8 @@ class MFSItemModel(QStandardItemModel):
             self.itemDocuments,
             self.itemWebPages,
             self.itemDWebApps,
-            self.itemQrCodes
+            self.itemQrCodes,
+            self.itemEncrypted
         ])
 
         self.initialized = True

@@ -993,7 +993,7 @@ class MainWindow(QMainWindow):
 
         tabName = shortPathRepr(multihash)
         tooltip = 'Multihash explorer: {0}'.format(multihash)
-        view = ipfsview.IPFSHashExplorerToolBox(self, multihash)
+        view = ipfsview.IPFSHashExplorerStack(self, multihash)
         self.registerTab(view, tabName, current=True,
                          icon=getIcon('hash.png'), tooltip=tooltip)
 

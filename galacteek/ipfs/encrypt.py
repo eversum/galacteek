@@ -26,14 +26,17 @@ class IpfsRSAAgent:
         log.debug('RSA Agent: {0}'.format(msg))
 
     async def encrypt(self, data, pubKey):
-        return await self.rsaExec.encryptData(BytesIO(data), pubKey)
+        return await self.rsaExec.encryptData(
+            data if isinstance(data, BytesIO) else BytesIO(data),
+            pubKey
+        )
 
     async def decrypt(self, data):
         return await self.rsaExec.decryptData(BytesIO(data),
                                               await self.__rsaReadPrivateKey())
 
     @ipfsOp
-    async def storeSelf(self, op, data, offline=False):
+    async def storeSelf(self, op, data, offline=False, wrap=False):
         """
         Encrypt some data with our pubkey and store it in IPFS
 
@@ -49,11 +52,12 @@ class IpfsRSAAgent:
             if encrypted is None:
                 return
 
-            entry = await op.addBytes(encrypted, offline=offline)
+            entry = await op.addBytes(encrypted,
+                                      offline=offline,
+                                      wrap=wrap)
             if entry:
                 self.debug(
-                    'storeSelf: encoded {0} bytes to {1}'.format(
-                        len(data), entry['Hash'])
+                    'storeSelf: encoded to {0}'.format(entry['Hash'])
                 )
                 return entry
         except aioipfs.APIError as err:

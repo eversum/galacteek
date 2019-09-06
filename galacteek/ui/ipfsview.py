@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import QSpacerItem
 from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtWidgets import QToolButton
 from PyQt5.QtWidgets import QAbstractItemView
+from PyQt5.QtWidgets import QStackedWidget
 
 from PyQt5.QtGui import QStandardItemModel
 from PyQt5.QtGui import QKeySequence
@@ -44,6 +45,8 @@ from galacteek import ensure
 from .i18n import *
 from .helpers import *
 from .widgets import GalacteekTab
+from .widgets import IPFSUrlLabel
+from .widgets import IPFSPathClipboardButton
 from .hashmarks import *
 
 import aioipfs
@@ -300,6 +303,51 @@ class IPFSHashExplorerToolBox(GalacteekTab):
                     view.reFocus()
 
 
+class IPFSHashExplorerStack(GalacteekTab):
+    """
+    Organizes IPFSHashExplorerWidgets with a QStackedWidget
+    """
+
+    def __init__(self, gWindow, hashRef, maxItems=16, parent=None):
+        super(IPFSHashExplorerStack, self).__init__(gWindow)
+
+        self.rootHash = hashRef
+        self.maxItems = maxItems
+
+        self.stack = QStackedWidget(self)
+        self.exLayout = QVBoxLayout()
+        self.exLayout.addWidget(self.stack)
+
+        self.vLayout.addLayout(self.exLayout)
+        if self.rootHash:
+            self.viewHash(self.rootHash)
+
+    @property
+    def itemsCount(self):
+        return self.stack.count()
+
+    def viewHash(self, hashRef, addClose=False, autoOpenFolders=False):
+        view = IPFSHashExplorerWidget(hashRef,
+                                      parent=self, addClose=addClose,
+                                      showCidLabel=True,
+                                      autoOpenFolders=autoOpenFolders)
+        view.closeRequest.connect(functools.partial(
+            self.remove, view))
+        view.directoryOpenRequest.connect(
+            lambda multihash: self.viewHash(multihash, addClose=True))
+
+        self.stack.insertWidget(self.stack.count(), view)
+        self.stack.setCurrentWidget(view)
+        view.reFocus()
+        return True
+
+    def remove(self, view):
+        try:
+            self.stack.removeWidget(view)
+        except:
+            pass
+
+
 class TreeEventFilter(QObject):
     copyPressed = pyqtSignal()
     returnPressed = pyqtSignal()
@@ -336,6 +384,7 @@ class IPFSHashExplorerWidget(QWidget):
     def __init__(self, hashRef, addClose=False,
                  mimeDetectionMethod='db',
                  addActions=True, autoOpenFiles=True,
+                 showCidLabel=False,
                  autoOpenFolders=False, parent=None):
         super(IPFSHashExplorerWidget, self).__init__(parent)
 
@@ -377,6 +426,17 @@ class IPFSHashExplorerWidget(QWidget):
 
         if addActions:
             self.addButtons()
+
+        if showCidLabel:
+            path = IPFSPath(self.rootHash, autoCidConv=True)
+            labelMultihash = IPFSUrlLabel(path)
+            clipButton = IPFSPathClipboardButton(path)
+            layout = QHBoxLayout()
+            layout.addWidget(labelMultihash)
+            layout.addWidget(clipButton)
+            layout.addItem(QSpacerItem(10, 20, QSizePolicy.Expanding,
+                                       QSizePolicy.Minimum))
+            self.mainLayout.addLayout(layout)
 
         self.mainLayout.addLayout(self.hLayoutTop)
 

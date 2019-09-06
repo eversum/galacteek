@@ -420,7 +420,8 @@ class UserProfile(QObject):
             self.pathCode,
             self.pathWebPages,
             self.pathDWebApps,
-            self.pathTmp
+            self.pathTmp,
+            self.pathEncryptedFiles
         ]
 
     @property
@@ -438,6 +439,10 @@ class UserProfile(QObject):
     @property
     def pathTmp(self):
         return os.path.join(self.pathFiles, 'tmp')
+
+    @property
+    def pathEncryptedFiles(self):
+        return os.path.join(self.pathFiles, 'sencrypted')
 
     @property
     def pathQrCodes(self):
