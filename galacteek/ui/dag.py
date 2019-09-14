@@ -44,6 +44,7 @@ class DAGViewer(GalacteekTab):
         self.addToLayout(self.dagWidget)
         self.ui = ui_dagview.Ui_DagViewForm()
         self.ui.setupUi(self.dagWidget)
+        self.mLinkColor = QColor(212, 184, 116)
 
         evfilter = IPFSTreeKeyFilter(self.ui.dagTree)
         evfilter.copyHashPressed.connect(self.onCopyItemHash)
@@ -85,19 +86,19 @@ class DAGViewer(GalacteekTab):
     async def displayItem(self, data, item):
         if data is None:
             return
-        await asyncio.sleep(0)
         if isinstance(data, dict):
             for dkey, dval in data.items():
-                await asyncio.sleep(0)
                 if dkey == '/':
                     # Merkle-link
                     linkValue = str(dval)
+                    if not cidhelpers.cidValid(linkValue):
+                        continue
+
                     dictItem = QTreeWidgetItem(item)
                     dictItem.setText(0, iMerkleLink())
-                    dictItem.setText(1, linkValue)
-                    color = QColor(212, 184, 116)
-                    dictItem.setBackground(0, color)
-                    dictItem.setBackground(1, color)
+                    dictItem.setText(1, cidhelpers.cidConvertBase32(linkValue))
+                    dictItem.setBackground(0, self.mLinkColor)
+                    dictItem.setBackground(1, self.mLinkColor)
                     dictItem.setExpanded(True)
                 else:
                     dictItem = QTreeWidgetItem(item)
@@ -112,7 +113,6 @@ class DAGViewer(GalacteekTab):
 
         elif isinstance(data, list):
             for i in range(0, len(data)):
-                await asyncio.sleep(0)
                 listItem = QTreeWidgetItem(item)
                 listItem.setText(0, iDagItem(i))
                 listItem.setExpanded(True)

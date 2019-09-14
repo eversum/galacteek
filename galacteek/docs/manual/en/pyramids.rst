@@ -27,7 +27,7 @@ Usage
 -----
 
 From the right toolbar, click on the blue pyramid button
-and then on *Add multihash pyramid*. After entering the
+and then select *Add multihash pyramid*. After entering the
 different parameters and validating the dialog, you will
 see your new pyramid appear in the right toolbar.
 

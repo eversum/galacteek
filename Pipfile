@@ -34,6 +34,7 @@ feedparser = ">=5.2.0"
 async-timeout = ">=3.0.1"
 aiosqlite = ">=0.10.0"
 web3 = ">=4.9.2"
+aiodns = ">=2.0.0"
 
 [dev-packages]
 pytest = "*"

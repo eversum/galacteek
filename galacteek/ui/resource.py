@@ -186,9 +186,6 @@ class IPFSResourceOpener(QObject):
                 tab.playFromPath(rscPath)
             return
 
-        if mimeType == 'application/pdf':
-            return await self.openWithSystemDefault(rscPath)
-
         if mimeType == 'application/pdf' and 0:  # not usable yet
             tab = WebTab(self.app.mainWindow)
             tab.attach(

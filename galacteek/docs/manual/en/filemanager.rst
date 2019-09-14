@@ -67,8 +67,9 @@ Offline mode
 ------------
 
 The *Offline mode* button, when toggled, sets the filemanager in offline
-mode. In this mode, adding new files to your node will not trigger an
-announcement on the DHT (meaning that other nodes will have no knowledge
+mode for the current folder (it is a per-folder switch). In this mode,
+adding new files to your node will not trigger an
+announcement on the :term:`DHT` (meaning that other nodes will have no knowledge
 yet that your node provides these files).
 
 Later on, if you want to manually announce to the network that you provide

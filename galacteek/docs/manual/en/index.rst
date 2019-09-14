@@ -7,17 +7,18 @@ galacteek's manual (english)
    :maxdepth: 2
    :name: mastertoc
 
-    Using the clipboard <clipboard>
-    Shortcuts <shortcuts>
     Settings <settings>
     Toolbars <toolbars>
+    Using the clipboard <clipboard>
+    Shortcuts <shortcuts>
     Hashmarks <hashmarks>
+    File manager <filemanager>
     Browsing <browsing>
+    Pinning <pinning>
     Multihash Pyramids <pyramids>
     Atom feeds <atom>
     QR codes <qrcodes>
-    File manager <filemanager>
-    Pinning <pinning>
+    Glossary <glossary>
 
 Quick-access
 ============

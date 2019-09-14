@@ -7,6 +7,12 @@ import re
 from galacteek import log
 from galacteek.ipfs.cidhelpers import IPFSPath
 
+"""
+This module was used by the ENSWhoisSchemeHandler for resolving
+the content hash of ENS domains using the whoisens.org API
+EthDNS will be the default resolver probably now
+"""
+
 
 whoisApiHost = 'api.whoisens.org'
 whoisBaseUrl = URL.build(host=whoisApiHost,
@@ -16,7 +22,7 @@ whoisBaseUrl = URL.build(host=whoisApiHost,
 
 async def ensContentHash(domain, sslverify=True, timeout=8):
     """
-    Resolve the content hash of an ENS domain
+    Resolve the content hash of an ENS domain with enswhois.org
 
     :rtype: IPFSPath
     """

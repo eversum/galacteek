@@ -37,19 +37,26 @@ def run(*args):
 
 
 class build_docs(Command):
-    user_options = []
+    user_options = [
+        ("all=", None, "Build all docs"),
+    ]
 
     def initialize_options(self):
-        pass
+        self.all = None
 
     def finalize_options(self):
         pass
 
     def run(self):
         from sphinx import build_main
-        build_main([sys.argv[0], '-b', 'html',
-                    'galacteek/docs/manual/en',
-                    'galacteek/docs/manual/en/html'])
+        args = [sys.argv[0], '-b', 'html',
+                'galacteek/docs/manual/en',
+                'galacteek/docs/manual/en/html']
+
+        if self.all:
+            args.append('-a')
+
+        build_main(args)
 
 
 class build_contracts(Command):

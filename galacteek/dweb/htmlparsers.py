@@ -22,7 +22,7 @@ class IPFSLinksParser(HTMLParser):
         self.base = basePath
 
     def handle_starttag(self, tag, alist):
-        if tag != 'a':
+        if tag not in ['a', 'link']:
             return
 
         attrs = dict(alist)

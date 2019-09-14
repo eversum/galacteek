@@ -3,6 +3,10 @@ import uuid
 import aioipfs
 import functools
 import asyncio
+import aiodns
+import async_timeout
+import collections
+import time
 from datetime import datetime
 
 from PyQt5.QtWebEngineCore import QWebEngineUrlSchemeHandler
@@ -38,8 +42,12 @@ from yarl import URL
 SCHEME_DWEB = 'dweb'
 SCHEME_FS = 'fs'
 SCHEME_IPFS = 'ipfs'
-SCHEME_ENS = 'ens'
 SCHEME_IPNS = 'ipns'
+
+# ENS-related schemes (ensr is redirect-on-resolve ENS scheme)
+SCHEME_ENS = 'ens'
+SCHEME_ENSR = 'ensr'
+SCHEME_E = 'e'
 
 # Misc schemes
 SCHEME_Z = 'z'
@@ -133,49 +141,10 @@ def initializeSchemes():
         syntax=QWebEngineUrlScheme.Syntax.Host
     )
 
-    dappsRegisterSchemes()
-    registerMiscSchemes()
-
-
-def initializeSchemesOld():
-    name = QWebEngineUrlScheme.schemeByName(SCHEME_DWEB.encode()).name()
-    if name:
-        # initializeSchemes() already called ?
-        return
-
-    schemeDweb = QWebEngineUrlScheme(SCHEME_DWEB.encode())
-    schemeDweb.setFlags(
-        QWebEngineUrlScheme.SecureScheme |
-        QWebEngineUrlScheme.ViewSourceAllowed
+    declareUrlScheme(
+        SCHEME_ENSR,
+        syntax=QWebEngineUrlScheme.Syntax.Host
     )
-
-    schemeFs = QWebEngineUrlScheme(SCHEME_FS.encode())
-    schemeFs.setFlags(QWebEngineUrlScheme.SecureScheme)
-
-    schemeIpfs = QWebEngineUrlScheme(SCHEME_IPFS.encode())
-    schemeIpfs.setFlags(
-        QWebEngineUrlScheme.SecureScheme |
-        QWebEngineUrlScheme.ViewSourceAllowed
-    )
-    schemeIpfs.setSyntax(QWebEngineUrlScheme.Syntax.Host)
-    schemeIpfs.setDefaultPort(QWebEngineUrlScheme.PortUnspecified)
-
-    schemeIpns = QWebEngineUrlScheme(SCHEME_IPNS.encode())
-    schemeIpns.setFlags(
-        QWebEngineUrlScheme.SecureScheme |
-        QWebEngineUrlScheme.ViewSourceAllowed
-    )
-    schemeIpns.setSyntax(QWebEngineUrlScheme.Syntax.Host)
-    schemeIpns.setDefaultPort(QWebEngineUrlScheme.PortUnspecified)
-
-    schemeEns = QWebEngineUrlScheme(SCHEME_ENS.encode())
-    schemeEns.setFlags(QWebEngineUrlScheme.SecureScheme)
-
-    QWebEngineUrlScheme.registerScheme(schemeDweb)
-    QWebEngineUrlScheme.registerScheme(schemeFs)
-    QWebEngineUrlScheme.registerScheme(schemeIpfs)
-    QWebEngineUrlScheme.registerScheme(schemeEns)
-    QWebEngineUrlScheme.registerScheme(schemeIpns)
 
     dappsRegisterSchemes()
     registerMiscSchemes()
@@ -209,6 +178,10 @@ class BaseURLSchemeHandler(QWebEngineUrlSchemeHandler):
 
 
 class ENSWhoisSchemeHandler(BaseURLSchemeHandler):
+    """
+    Deprecated ENS resolver (that was using api.whoisens.org)
+    """
+
     contentReady = pyqtSignal(str, QWebEngineUrlRequestJob, str, bytes)
     domainResolved = pyqtSignal(str, IPFSPath)
 
@@ -255,6 +228,112 @@ class ENSWhoisSchemeHandler(BaseURLSchemeHandler):
         ensure(self.handleRequest(self.requests[uid]))
 
 
+class EthDNSResolver:
+    def __init__(self, loop):
+        self.dnsResolver = aiodns.DNSResolver(loop=loop)
+
+    def debug(self, msg):
+        log.debug('EthDNS resolver: {}'.format(msg))
+
+    def domainValid(self, domain):
+        domainP = r'^([A-Za-z0-9]\.|[A-Za-z0-9][A-Za-z0-9-]{0,61}[A-Za-z0-9]\.){1,3}[A-Za-z]{2,6}$'  # noqa
+        return re.match(domainP, domain)
+
+    async def resolveEnsDomain(self, domain, timeout=15):
+        """
+        Resolve an ENS domain with EthDNS, and return the
+        IPFS path for this domain
+
+        :param str domain: Eth domain name to resolve (e.g mydomain.eth)
+        :rtype: IPFSPath
+        """
+
+        # EthDNS uses the .link TLD
+        domainWLink = '{domain}.link'.format(domain=domain)
+
+        try:
+            with async_timeout.timeout(timeout):
+                result = await self.dnsResolver.query(domainWLink, 'TXT')
+
+                if not result:
+                    self.debug('Failed to resolve {}'.format(domain))
+                    return None
+
+                for entry in result:
+                    # Grab the dnslink
+
+                    match = re.search('^dnslink=(.*)$', entry.text)
+                    if not match:
+                        continue
+
+                    return IPFSPath(match.group(1), autoCidConv=True)
+        except asyncio.TimeoutError:
+            self.debug('Timeout resolving domain {}'.format(domain))
+        except Exception as err:
+            self.debug('Error while resolving domain {0}: {1}'.format(
+                domain, str(err)))
+
+
+class EthDNSSchemeHandler(BaseURLSchemeHandler):
+    """
+    ENS scheme handler (resolves ENS domains through EthDNS with aiodns)
+
+    Redirects to the resolved IPFS object
+    """
+
+    contentReady = pyqtSignal(str, QWebEngineUrlRequestJob, str, bytes)
+    domainResolved = pyqtSignal(str, IPFSPath)
+
+    def __init__(self, app, resolver=None, parent=None):
+        super(EthDNSSchemeHandler, self).__init__(parent)
+
+        self.app = app
+        self.requests = {}
+        self.ethResolver = resolver if resolver else \
+            EthDNSResolver(self.app.loop)
+
+    def debug(self, msg):
+        log.debug('EthDNS: {}'.format(msg))
+
+    def onRequestDestroyed(self, uid):
+        if uid in self.requests:
+            del self.requests[uid]
+
+    async def handleRequest(self, request):
+        rUrl = request.requestUrl()
+        if not rUrl.isValid():
+            return self.urlInvalid(request)
+
+        domain = rUrl.host()
+        uPath = rUrl.path()
+
+        if not domain or len(domain) > 512 or not \
+                self.ethResolver.domainValid(domain):
+            logUser.info('EthDNS: invalid domain request')
+            return self.urlInvalid(request)
+
+        logUser.info('EthDNS: resolving {0}'.format(domain))
+
+        path = await self.ethResolver.resolveEnsDomain(domain)
+
+        if path and path.valid:
+            self.domainResolved.emit(domain, path)
+            sPath = path.child(uPath) if uPath else path
+            logUser.info('EthDNS: {domain} resolved to {res}'.format(
+                domain=domain, res=sPath.ipfsUrl))
+            return request.redirect(QUrl(sPath.ipfsUrl))
+        else:
+            logUser.info('EthDNS: {domain} resolve failed'.format(
+                domain=domain))
+            return self.urlNotFound(request)
+
+    def requestStarted(self, request):
+        uid = str(uuid.uuid4())
+        self.requests[uid] = request
+        request.destroyed.connect(lambda: self.onRequestDestroyed(uid))
+        ensure(self.handleRequest(self.requests[uid]))
+
+
 class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
     """
     Native scheme handler for URLs using the ipfs://<cidv1base32>
@@ -274,11 +353,13 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
 
     contentReady = pyqtSignal(str, QWebEngineUrlRequestJob, str, bytes)
 
-    def __init__(self, app, parent=None):
+    def __init__(self, app, parent=None, validCidQSize=32, reqTimeout=60 * 10):
         super(NativeIPFSSchemeHandler, self).__init__(parent)
 
         self.app = app
         self.requests = {}
+        self.validCids = collections.deque([], validCidQSize)
+        self.requestTimeout = reqTimeout
         self.contentReady.connect(self.onContent)
 
     def debug(self, msg):
@@ -417,9 +498,16 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
 
         if scheme == SCHEME_IPFS:
             # hostname = base32-encoded CID
+            #
+            # We keep a list (deque) of CIDs that have been validated.
+            # If you hit a page which references a lot of other resources for
+            # instance, this should be faster than regexp
 
-            if not ipfsRegSearchCid32(host):
-                return self.urlInvalid(request)
+            if host not in self.validCids:
+                if not ipfsRegSearchCid32(host):
+                    return self.urlInvalid(request)
+
+                self.validCids.append(host)
 
             ipfsPathS = joinIpfs(host) + rUrl.path()
         elif scheme == SCHEME_IPNS:
@@ -431,7 +519,14 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
         if not ipfsPath.valid:
             return self.urlInvalid(request)
 
-        return await self.fetchFromPath(ipfsop, request, ipfsPath, uid)
+        try:
+            with async_timeout.timeout(self.requestTimeout):
+                return await self.fetchFromPath(ipfsop, request, ipfsPath, uid)
+        except asyncio.TimeoutError:
+            return self.reqFailed(request)
+        except Exception:
+            # Any other error
+            return self.reqFailed(request)
 
     async def fetchFromPath(self, ipfsop, request, ipfsPath, uid, **kw):
         try:
@@ -877,3 +972,73 @@ class MultiDAGProxySchemeHandler(NativeIPFSSchemeHandler):
                     return await self.renderData(request, data, uid)
         else:
             return await self.renderData(request, data, uid)
+
+
+class EthDNSProxySchemeHandler(NativeIPFSSchemeHandler):
+    """
+    ENS scheme handler (resolves ENS domains through EthDNS with aiodns)
+
+    This does not redirect to the IPFS object, but rather acts as a proxy.
+    """
+
+    def __init__(self, app, resolver=None, parent=None, cacheMaxEntries=64):
+        super(EthDNSProxySchemeHandler, self).__init__(app, parent)
+
+        self.ethResolver = resolver if resolver else \
+            EthDNSResolver(self.app.loop)
+        self._ensCache = collections.OrderedDict()
+        self._ensCacheMaxEntries = cacheMaxEntries
+        self._ensExpires = 60 * 10
+
+    def debug(self, msg):
+        log.debug('EthDNS proxy: {}'.format(msg))
+
+    @ipfsOp
+    async def handleRequest(self, ipfsop, request, uid):
+        rUrl = request.requestUrl()
+        if not rUrl.isValid():
+            return self.urlInvalid(request)
+
+        domain = rUrl.host()
+        uPath = rUrl.path()
+
+        if not domain or len(domain) > 512 or not \
+                self.ethResolver.domainValid(domain):
+            logUser.info('EthDNS: invalid domain request')
+            return self.urlInvalid(request)
+
+        logUser.info('EthDNS: resolving {0}'.format(domain))
+
+        now = time.time()
+        lastDnsLink = lastResolved = None
+        cached = self._ensCache.get(domain, None)
+
+        if cached:
+            lastDnsLink = cached['dnslinkp']
+            lastResolved = cached['rlast']
+
+        linkExpired = lastResolved and (now - lastResolved) > self._ensExpires
+
+        if not lastDnsLink or linkExpired:
+            path = await self.ethResolver.resolveEnsDomain(domain)
+        else:
+            path = lastDnsLink
+
+        if path and path.valid:
+            if not cached:
+                if len(self._ensCache) >= self._ensCacheMaxEntries:
+                    self._ensCache.popitem(last=False)
+
+                self._ensCache[domain] = {
+                    'dnslinkp': path,
+                    'rlast': now
+                }
+
+            sPath = path.child(uPath) if uPath else path
+            logUser.info('EthDNS: {domain} resolved to {res}'.format(
+                domain=domain, res=sPath.ipfsUrl))
+            return await self.fetchFromPath(ipfsop, request, sPath, uid)
+        else:
+            logUser.info('EthDNS: {domain} resolve failed'.format(
+                domain=domain))
+            return self.urlNotFound(request)

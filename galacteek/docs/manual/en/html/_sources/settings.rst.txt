@@ -26,7 +26,7 @@ size in gigabytes.
 
 The **Routing mode** setting lets you choose between *dht* (the default)
 or *dhtclient*.  Using *dhtclient* can significantly reduce CPU usage, but
-your node will not act as a full DHT node on the network.
+your node will not act as a full :term:`DHT` node on the network.
 
 The **Pubsub routing** setting lets you choose the pubsub routing protocol.
 The *gossipsub* protocol is potentially more bandwidth-efficient than

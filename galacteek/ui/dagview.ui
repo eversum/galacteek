@@ -31,6 +31,12 @@
        <property name="columnCount">
         <number>2</number>
        </property>
+       <attribute name="headerDefaultSectionSize">
+        <number>200</number>
+       </attribute>
+       <attribute name="headerMinimumSectionSize">
+        <number>180</number>
+       </attribute>
        <column>
         <property name="text">
          <string notr="true">1</string>

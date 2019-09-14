@@ -53,6 +53,7 @@ from .widgets import HorizontalLine
 from .widgets import IconSelector
 from .widgets import LabelWithURLOpener
 
+from .i18n import iTitle
 from .i18n import iDoNotPin
 from .i18n import iPinSingle
 from .i18n import iPinRecursive
@@ -798,6 +799,44 @@ class ResourceOpenConfirmDialog(QDialog):
         layout.addWidget(buttonBox)
 
         self.setLayout(layout)
+
+    def accept(self):
+        self.done(1)
+
+
+class TitleInputDialog(QDialog):
+    def __init__(self, title, maxLength=64, parent=None):
+        super().__init__(parent)
+
+        self.app = QApplication.instance()
+        self.title = title
+
+        self.setWindowTitle(iTitle())
+
+        buttonBox = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
+            self
+        )
+        buttonBox.accepted.connect(self.accept)
+        buttonBox.rejected.connect(self.reject)
+
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel(iTitle()))
+
+        self.tEdit = QLineEdit(self)
+        self.tEdit.setMaxLength(maxLength)
+        self.tEdit.setText(title[0:maxLength - 1])
+
+        layout.addWidget(self.tEdit)
+        layout.addWidget(buttonBox)
+
+        self.setLayout(layout)
+
+    def sizeHint(self):
+        return QSize(
+            self.app.desktopGeometry.width() / 2,
+            100
+        )
 
     def accept(self):
         self.done(1)

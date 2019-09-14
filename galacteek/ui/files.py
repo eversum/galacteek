@@ -24,6 +24,7 @@ from galacteek import ensure
 from galacteek import GALACTEEK_NAME
 from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import IPFSPath
+from galacteek.ipfs.cidhelpers import cidConvertBase32
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.mimetype import MIMEType
@@ -70,6 +71,18 @@ def iLoadingFile(name):
 def iLoading(name):
     return QCoreApplication.translate('FileManagerForm',
                                       'Loading {0}').format(name)
+
+
+def iListingMFSPath(path):
+    return QCoreApplication.translate(
+        'FileManagerForm',
+        'Listing MFS path: {0}').format(path)
+
+
+def iListingMFSTimeout(path):
+    return QCoreApplication.translate(
+        'FileManagerForm',
+        'Timeout while listing MFS path: {0}').format(path)
 
 
 def iOpenWith():
@@ -184,9 +197,6 @@ class FileManager(QWidget):
         self.ui.treeFiles.expanded.connect(self.onExpanded)
         self.ui.treeFiles.collapsed.connect(self.onCollapsed)
 
-        # Path selector setup
-        self.setupPathSelector()
-
         self.ui.comboIconSize.addItem('Small')
         self.ui.comboIconSize.addItem('Medium')
         self.ui.comboIconSize.addItem('Large')
@@ -295,34 +305,45 @@ class FileManager(QWidget):
         def c():
             return self.ui.pathSelector.count()
 
+        self.ui.pathSelector.clear()
+
         self.ui.pathSelector.setObjectName('fmanagerPathSelector')
-        self.ui.pathSelector.insertItem(c(), getIcon('go-home.png'), 'Home')
+        self.ui.pathSelector.insertItem(c(), self.model.itemHome.icon(),
+                                        'Home')
         self.ui.pathSelector.insertSeparator(c())
-        self.ui.pathSelector.insertItem(c(), getMimeIcon('image/x-generic'),
+        self.ui.pathSelector.insertItem(c(), self.model.itemImages.icon(),
                                         iImages())
-        self.ui.pathSelector.insertItem(c(), getIcon('folder-pictures.png'),
+        self.ui.pathSelector.insertItem(c(),
+                                        self.model.itemPictures.icon(),
                                         iPictures())
-        self.ui.pathSelector.insertItem(c(), getIcon('folder-videos.png'),
+        self.ui.pathSelector.insertItem(c(), self.model.itemVideos.icon(),
                                         iVideos())
-        self.ui.pathSelector.insertItem(c(), getIcon('folder-music.png'),
+        self.ui.pathSelector.insertItem(c(), self.model.itemMusic.icon(),
                                         iMusic())
         self.ui.pathSelector.insertSeparator(c())
-        self.ui.pathSelector.insertItem(c(), getIcon('code-fork.png'), iCode())
-        self.ui.pathSelector.insertItem(c(), getIcon('folder-documents.png'),
+        self.ui.pathSelector.insertItem(c(), self.model.itemCode.icon(),
+                                        iCode())
+        self.ui.pathSelector.insertItem(c(),
+                                        self.model.itemDocuments.icon(),
                                         iDocuments())
         self.ui.pathSelector.insertSeparator(c())
-        self.ui.pathSelector.insertItem(c(), getMimeIcon('text/html'),
+        self.ui.pathSelector.insertItem(c(),
+                                        self.model.itemWebPages.icon(),
                                         iWebPages())
-        self.ui.pathSelector.insertItem(c(), getIcon('distributed.png'),
+        self.ui.pathSelector.insertItem(c(),
+                                        self.model.itemDWebApps.icon(),
                                         iDWebApps())
         self.ui.pathSelector.insertSeparator(c())
-        self.ui.pathSelector.insertItem(c(), getIcon('ipfs-qrcode.png'),
+        self.ui.pathSelector.insertItem(c(),
+                                        self.model.itemQrCodes.icon(),
                                         iQrCodes())
         self.ui.pathSelector.insertSeparator(c())
-        self.ui.pathSelector.insertItem(c(), getIcon('folder-temp.png'),
+        self.ui.pathSelector.insertItem(c(),
+                                        self.model.itemTemporary.icon(),
                                         iTemporaryFiles())
         self.ui.pathSelector.insertSeparator(c())
-        self.ui.pathSelector.insertItem(c(), getIcon('key-diago.png'),
+        self.ui.pathSelector.insertItem(c(),
+                                        self.model.itemEncrypted.icon(),
                                         iEncryptedFiles())
         self.ui.pathSelector.activated.connect(self.onPathSelector)
 
@@ -358,6 +379,9 @@ class FileManager(QWidget):
         # Connect the model's drag-and-drop signals
         self.model.fileDropEvent.connect(self.onDropFile)
         self.model.directoryDropEvent.connect(self.onDropDirectory)
+
+        if self.ui.pathSelector.count() == 0:
+            self.setupPathSelector()
 
     def enableButtons(self, flag=True):
         for btn in [self.ui.addFileButton,
@@ -630,7 +654,7 @@ class FileManager(QWidget):
 
     def browse(self, path):
         self.gWindow.addBrowserTab().browseFsPath(
-            IPFSPath(path))
+            IPFSPath(path, autoCidConv=True))
 
     def onDhtProvide(self, multihash, recursive):
         @ipfsOpFn
@@ -778,28 +802,39 @@ class FileManager(QWidget):
 
     @ipfsOp
     async def listFiles(self, ipfsop, path, parentItem, maxdepth=0,
-                        autoexpand=False):
+                        autoexpand=False, timeout=20):
         if self.busy:
             return
 
         self.enableButtons(flag=False)
         self.status = self.statusBusy
 
-        try:
-            with async_timeout.timeout(60):
-                await self.listPath(ipfsop, path, parentItem,
-                                    maxdepth=maxdepth,
-                                    autoexpand=autoexpand)
-        except aioipfs.APIError:
-            pass
+        await self.listPathWithTimeout(ipfsop, path, parentItem,
+                                       maxdepth=maxdepth,
+                                       autoexpand=autoexpand,
+                                       timeout=timeout)
 
         self.enableButtons()
         self.status = self.statusReady
 
+    async def listPathWithTimeout(self, ipfsop, path, parentItem, **kw):
+        timeout = kw.pop('timeout', 10)
+        try:
+            with async_timeout.timeout(timeout):
+                await self.listPath(ipfsop, path, parentItem, **kw)
+        except asyncio.TimeoutError:
+            self.statusSet(iListingMFSTimeout(path))
+        except aioipfs.APIError as err:
+            self.statusSet(iIpfsError(err.message))
+        except Exception:
+            pass
+
     async def listPath(self, op, path, parentItem, depth=0, maxdepth=1,
-                       autoexpand=False):
+                       autoexpand=False, timeout=10):
         if not parentItem or not parentItem.path:
             return
+
+        self.statusSet(iListingMFSPath(path))
 
         listing = await op.filesList(path)
         if not listing:
@@ -838,7 +873,7 @@ class FileManager(QWidget):
             nItemName.mimeFromDb(self.app.mimeDb)
             nItemName.setParentHash(parentItemHash)
             nItemSize = MFSItem(sizeFormat(entry['Size']))
-            nItemHash = MFSItem(entry['Hash'])
+            nItemHash = MFSItem(cidConvertBase32(entry['Hash']))
 
             if not icon and nItemName.mimeTypeName:
                 # If we have a better icon matching the file's type..
@@ -859,14 +894,21 @@ class FileManager(QWidget):
             if entry['Type'] == 1:  # directory
                 if autoexpand is True:
                     self.ui.treeFiles.setExpanded(nItemName.index(), True)
-                await asyncio.sleep(0)
+
                 if maxdepth > depth:
-                    depth += 1
-                    await self.listPath(op,
-                                        nItemName.path,
-                                        nItemName,
-                                        maxdepth=maxdepth, depth=depth)
-                    depth -= 1
+                    # We used to await listPath() here but it sucks
+                    # tremendously if you have a dead CID in the MFS which
+                    # will make the ls timeout and hang the filemanager.
+                    # Instead, use listPathWithTimeout() in another task. The
+                    # FM status will be set to ready before potential
+                    # subfolders are being listed in background tasks, which
+                    # is fine
+
+                    ensure(self.listPathWithTimeout(
+                        op,
+                        nItemName.path,
+                        nItemName,
+                        maxdepth=maxdepth, depth=depth + 1))
 
         if autoexpand is True:
             self.ui.treeFiles.expand(parentItem.index())

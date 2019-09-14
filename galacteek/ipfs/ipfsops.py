@@ -10,6 +10,8 @@ import async_timeout
 
 from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import stripIpfs
+from galacteek.ipfs.cidhelpers import cidConvertBase32
+
 from galacteek.core.asynclib import async_enterable
 from galacteek import log
 from galacteek import logUser
@@ -193,7 +195,7 @@ class IPFSOperator(object):
             if entry['Name'] == name:
                 return entry
 
-    async def filesLookupHash(self, path, hash):
+    async def filesLookupHash(self, path, mhash):
         """
         Searches for a file (files API) with a given hash in this path
 
@@ -202,8 +204,10 @@ class IPFSOperator(object):
         :return: IPFS entry
         """
         listing = await self.filesList(path)
+        b32Multihash = cidConvertBase32(mhash)
+
         for entry in listing:
-            if entry['Hash'] == hash:
+            if cidConvertBase32(entry['Hash']) == b32Multihash:
                 return entry
 
     async def filesRm(self, path, recursive=False):
@@ -312,7 +316,7 @@ class IPFSOperator(object):
 
     async def filesLink(self, entry, dest, flush=True, name=None):
         """ Given an entry (as returned by /files/ls), make a link
-            in dest """
+            in ``dest`` """
 
         try:
             await self.client.files.cp(

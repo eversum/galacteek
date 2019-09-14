@@ -31,7 +31,7 @@ QTabBar::tab {
     text-align: center;
     min-width: 170px;
     background-color: #7f8491;
-    border-bottom: 2px solid #c2c7cb;
+    border-radius: 2px;
     padding-left: 4px;
     padding-right: 4px;
     padding-top: 2px;
@@ -39,7 +39,7 @@ QTabBar::tab {
 
 QTabBar::tab:selected {
     margin-top: 1px;
-    background-color: #bfbfbf;
+    background-color: #C3D7DF;
 }
 
 QTabBar::tab:!selected {
@@ -175,4 +175,8 @@ QTreeView#historySearchResults {
 QLabel#ipfsStatusLabel {
     padding-left: 10px;
     font: 9pt "Montserrat";
+}
+
+QLineEdit#urlZone {
+    font: 12pt "Inter UI";
 }

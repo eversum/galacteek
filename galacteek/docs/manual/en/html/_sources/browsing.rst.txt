@@ -6,13 +6,30 @@ URL bar
 -------
 
 In the address bar you can type (or paste) a full URL, an
-IPFS CID or a full IPFS path (they will be loaded with the
-appropriate scheme).
+IPFS :term:`CID` or a full :term:`IPFS path` (they will be
+loaded with the appropriate scheme).
 
 You can also type words that you want to search for in the hashmarks
 database and the visited URLs history (search results will
 pop up after a short amount of time). Hitting the *Escape* key
 will hide the results.
+
+CID status icon
+^^^^^^^^^^^^^^^
+
+When you are browsing a valid page over IPFS, you will see an
+orange-colored IPFS cube or a blue-colored IPFS cube to the
+left of the address bar.
+
+When you see an orange cube, it means that you're browsing
+using the secure *ipfs://* URL scheme with a base32-encoded
+:term:`CID`.
+
+When you see a blue/aqua cube, it means that you're browsing
+using the *dweb:/* URL scheme.
+
+Clicking on the cube will open the DAG viewer for the page's
+IPFS object.
 
 Supported URL formats
 ---------------------
@@ -21,8 +38,8 @@ ipfs:// and ipns://
 ^^^^^^^^^^^^^^^^^^^
 
 These are the *native* URL schemes that support
-using base32-encoded CIDv1 strings as hostname
-(with the benefit of the CID becoming the URL's
+using base32-encoded (lowercase) :term:`CID` strings as
+hostname (with the benefit of the CID becoming the URL's
 authority). The following URL formats are supported::
 
     ipfs://{cidv1base32}/path/to/resource
@@ -33,14 +50,14 @@ Examples::
     ipfs://bafybeibp7sff6wwowsimitrxcpdoqnknyreesvtn24qrnx7gxkhqhzj2fi/
     ipns://ipfs.io/
 
-If you use a valid base58-encoded CID (whatever the CID version)
+If you use a valid base58-encoded :term:`CID` (whatever the CID version)
 with the *ipfs://* URL scheme, the CID will automatically be
 upgraded (v0 to v1) if necessary and its base32 representation will
 be used in the URL. For instance, trying to access::
 
     ipfs://QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco
 
-will trigger a CID upgrade and ultimately access the same object with
+will trigger a :term:`CID upgrade` and ultimately access the same object with
 its base32 representation at the following URL::
 
     ipfs://bafybeiemxf5abjwjbikoz4mc3a3dla6ual3jsgpdr4cjr3oz3evfyavhwq
@@ -52,13 +69,13 @@ dweb:/
 ^^^^^^
 
 This is the legacy scheme and it will automatically be used when
-accessing content rooted under CIDv0 objects.
+accessing content rooted under :term:`CIDv0` objects.
 
-Since version *0.4.12*, automatic CID upgrade is enabled as much
+Since version *0.4.12*, automatic :term:`CID upgrade` is enabled as much
 as possible, meaning that the *ipfs://* URL scheme will
 automatically be used whenever possible.
 IPNS paths using a base58 libp2p key will still be
-accessed using this scheme.
+accessed using the *dweb:/* scheme.
 
 Because it proxies the requests to the *go-ipfs* daemon's HTTP
 gateway, it can handle anything that the daemon supports::
@@ -76,13 +93,26 @@ Examples::
     dweb:/ipns/QmarwvLcWm51SwhnxABxsy1cE7v1RHPMjt4VkQ3kqsrdX3
     dweb:/ipns/awesome.ipfs.io
 
-ens://
-^^^^^^
+ens:// and ensr://
+^^^^^^^^^^^^^^^^^^
 
 There is support for accessing IPFS-hosted websites that are registered
-on the *Ethereum Name Service* (see ENS_). Just use **ens://mydomain.eth**
-for example as a URL in the browser and you will be redirected to the IPFS
-website referenced on ENS for this domain.
+on the *Ethereum Name Service* (see ENS_). The ENS domains are resolved
+via EthDNS.
+
+Just use **ens://mydomain.eth** or **ensr://mydomain.eth** for instance
+as a URL in the address bar.
+
+The *ensr://* URL scheme is a resolve-and-redirect scheme, meaning
+that you will be redirected to the IPFS website referenced on ENS,
+switching to the *ipfs://* scheme.
+
+The *ens://* URL scheme is a resolve-and-proxy scheme: rather than
+being redirected, the URL is preserved and the scheme handler
+transparently proxies the resolved IPFS object referenced in the
+DNSLink for this domain. *Note*: if the underlying website depends
+on the Javascript *window.location* variable to contain the IPFS
+path, use the *ensr* scheme.
 
 Go to `ens://blog.almonit.eth <ens://blog.almonit.eth>`_ to find a list
 of some ENS+IPFS websites.

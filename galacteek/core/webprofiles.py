@@ -9,6 +9,7 @@ from galacteek.dweb.webscripts import ethereumClientScripts
 
 from galacteek.core.schemes import SCHEME_DWEB
 from galacteek.core.schemes import SCHEME_ENS
+from galacteek.core.schemes import SCHEME_ENSR
 from galacteek.core.schemes import SCHEME_FS
 from galacteek.core.schemes import SCHEME_IPFS
 from galacteek.core.schemes import SCHEME_IPNS
@@ -58,7 +59,8 @@ class BaseProfile(QWebEngineProfile):
         for scheme in [SCHEME_IPFS, SCHEME_IPNS]:
             self.installHandler(scheme, self.app.nativeIpfsSchemeHandler)
 
-        self.installHandler(SCHEME_ENS, self.app.ensSchemeHandler)
+        self.installHandler(SCHEME_ENS, self.app.ensProxySchemeHandler)
+        self.installHandler(SCHEME_ENSR, self.app.ensSchemeHandler)
         self.installHandler(SCHEME_Q, self.app.qSchemeHandler)
 
 

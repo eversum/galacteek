@@ -163,33 +163,47 @@ class MFSItemModel(QStandardItemModel):
         self.qrInitialized = False
 
     def setupItemsFromProfile(self, profile):
-        self.itemHome = MFSRootItem(iHome(), path=profile.pathHome)
+        self.itemHome = MFSRootItem(iHome(),
+                                    path=profile.pathHome,
+                                    icon=getIcon('go-home.png'))
         self.itemImages = MFSRootItem(iImages(),
-                                      path=profile.pathImages)
+                                      path=profile.pathImages,
+                                      icon=getMimeIcon('image/x-generic'))
         self.itemPictures = MFSRootItem(iPictures(),
-                                        path=profile.pathPictures)
+                                        path=profile.pathPictures,
+                                        icon=getIcon('folder-pictures.png'))
         self.itemVideos = MFSRootItem(iVideos(),
-                                      path=profile.pathVideos)
+                                      path=profile.pathVideos,
+                                      icon=getIcon('folder-videos.png'))
         self.itemMusic = MFSRootItem(iMusic(),
-                                     path=profile.pathMusic)
+                                     path=profile.pathMusic,
+                                     icon=getIcon('folder-music.png'))
         self.itemCode = MFSRootItem(iCode(),
-                                    path=profile.pathCode)
+                                    path=profile.pathCode,
+                                    icon=getIcon('code-fork.png'))
         self.itemDocuments = MFSRootItem(iDocuments(),
-                                         path=profile.pathDocuments)
+                                         path=profile.pathDocuments,
+                                         icon=getIcon('folder-documents.png'))
         self.itemWebPages = MFSRootItem(iWebPages(),
-                                        path=profile.pathWebPages)
+                                        path=profile.pathWebPages,
+                                        icon=getMimeIcon('text/html'))
         self.itemDWebApps = MFSRootItem(iDWebApps(),
-                                        path=profile.pathDWebApps)
+                                        path=profile.pathDWebApps,
+                                        icon=getIcon('distributed.png'))
         self.itemQrCodes = MFSRootItem(iQrCodes(),
-                                       path=profile.pathQrCodes)
+                                       path=profile.pathQrCodes,
+                                       icon=getIcon('ipfs-qrcode.png'))
         self.itemTemporary = MFSRootItem(iTemporaryFiles(),
                                          alwaysOffline=True,
-                                         path=profile.pathTmp)
+                                         path=profile.pathTmp,
+                                         icon=getIcon('folder-temp.png'))
         self.itemEncrypted = MFSRootItem(iEncryptedFiles(),
                                          alwaysOffline=True,
-                                         path=profile.pathEncryptedFiles)
+                                         path=profile.pathEncryptedFiles,
+                                         icon=getIcon('key-diago.png'))
 
-        self.itemRoot.appendRows([
+        # Core MFS folders (visible in the "Link to MFS" folders)
+        self.fsCore = [
             self.itemHome,
             self.itemTemporary,
             self.itemPictures,
@@ -199,10 +213,18 @@ class MFSItemModel(QStandardItemModel):
             self.itemMusic,
             self.itemDocuments,
             self.itemWebPages,
-            self.itemDWebApps,
+            self.itemDWebApps
+        ]
+
+        # Extra folders
+        self.fsExtra = [
             self.itemQrCodes,
             self.itemEncrypted
-        ])
+        ]
+
+        self.filesystem = self.fsCore + self.fsExtra
+
+        self.itemRoot.appendRows(self.filesystem)
 
         self.initialized = True
 

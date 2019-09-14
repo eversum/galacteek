@@ -7,7 +7,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     <title>Browsing &#8212; galacteek  documentation</title>
-    <link rel="stylesheet" href="_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="_static/galacteek.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
     <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
     <script type="text/javascript" src="_static/jquery.js"></script>
@@ -16,16 +16,9 @@
     <script type="text/javascript" src="_static/language_data.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Multihash pyramids" href="pyramids.html" />
-    <link rel="prev" title="Hashmarks" href="hashmarks.html" />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Neuton&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nobile:regular,italic,bold,bolditalic&amp;subset=latin" type="text/css" media="screen" charset="utf-8" />
-<!--[if lte IE 6]>
-<link rel="stylesheet" href="_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
-<![endif]-->
-
+    <link rel="next" title="Pinning content" href="pinning.html" />
+    <link rel="prev" title="File manager" href="filemanager.html" /> 
   </head><body>
-
     <div class="related" role="navigation" aria-label="related navigation">
       <h3>Navigation</h3>
       <ul>
@@ -33,10 +26,10 @@
           <a href="genindex.html" title="General Index"
              accesskey="I">index</a></li>
         <li class="right" >
-          <a href="pyramids.html" title="Multihash pyramids"
+          <a href="pinning.html" title="Pinning content"
              accesskey="N">next</a> |</li>
         <li class="right" >
-          <a href="hashmarks.html" title="Hashmarks"
+          <a href="filemanager.html" title="File manager"
              accesskey="P">previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">galacteek  documentation</a> &#187;</li> 
       </ul>
@@ -52,20 +45,33 @@
 <div class="section" id="url-bar">
 <h2>URL bar<a class="headerlink" href="#url-bar" title="Permalink to this headline">¶</a></h2>
 <p>In the address bar you can type (or paste) a full URL, an
-IPFS CID or a full IPFS path (they will be loaded with the
-appropriate scheme).</p>
+IPFS <a class="reference internal" href="glossary.html#term-cid"><span class="xref std std-term">CID</span></a> or a full <a class="reference internal" href="glossary.html#term-ipfs-path"><span class="xref std std-term">IPFS path</span></a> (they will be
+loaded with the appropriate scheme).</p>
 <p>You can also type words that you want to search for in the hashmarks
 database and the visited URLs history (search results will
 pop up after a short amount of time). Hitting the <em>Escape</em> key
 will hide the results.</p>
+<div class="section" id="cid-status-icon">
+<h3>CID status icon<a class="headerlink" href="#cid-status-icon" title="Permalink to this headline">¶</a></h3>
+<p>When you are browsing a valid page over IPFS, you will see an
+orange-colored IPFS cube or a blue-colored IPFS cube to the
+left of the address bar.</p>
+<p>When you see an orange cube, it means that you’re browsing
+using the secure <em>ipfs://</em> URL scheme with a base32-encoded
+<a class="reference internal" href="glossary.html#term-cid"><span class="xref std std-term">CID</span></a>.</p>
+<p>When you see a blue/aqua cube, it means that you’re browsing
+using the <em>dweb:/</em> URL scheme.</p>
+<p>Clicking on the cube will open the DAG viewer for the page’s
+IPFS object.</p>
+</div>
 </div>
 <div class="section" id="supported-url-formats">
 <h2>Supported URL formats<a class="headerlink" href="#supported-url-formats" title="Permalink to this headline">¶</a></h2>
 <div class="section" id="ipfs-and-ipns">
 <h3>ipfs:// and ipns://<a class="headerlink" href="#ipfs-and-ipns" title="Permalink to this headline">¶</a></h3>
 <p>These are the <em>native</em> URL schemes that support
-using base32-encoded CIDv1 strings as hostname
-(with the benefit of the CID becoming the URL’s
+using base32-encoded (lowercase) <a class="reference internal" href="glossary.html#term-cid"><span class="xref std std-term">CID</span></a> strings as
+hostname (with the benefit of the CID becoming the URL’s
 authority). The following URL formats are supported:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ipfs</span><span class="p">:</span><span class="o">//</span><span class="p">{</span><span class="n">cidv1base32</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
 <span class="n">ipns</span><span class="p">:</span><span class="o">//</span><span class="p">{</span><span class="n">fqdn</span><span class="o">-</span><span class="k">with</span><span class="o">-</span><span class="n">dnslink</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
@@ -76,14 +82,14 @@ authority). The following URL formats are supported:</p>
 <span class="n">ipns</span><span class="p">:</span><span class="o">//</span><span class="n">ipfs</span><span class="o">.</span><span class="n">io</span><span class="o">/</span>
 </pre></div>
 </div>
-<p>If you use a valid base58-encoded CID (whatever the CID version)
+<p>If you use a valid base58-encoded <a class="reference internal" href="glossary.html#term-cid"><span class="xref std std-term">CID</span></a> (whatever the CID version)
 with the <em>ipfs://</em> URL scheme, the CID will automatically be
 upgraded (v0 to v1) if necessary and its base32 representation will
 be used in the URL. For instance, trying to access:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ipfs</span><span class="p">:</span><span class="o">//</span><span class="n">QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco</span>
 </pre></div>
 </div>
-<p>will trigger a CID upgrade and ultimately access the same object with
+<p>will trigger a <a class="reference internal" href="glossary.html#term-cid-upgrade"><span class="xref std std-term">CID upgrade</span></a> and ultimately access the same object with
 its base32 representation at the following URL:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ipfs</span><span class="p">:</span><span class="o">//</span><span class="n">bafybeiemxf5abjwjbikoz4mc3a3dla6ual3jsgpdr4cjr3oz3evfyavhwq</span>
 </pre></div>
@@ -94,12 +100,12 @@ use the <em>go-ipfs</em> daemon’s HTTP gateway</p>
 <div class="section" id="dweb">
 <h3>dweb:/<a class="headerlink" href="#dweb" title="Permalink to this headline">¶</a></h3>
 <p>This is the legacy scheme and it will automatically be used when
-accessing content rooted under CIDv0 objects.</p>
-<p>Since version <em>0.4.12</em>, automatic CID upgrade is enabled as much
+accessing content rooted under <a class="reference internal" href="glossary.html#term-cidv0"><span class="xref std std-term">CIDv0</span></a> objects.</p>
+<p>Since version <em>0.4.12</em>, automatic <a class="reference internal" href="glossary.html#term-cid-upgrade"><span class="xref std std-term">CID upgrade</span></a> is enabled as much
 as possible, meaning that the <em>ipfs://</em> URL scheme will
 automatically be used whenever possible.
 IPNS paths using a base58 libp2p key will still be
-accessed using this scheme.</p>
+accessed using the <em>dweb:/</em> scheme.</p>
 <p>Because it proxies the requests to the <em>go-ipfs</em> daemon’s HTTP
 gateway, it can handle anything that the daemon supports:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dweb</span><span class="p">:</span><span class="o">/</span><span class="n">ipfs</span><span class="o">/</span><span class="p">{</span><span class="n">cidv0</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
@@ -117,12 +123,22 @@ gateway, it can handle anything that the daemon supports:</p>
 </pre></div>
 </div>
 </div>
-<div class="section" id="ens">
-<h3>ens://<a class="headerlink" href="#ens" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="ens-and-ensr">
+<h3>ens:// and ensr://<a class="headerlink" href="#ens-and-ensr" title="Permalink to this headline">¶</a></h3>
 <p>There is support for accessing IPFS-hosted websites that are registered
-on the <em>Ethereum Name Service</em> (see <a class="reference external" href="https://ens.domains/">ENS</a>). Just use <strong>ens://mydomain.eth</strong>
-for example as a URL in the browser and you will be redirected to the IPFS
-website referenced on ENS for this domain.</p>
+on the <em>Ethereum Name Service</em> (see <a class="reference external" href="https://ens.domains/">ENS</a>). The ENS domains are resolved
+via EthDNS.</p>
+<p>Just use <strong>ens://mydomain.eth</strong> or <strong>ensr://mydomain.eth</strong> for instance
+as a URL in the address bar.</p>
+<p>The <em>ensr://</em> URL scheme is a resolve-and-redirect scheme, meaning
+that you will be redirected to the IPFS website referenced on ENS,
+switching to the <em>ipfs://</em> scheme.</p>
+<p>The <em>ens://</em> URL scheme is a resolve-and-proxy scheme: rather than
+being redirected, the URL is preserved and the scheme handler
+transparently proxies the resolved IPFS object referenced in the
+DNSLink for this domain. <em>Note</em>: if the underlying website depends
+on the Javascript <em>window.location</em> variable to contain the IPFS
+path, use the <em>ensr</em> scheme.</p>
 <p>Go to <a class="reference external" href="ens://blog.almonit.eth">ens://blog.almonit.eth</a> to find a list
 of some ENS+IPFS websites.</p>
 </div>
@@ -182,12 +198,15 @@ a <em>Web3</em> instance (from the <em>web3.js</em> JS library) available as
       </div>
       <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
         <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/galacteek.png" alt="Logo"/>
+            </a></p>
   <h4>Previous topic</h4>
-  <p class="topless"><a href="hashmarks.html"
-                        title="previous chapter">Hashmarks</a></p>
+  <p class="topless"><a href="filemanager.html"
+                        title="previous chapter">File manager</a></p>
   <h4>Next topic</h4>
-  <p class="topless"><a href="pyramids.html"
-                        title="next chapter">Multihash pyramids</a></p>
+  <p class="topless"><a href="pinning.html"
+                        title="next chapter">Pinning content</a></p>
 <div id="searchbox" style="display: none" role="search">
   <h3>Quick search</h3>
     <div class="searchformwrapper">
@@ -211,10 +230,10 @@ a <em>Web3</em> instance (from the <em>web3.js</em> JS library) available as
           <a href="genindex.html" title="General Index"
              >index</a></li>
         <li class="right" >
-          <a href="pyramids.html" title="Multihash pyramids"
+          <a href="pinning.html" title="Pinning content"
              >next</a> |</li>
         <li class="right" >
-          <a href="hashmarks.html" title="Hashmarks"
+          <a href="filemanager.html" title="File manager"
              >previous</a> |</li>
         <li class="nav-item nav-item-0"><a href="index.html">galacteek  documentation</a> &#187;</li> 
       </ul>

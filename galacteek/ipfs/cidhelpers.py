@@ -371,6 +371,8 @@ class IPFSPath:
         if not isinstance(self.input, str):
             return False
 
+        self._input = self._input.strip()
+
         if len(self.input) > self.maxLength:
             return False
 

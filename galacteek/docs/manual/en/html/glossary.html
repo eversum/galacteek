@@ -1,0 +1,168 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Glossary &#8212; galacteek  documentation</title>
+    <link rel="stylesheet" href="_static/galacteek.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/language_data.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Support for QR codes" href="qrcodes.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="qrcodes.html" title="Support for QR codes"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">galacteek  documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="glossary">
+<span id="galacteek-glossary"></span><h1>Glossary<a class="headerlink" href="#glossary" title="Permalink to this headline">¶</a></h1>
+<dl class="glossary docutils">
+<dt id="term-cid">CID</dt>
+<dd><p class="first">IPFS Content IDentifier.</p>
+<p>Identifies content in IPFS. There are two versions
+of identifiers: CIDv0 (in base58) and CIDv1 (can be represented
+in base58 or base32).</p>
+<p>CIDv0 examples (will always start with <em>Qm</em>):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">QmZGqE15BKQqrm6ADmnRyBLQSF1Ht16T9GSmp88vFxZ1Nu</span>
+<span class="n">QmUvdbNn65yvkxoGU3FBNbZWEpvR72LGiVAY15LYKRkY6k</span>
+</pre></div>
+</div>
+<p>CIDv1 examples:</p>
+<div class="last highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">zdj7WZ4rubKSt8YvKkLRg92HMU3X7HBhdM7p8azhuyTbe1zrG</span>
+<span class="n">bafybeidhx5nzmk4n7vj24wjbyx5lcvrxjdrrt5gg7rejzydfixqlwx7ae4</span>
+</pre></div>
+</div>
+</dd>
+<dt id="term-cidv0">CIDv0</dt>
+<dd>IPFS Content IDentifier (version 0)</dd>
+<dt id="term-cidv1">CIDv1</dt>
+<dd>IPFS Content IDentifier (version 1)</dd>
+<dt id="term-cid-upgrade">CID upgrade</dt>
+<dd>The process of converting/upgrading a <a class="reference internal" href="#term-cidv0"><span class="xref std std-term">CIDv0</span></a> (CID version 0)
+to a <a class="reference internal" href="#term-cidv1"><span class="xref std std-term">CIDv1</span></a> (CID version 1)</dd>
+<dt id="term-dag">DAG</dt>
+<dd><p class="first">Directed Acyclic Graph. From Wikipedia:</p>
+<div class="last highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">In</span> <span class="n">mathematics</span> <span class="ow">and</span> <span class="n">computer</span> <span class="n">science</span><span class="p">,</span> <span class="n">a</span> <span class="n">directed</span> <span class="n">acyclic</span> <span class="n">graph</span>
+<span class="p">(</span><span class="n">DAG</span> <span class="o">/</span><span class="n">ˈdæɡ</span><span class="o">/</span><span class="p">),</span> <span class="ow">is</span> <span class="n">a</span> <span class="n">finite</span> <span class="n">directed</span> <span class="n">graph</span> <span class="k">with</span> <span class="n">no</span> <span class="n">directed</span> <span class="n">cycles</span><span class="o">.</span>
+
+<span class="n">DAGs</span> <span class="n">can</span> <span class="n">model</span> <span class="n">many</span> <span class="n">different</span> <span class="n">kinds</span> <span class="n">of</span> <span class="n">information</span><span class="o">.</span>
+</pre></div>
+</div>
+</dd>
+<dt id="term-dweb">dweb</dt>
+<dd>The distributed web</dd>
+<dt id="term-galacteek">galacteek</dt>
+<dd>Browser for the distributed web</dd>
+<dt id="term-go-ipfs">go-ipfs</dt>
+<dd>IPFS daemon implementation in Go</dd>
+<dt id="term-dht">DHT</dt>
+<dd><p class="first">Distributed Hash Table</p>
+<p>From Wikipedia:</p>
+<div class="last highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">A</span> <span class="n">distributed</span> <span class="nb">hash</span> <span class="n">table</span> <span class="p">(</span><span class="n">DHT</span><span class="p">)</span> <span class="ow">is</span> <span class="n">a</span> <span class="k">class</span> <span class="nc">of</span> <span class="n">a</span> <span class="n">decentralized</span>
+<span class="n">distributed</span> <span class="n">system</span> <span class="n">that</span> <span class="n">provides</span> <span class="n">a</span> <span class="n">lookup</span> <span class="n">service</span> <span class="n">similar</span> <span class="n">to</span> <span class="n">a</span>
+<span class="nb">hash</span> <span class="n">table</span><span class="p">:</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="n">pairs</span> <span class="n">are</span> <span class="n">stored</span> <span class="ow">in</span> <span class="n">a</span> <span class="n">DHT</span><span class="p">,</span> <span class="ow">and</span> <span class="nb">any</span>
+<span class="n">participating</span> <span class="n">node</span> <span class="n">can</span> <span class="n">efficiently</span> <span class="n">retrieve</span> <span class="n">the</span> <span class="n">value</span> <span class="n">associated</span>
+<span class="k">with</span> <span class="n">a</span> <span class="n">given</span> <span class="n">key</span>
+</pre></div>
+</div>
+</dd>
+<dt id="term-ipfs">IPFS</dt>
+<dd><p class="first">InterPlanetary File System</p>
+<p><a class="reference external" href="https://www.ipfs.io">https://www.ipfs.io</a></p>
+<p class="last">ipns://ipfs.io</p>
+</dd>
+<dt id="term-ipfs-path">IPFS path</dt>
+<dd><p class="first">An IPFS path is a full path to an IPFS object. Examples:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">/</span><span class="n">ipfs</span><span class="o">/</span><span class="n">bafybeid534xc5jnyi4vgndvw7ngq72q7iadkloqyb5anh34ia7z3k32tw4</span><span class="o">/</span><span class="n">galacteek</span><span class="o">.</span><span class="n">png</span>
+<span class="o">/</span><span class="n">ipns</span><span class="o">/</span><span class="n">ipfs</span><span class="o">.</span><span class="n">io</span>
+</pre></div>
+</div>
+<p class="last"><a class="reference internal" href="#term-galacteek"><span class="xref std std-term">galacteek</span></a> uses full IPFS paths wherever possible to
+reference objects.</p>
+</dd>
+<dt id="term-js-ipfs">js-ipfs</dt>
+<dd>IPFS implementation in Javascript</dd>
+<dt id="term-merkle-tree">Merkle tree</dt>
+<dd>In cryptography and computer science, a hash tree or Merkle tree is
+a tree in which every non-leaf node is labelled with the cryptographic
+hash of the labels or values (in case of leaves) of its child nodes.
+Hash trees allow efficient and secure verification of the contents of
+large data structures. Hash trees are a generalization of hash lists
+and hash chains.</dd>
+<dt id="term-mfs">MFS</dt>
+<dd><p class="first">Mutable filesystem</p>
+<p class="last">The Mutable Filesystem is an IPFS feature that gives the
+ability to manipulate IPFS objects as if they were part
+of a unix filesystem . This is used by the filemanager.</p>
+</dd>
+</dl>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/galacteek.png" alt="Logo"/>
+            </a></p>
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="qrcodes.html"
+                        title="previous chapter">Support for QR codes</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="qrcodes.html" title="Support for QR codes"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">galacteek  documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2019, galacteek.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.8.5.
+    </div>
+  </body>
+</html>

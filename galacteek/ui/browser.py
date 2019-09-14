@@ -1,6 +1,7 @@
 import functools
 import os.path
 import re
+import aioipfs
 
 from PyQt5.QtWidgets import QDialog
 from PyQt5.QtWidgets import QAction
@@ -68,6 +69,7 @@ from galacteek.dweb.render import renderTemplate
 from galacteek.dweb.htmlparsers import IPFSLinksParser
 
 from . import ui_browsertab
+from .dag import DAGViewer
 from .pin import PinBatchWidget, PinBatchTab
 from .helpers import *
 from .dialogs import *
@@ -104,9 +106,9 @@ def iDownload():
     return QCoreApplication.translate('BrowserTabForm', 'Download')
 
 
-def iSaveWebPage():
+def iSaveContainedWebPage():
     return QCoreApplication.translate(
-        'BrowserTabForm', 'Save page to the "Web Pages" folder')
+        'BrowserTabForm', 'Save full webpage to the "Web Pages" folder')
 
 
 def iJsConsole():
@@ -123,6 +125,10 @@ def iPinThisPage():
 
 def iPinRecursive():
     return QCoreApplication.translate('BrowserTabForm', 'PIN (recursive)')
+
+
+def iLinkToMfsFolder():
+    return QCoreApplication.translate('BrowserTabForm', 'Link to folder (MFS)')
 
 
 def iFollow():
@@ -423,6 +429,23 @@ class WebView(IPFSWebView):
 
         self.linkInfoTimer.start(2200)
 
+    def contextMenuCreateDefault(self):
+        """
+        Default context menu (returned for non-link rclicks)
+        """
+        menu = QMenu(self)
+        menu.addAction(self.pageAction(QWebEnginePage.Back))
+        menu.addAction(self.pageAction(QWebEnginePage.Forward))
+        menu.addSeparator()
+        menu.addAction(self.pageAction(QWebEnginePage.Reload))
+        menu.addAction(self.pageAction(QWebEnginePage.ReloadAndBypassCache))
+        menu.addSeparator()
+        menu.addAction(self.pageAction(QWebEnginePage.Cut))
+        menu.addAction(self.pageAction(QWebEnginePage.Copy))
+        menu.addSeparator()
+        menu.addAction(self.pageAction(QWebEnginePage.ViewSource))
+        return menu
+
     def contextMenuEvent(self, event):
         # TODO: cleanup and refactoring provably
 
@@ -434,7 +457,7 @@ class WebView(IPFSWebView):
         mediaUrl = contextMenuData.mediaUrl()
 
         if not url.isValid() and not mediaUrl.isValid():
-            menu = currentPage.createStandardContextMenu()
+            menu = self.contextMenuCreateDefault()
             menu.exec(event.globalPos())
             return
 
@@ -485,7 +508,7 @@ class WebView(IPFSWebView):
                         iMenu.addAction(
                             getIcon('atom-feed.png'),
                             'Follow Atom feed',
-                            lambda: self.onFollowTheAtom(path)
+                            functools.partial(self.onFollowTheAtom, path)
                         )
             ensure(
                 analyzer(ipfsPath),
@@ -787,17 +810,26 @@ class URLInputWidget(QLineEdit):
 class CIDInfosDisplay(QObject):
     objectVisited = pyqtSignal(IPFSPath)
 
+    dagViewRequested = pyqtSignal(IPFSPath)
+
     tooltipMessage = '''
         <p>
-            <img src='{icon}' width='32' height='32'/>
+          <img src='{icon}' width='32' height='32'/>
         </p>
         <p>Root CID: CIDv{cidv} {more} <b>{cid}</b></p>
+        <div style='font-size: 200%;'>
+        <p>
+          <b>Click on the cube</b> to get a view of the DAG for this page
+        </p>
+        </div>
     '''
 
     def __init__(self, label, parent=None):
         super(CIDInfosDisplay, self).__init__(parent)
 
         self.cidLabel = label
+        self.cidLabel.mousePressEvent = self.labelMouseEvent
+        self.currentPath = None
         self.objectVisited.connect(self.onVisited)
 
         self.pathCubeOrange = ':/share/icons/cube-nova-orange.png'
@@ -806,7 +838,12 @@ class CIDInfosDisplay(QObject):
         self.pixmapCubeOrange = QPixmap.fromImage(QImage(self.pathCubeOrange))
         self.pixmapCubeAqua = QPixmap.fromImage(QImage(self.pathCubeAqua))
 
+    def labelMouseEvent(self, event):
+        if event.button() == Qt.LeftButton and self.currentPath:
+            self.dagViewRequested.emit(self.currentPath)
+
     def onVisited(self, ipfsPath):
+        self.currentPath = ipfsPath
         cidRepr = ipfsPath.rootCidRepr
 
         if ipfsPath.rootCidUseB32:
@@ -856,6 +893,7 @@ class BrowserTab(GalacteekTab):
 
         self.cidInfosDisplay = CIDInfosDisplay(self.ui.cidInfoLabel,
                                                parent=self)
+        self.cidInfosDisplay.dagViewRequested.connect(self.onDagViewRequested)
 
         initialProfileName = self.app.settingsMgr.defaultWebProfile
         if initialProfileName not in self.app.availableWebProfilesNames():
@@ -888,16 +926,8 @@ class BrowserTab(GalacteekTab):
 
         self.ui.linkInfosLabel.setObjectName('linkInfos')
 
-        # Save page button, visible when non-IPFS content is displayed
-        saveIcon = getMimeIcon('text/html')
-        self.savePageButton = PopupToolButton(
-            saveIcon, mode=QToolButton.InstantPopup, parent=self
-        )
-        self.savePageButton.setToolTip(iSaveWebPage())
-        self.savePageButton.menu.addAction(saveIcon,
-                                           iSaveWebPage(),
-                                           self.onSavePage)
-        self.savePageButton.setEnabled(False)
+        # Page ops button
+        self.createPageOpsButton()
 
         self.hashmarkPageAction = QAction(getIcon('hashmark-black.png'),
                                           iHashmarkThisPage(), self,
@@ -906,7 +936,7 @@ class BrowserTab(GalacteekTab):
         self.ui.hashmarkThisPage.setDefaultAction(self.hashmarkPageAction)
         self.ui.hashmarkThisPage.setEnabled(False)
 
-        self.ui.hLayoutCtrl.addWidget(self.savePageButton)
+        self.ui.hLayoutCtrl.addWidget(self.pageOpsButton)
 
         # Setup the IPFS control tool button (has actions
         # for browsing CIDS and web profiles etc..)
@@ -1015,6 +1045,9 @@ class BrowserTab(GalacteekTab):
                           self.onPinRecursiveParent)
         pinMenu.addSeparator()
         pinMenu.addAction(iconPin, iPinPageLinks(), self.onPinPageLinks)
+        pinMenu.addSeparator()
+        pinMenu.addAction(getIcon('help.png'), iHelp(), functools.partial(
+            self.app.manuals.browseManualPage, 'pinning.html'))
 
         self.ui.pinToolButton.setMenu(pinMenu)
         self.ui.pinToolButton.setIcon(iconPin)
@@ -1090,6 +1123,84 @@ class BrowserTab(GalacteekTab):
     def currentIpfsObject(self):
         return self._currentIpfsObject
 
+    def createPageOpsButton(self):
+        icon = getMimeIcon('text/html')
+        self.pageOpsButton = PopupToolButton(
+            icon, mode=QToolButton.InstantPopup, parent=self
+        )
+        self.pageOpsButton.menu.addAction(
+            icon, iSaveContainedWebPage(), self.onSavePageContained)
+
+        ensure(self.createPageOpsMfsMenu())
+
+    @ipfsOp
+    async def createPageOpsMfsMenu(self, ipfsop):
+        self.mfsMenu = QMenu(iLinkToMfsFolder(), self)
+        self.mfsMenu.setIcon(getIcon('folder-open-black.png'))
+        self.mfsMenu.triggered.connect(self.onMoveToMfsMenuTriggered)
+
+        profile = ipfsop.ctx.currentProfile
+        filesystem = profile.filesModel.fsCore
+
+        for item in filesystem:
+            icon = item.icon()
+            action = QAction(icon, item.text(), self)
+            action.setData(item)
+            self.mfsMenu.addAction(action)
+            self.mfsMenu.addSeparator()
+
+        self.pageOpsButton.menu.addSeparator()
+        self.pageOpsButton.menu.addMenu(self.mfsMenu)
+
+    def onMoveToMfsMenuTriggered(self, action):
+        mfsItem = action.data()
+
+        if not mfsItem:
+            return
+
+        if not self.currentIpfsObject:
+            # ERR
+            return
+
+        cTitle = self.currentPageTitle if self.currentPageTitle else ''
+
+        runDialog(
+            TitleInputDialog, cTitle,
+            accepted=functools.partial(
+                self.onMoveToMfsWithTitle,
+                self.currentIpfsObject,
+                mfsItem
+            )
+        )
+
+    def onMoveToMfsWithTitle(self, ipfsPath, mfsItem, dialog):
+        cTitle = dialog.tEdit.text().replace('/', '_')
+        if not cTitle:
+            return messageBox('Invalid title')
+
+        ensure(self.linkPageToMfs(ipfsPath, mfsItem, cTitle))
+
+    @ipfsOp
+    async def linkPageToMfs(self, ipfsop, ipfsPath, mfsItem, cTitle):
+        basename = ipfsPath.basename
+        print(cTitle, basename)
+
+        dest = os.path.join(mfsItem.path, cTitle.strip())
+
+        if basename and not (ipfsPath.isIpfsRoot or ipfsPath.isIpnsRoot):
+            await ipfsop.filesMkdir(dest)
+            dest = os.path.join(dest, basename)
+
+        try:
+            await ipfsop.client.files.cp(
+                ipfsPath.objPath,
+                dest
+            )
+        except aioipfs.APIError:
+            messageBox('Error while linking')
+
+        self.pinPath(ipfsPath.objPath, recursive=True, notify=True)
+
     def installCustomPageScripts(self, handler, url):
         # Page-specific IPFS scripts
 
@@ -1119,6 +1230,15 @@ class BrowserTab(GalacteekTab):
                 scripts.remove(existing)
 
             scripts.insert(script)
+
+    def onDagViewRequested(self, ipfsPath):
+        view = DAGViewer(ipfsPath.objPath, self.app.mainWindow)
+        self.app.mainWindow.registerTab(
+            view, iDagViewer(),
+            current=True,
+            icon=getIcon('ipld.png'),
+            tooltip=str(ipfsPath)
+        )
 
     def onPathVisited(self, ipfsPath):
         # Called after a new IPFS object has been loaded in this tab
@@ -1230,7 +1350,7 @@ class BrowserTab(GalacteekTab):
             QWebEnginePage.Reload
         )
 
-    def onSavePage(self):
+    def onSavePageContained(self):
         tmpd = self.app.tempDirCreate(self.app.tempDirWeb)
         if tmpd is None:
             return messageBox('Cannot create temporary directory')
@@ -1523,7 +1643,6 @@ class BrowserTab(GalacteekTab):
 
     def onLoadFinished(self, ok):
         self.ui.stopButton.setEnabled(False)
-        self.savePageButton.setEnabled(True)
 
     def onIconChanged(self, icon):
         self.gWindow.tabWidget.setTabIcon(self.tabPageIdx, icon)
@@ -1582,7 +1701,6 @@ class BrowserTab(GalacteekTab):
         self.urlZone.urlEditing = False
         self.urlZone.clearFocus()
 
-        self.savePageButton.setEnabled(False)
         log.debug('Entering URL {}'.format(url.toString()))
 
         handler = self.webEngineView.webProfile.urlSchemeHandler(

@@ -17,6 +17,11 @@ def iGeneralError(msg):
                                       'General error: {0}').format(msg)
 
 
+def iIpfsError(msg):
+    return QCoreApplication.translate('GalacteekWindow',
+                                      'IPFS error: {0}').format(msg)
+
+
 def iErrNoCx():
     return QCoreApplication.translate(
         'GalacteekWindow',
@@ -271,6 +276,10 @@ def iIpfsQrCodes():
 
 def iIpfsQrEncode():
     return QCoreApplication.translate('GalacteekWindow', 'QR encoding')
+
+
+def iTitle():
+    return QCoreApplication.translate('GalacteekWindow', 'Title')
 
 
 def iNoTitle():

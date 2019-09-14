@@ -12,7 +12,9 @@ from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtCore import QFile
 from PyQt5.QtCore import QIODevice
 
-from galacteek import log, logUser, ensure
+from galacteek import log
+from galacteek import logUser
+from galacteek import ensure
 
 from galacteek.ipfs import ipfsOpFn
 from galacteek.ipfs.mutable import MutableIPFSJson, CipheredIPFSJson

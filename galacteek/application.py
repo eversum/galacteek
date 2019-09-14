@@ -48,7 +48,8 @@ from galacteek.core.signaltowers import URLSchemesTower
 
 from galacteek.core.schemes import SCHEME_MANUAL
 from galacteek.core.schemes import DWebSchemeHandler
-from galacteek.core.schemes import ENSWhoisSchemeHandler
+from galacteek.core.schemes import EthDNSSchemeHandler
+from galacteek.core.schemes import EthDNSProxySchemeHandler
 from galacteek.core.schemes import NativeIPFSSchemeHandler
 from galacteek.core.schemes import ObjectProxySchemeHandler
 from galacteek.core.schemes import MultiObjectHostSchemeHandler
@@ -778,7 +779,8 @@ class GalacteekApplication(QApplication):
 
     def setupSchemeHandlers(self):
         self.ipfsSchemeHandler = DWebSchemeHandler(self)
-        self.ensSchemeHandler = ENSWhoisSchemeHandler(self)
+        self.ensSchemeHandler = EthDNSSchemeHandler(self)
+        self.ensProxySchemeHandler = EthDNSProxySchemeHandler(self)
         self.nativeIpfsSchemeHandler = NativeIPFSSchemeHandler(self)
         self.qSchemeHandler = MultiObjectHostSchemeHandler(self)
 
