@@ -16,6 +16,13 @@
     font: 11pt "Montserrat";
 }
 
+QToolTip {
+    border: 1px solid black;
+    border-radius: 4px;
+    padding: 2px;
+    background-color: #C3D7DF;
+}
+
 QWidget#centralWidget {
     padding: 0px;
     margin: 0px;
@@ -31,10 +38,10 @@ QTabBar::tab {
     text-align: center;
     min-width: 170px;
     background-color: #7f8491;
-    border-radius: 2px;
     padding-left: 4px;
     padding-right: 4px;
     padding-top: 2px;
+    font: 11pt "Inter UI";
 }
 
 QTabBar::tab:selected {
@@ -169,7 +176,8 @@ QToolButton#jsConsoleButton::checked {
 QTreeView#historySearchResults {
     background-color: #B7CDC2;
     margin: 4px;
-    font: 10pt "Courier";
+    margin-left: 12px;
+    font: 11pt "Inter UI";
 }
 
 QLabel#ipfsStatusLabel {
@@ -178,5 +186,16 @@ QLabel#ipfsStatusLabel {
 }
 
 QLineEdit#urlZone {
+    font: 12pt "Inter UI";
+}
+
+QTreeWidget::item#dagTree {
+    margin-left: 4px;
+    margin-right: 4px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+QTreeWidgetdagTree {
     font: 12pt "Inter UI";
 }

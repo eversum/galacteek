@@ -23,7 +23,7 @@ from .widgets import GalacteekTab
 from .helpers import *
 
 from .i18n import iUnknown
-from .i18n import iMultihash
+from .i18n import iP2PKey
 
 
 def iKeyName():
@@ -74,7 +74,7 @@ class KeysView(QTreeView):
         QTreeView.mousePressEvent(self, event)
 
 
-class KeyMultihashItem(UneditableItem):
+class KeyItem(UneditableItem):
     pass
 
 
@@ -114,7 +114,7 @@ class KeysTab(GalacteekTab):
         self.model.clear()
         self.model.setColumnCount(3)
         self.model.setHorizontalHeaderLabels([
-            iKeyName(), iMultihash(), iKeyResolve()])
+            iKeyName(), iP2PKey(), iKeyResolve()])
         self.ui.treeKeys.header().setSectionResizeMode(
             0, QHeaderView.ResizeToContents)
         self.ui.treeKeys.header().setSectionResizeMode(
@@ -160,7 +160,7 @@ class KeysTab(GalacteekTab):
             resolveItem = KeyResolvedItem('')
             self.model.appendRow([
                 nameItem,
-                KeyMultihashItem(key['Id']),
+                KeyItem(key['Id']),
                 resolveItem
             ])
 

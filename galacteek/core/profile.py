@@ -547,15 +547,13 @@ class UserProfile(QObject):
             self.userLogInfo('Error while initializing crypto')
             raise ProfileError('Crypto init failed')
 
-        keysNames = await ipfsop.keysNames()
-
-        if self.keyRoot not in keysNames:
-            self.userLogInfo('Generating main IPNS key')
-            await ipfsop.keyGen(self.keyRoot)
-
         key = await ipfsop.keyFind(self.keyRoot)
         if key is not None:
             self.keyRootId = key.get('Id', None)
+        else:
+            self.userLogInfo('Generating main IPNS key')
+            result = await ipfsop.keyGen(self.keyRoot)
+            self.keyRootId = result.get('Id', None)
 
         self.debug('IPNS key({0}): {1}'.format(self.keyRoot, self.keyRootId))
 

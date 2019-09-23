@@ -38,6 +38,17 @@
           </widget>
          </item>
          <item>
+          <widget class="QToolButton" name="fsOptionsButton">
+           <property name="text">
+            <string/>
+           </property>
+           <property name="icon">
+            <iconset resource="galacteek.qrc">
+             <normaloff>:/share/icons/settings.png</normaloff>:/share/icons/settings.png</iconset>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QComboBox" name="pathSelector"/>
          </item>
          <item>

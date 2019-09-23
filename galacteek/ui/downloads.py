@@ -122,10 +122,10 @@ class DownloadsManager(QObject):
             if entry is None:
                 return
 
-            multihash = entry.get('Hash')
-            logUser.debug('Saved webpage to {}'.format(multihash))
+            cid = entry.get('Hash')
+            logUser.debug('Saved webpage to {}'.format(cid))
 
-            if curProfile and multihash:
+            if curProfile and cid:
                 curProfile.webPageSaved.emit(entry, title)
 
             self.app.systemTrayMessage('Downloads', iPageSaved(title))

@@ -5,6 +5,28 @@ def qtr(ctx, msg):
     return QCoreApplication.translate(ctx, msg)
 
 
+# CID
+
+def iCID():
+    return QCoreApplication.translate('GalacteekWindow', 'CID')
+
+
+def iCIDv0():
+    return QCoreApplication.translate('GalacteekWindow', 'CIDv0')
+
+
+def iCIDv1():
+    return QCoreApplication.translate('GalacteekWindow', 'CIDv1')
+
+
+def iP2PKey():
+    return QCoreApplication.translate('GalacteekWindow', 'P2P key')
+
+
+def iUnixFSNode():
+    return QCoreApplication.translate('GalacteekWindow', 'UnixFS node')
+
+
 # Main window messages
 
 
@@ -92,7 +114,7 @@ def iMultihash():
 
 
 def iMimeType():
-    return QCoreApplication.translate('IPFSTreeView', 'Mime type')
+    return QCoreApplication.translate('IPFSTreeView', 'MIME type')
 
 
 def iPinSuccess(path):
@@ -193,6 +215,10 @@ def iDagViewer():
     return QCoreApplication.translate('GalacteekWindow', 'DAG viewer')
 
 
+def iDagView():
+    return QCoreApplication.translate('GalacteekWindow', 'DAG view')
+
+
 def iLocalHashmarksCount(count):
     return QCoreApplication.translate(
         'GalacteekWindow',
@@ -245,7 +271,11 @@ def iRemove():
 
 
 def iInvalidInput():
-    return QCoreApplication.translate('Galacteek', 'Invalid input')
+    return QCoreApplication.translate('GalacteekWindow', 'Invalid input')
+
+
+def iInvalidCID():
+    return QCoreApplication.translate('GalacteekWindow', 'Invalid CID')
 
 
 def iCannotResolve(objPath):

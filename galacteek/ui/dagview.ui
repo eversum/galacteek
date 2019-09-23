@@ -17,25 +17,49 @@
    <item>
     <layout class="QVBoxLayout" name="verticalLayout">
      <item>
-      <widget class="QLabel" name="dagHash">
-       <property name="text">
-        <string/>
-       </property>
-       <property name="textInteractionFlags">
-        <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByMouse</set>
-       </property>
-      </widget>
+      <layout class="QHBoxLayout" name="horizontalLayout">
+       <item>
+        <widget class="QLabel" name="dagPath">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="textInteractionFlags">
+          <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByMouse</set>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="collapseButton">
+         <property name="text">
+          <string>Collapse tree</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="expandButton">
+         <property name="text">
+          <string>Expand tree</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
      </item>
      <item>
       <widget class="QTreeWidget" name="dagTree">
        <property name="columnCount">
         <number>2</number>
        </property>
+       <attribute name="headerVisible">
+        <bool>false</bool>
+       </attribute>
        <attribute name="headerDefaultSectionSize">
         <number>200</number>
        </attribute>
        <attribute name="headerMinimumSectionSize">
         <number>180</number>
+       </attribute>
+       <attribute name="headerStretchLastSection">
+        <bool>false</bool>
        </attribute>
        <column>
         <property name="text">

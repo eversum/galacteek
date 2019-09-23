@@ -111,13 +111,12 @@ class QuickAccessToolBar(QToolBar, URLDragAndDropProcessor):
         path = str(ipfsPath)
 
         try:
-            with await self.lock:
-                mark = self.app.marksLocal.find(path)
-                if not mark:
-                    # Quick access without hashmark
-                    await self.registerSimple(ipfsPath)
-                else:
-                    await self.registerHashmark(mark)
+            mark = self.app.marksLocal.find(path)
+            if not mark:
+                # Quick access without hashmark
+                await self.registerSimple(ipfsPath)
+            else:
+                await self.registerHashmark(mark)
         except Exception as err:
             log.debug('Error while processing object: {0} {1}'.format(
                 ipfsPath, str(err)))
@@ -263,7 +262,7 @@ class QuickAccessToolBar(QToolBar, URLDragAndDropProcessor):
         await self.load()
 
         for path in self.config['objects']:
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.05)
 
             ipfsPath = IPFSPath(path)
             if not ipfsPath.valid:

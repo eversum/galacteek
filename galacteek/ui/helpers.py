@@ -1,5 +1,7 @@
 import os
 import functools
+import binascii
+import multihash
 
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtGui import QImage
@@ -20,6 +22,7 @@ from PyQt5.QtWidgets import QMenu
 
 from galacteek import ensure
 from galacteek.ipfs.mimetype import mimeTypeDag
+from galacteek.ipfs.cidhelpers import getCID
 
 from .i18n import iIpfsQrCodes
 
@@ -331,3 +334,28 @@ def qrCodesMenuBuilder(urls, resourceOpener, parent=None):
                 icon, str(url), functools.partial(
                     ensure, resourceOpener.open(url)))
         return menu
+
+
+def cidInfosMarkup(cidString):
+    try:
+        cid = getCID(cidString)
+        mhash = multihash.decode(cid.multihash)
+    except:
+        return '<p>Invalid CID</p>'
+
+    return '''
+    <p>CID version {cidv}</p>
+
+    <p>Codec: <b>{codec}</b></p>
+    <p>Multihash function: <b>{mhashfunc}</b></p>
+    <p>Multihash function code: {mhashfuncvalue}
+        (<b>{mhashfuncvaluehex}</b>)</p>
+    <p>Multihash digest: <b>{mhashdigest}</b></p>
+    <p>Multihash: <b>{mhashascii}</b></p>
+    '''.format(cidv=cid.version,
+               codec=cid.codec,
+               mhashfunc=mhash.func.name,
+               mhashfuncvalue=mhash.func.value,
+               mhashfuncvaluehex=hex(mhash.func.value),
+               mhashdigest=binascii.b2a_hex(mhash.digest).decode('ascii'),
+               mhashascii=binascii.b2a_hex(cid.multihash).decode('ascii'))

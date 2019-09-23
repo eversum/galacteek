@@ -5,6 +5,7 @@ import async_timeout
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QAction
+from PyQt5.QtWidgets import QActionGroup
 from PyQt5.QtWidgets import QFileDialog
 from PyQt5.QtWidgets import QTreeView
 from PyQt5.QtWidgets import QMenu
@@ -36,11 +37,12 @@ from galacteek.core.models.mfs import MFSNameItem
 from galacteek.core.models.mfs import MFSRootItem
 
 from . import ui_files
+from . import dag
 from .i18n import *  # noqa
 from .helpers import *  # noqa
 from .widgets import GalacteekTab
 from .hashmarks import *  # noqa
-from .clipboard import iCopyMultihashToClipboard
+from .clipboard import iCopyCIDToClipboard
 from .clipboard import iCopyPathToClipboard
 
 import aioipfs
@@ -134,6 +136,30 @@ def iDhtProvideRecursive():
         'Announce (DHT provide, recursive)')
 
 
+def iRawBlocksForLeaves():
+    return QCoreApplication.translate(
+        'FileManagerForm',
+        'Use raw blocks for leaf nodes')
+
+
+def iDAGGenerationFormat():
+    return QCoreApplication.translate(
+        'FileManagerForm',
+        'DAG generation format')
+
+
+def iDAGFormatBalanced():
+    return QCoreApplication.translate(
+        'FileManagerForm',
+        'Balanced')
+
+
+def iDAGFormatTrickle():
+    return QCoreApplication.translate(
+        'FileManagerForm',
+        'Trickle')
+
+
 def iOfflineModeToolTip():
     return QCoreApplication.translate(
         'FileManagerForm',
@@ -181,6 +207,43 @@ class FileManager(QWidget):
         self.ui.localFileManagerSwitch.toggled.connect(
             self.onLocalFileManagerToggled)
         self.ui.fileManagerButton.clicked.connect(self.onLocalFileManager)
+
+        # FS options button
+        fsOptsMenu = QMenu(self)
+        fsDagFormatMenu = QMenu(iDAGGenerationFormat(), self)
+        fsDagFormatMenu.setIcon(getIcon('ipld.png'))
+
+        fsMiscOptsMenu = QMenu('Options', self)
+        fsMiscOptsMenu.setIcon(getIcon('folder-black.png'))
+
+        self.rawLeavesAction = QAction(
+            iRawBlocksForLeaves(), fsMiscOptsMenu)
+        self.rawLeavesAction.setCheckable(True)
+
+        fsMiscOptsMenu.addAction(self.rawLeavesAction)
+
+        self.dagFormatGroup = QActionGroup(fsDagFormatMenu)
+        self.dagFormatGroup.triggered.connect(self.onDagFormatChanged)
+
+        self.dagFormatBalancedAction = QAction(
+            iDAGFormatBalanced(), self.dagFormatGroup)
+        self.dagFormatBalancedAction.setCheckable(True)
+        self.dagFormatBalancedAction.setChecked(True)
+        self.dagFormatTrickleAction = QAction(
+            iDAGFormatTrickle(), self.dagFormatGroup)
+        self.dagFormatTrickleAction.setCheckable(True)
+
+        self.dagFormatGroup.addAction(self.dagFormatBalancedAction)
+        self.dagFormatGroup.addAction(self.dagFormatTrickleAction)
+
+        fsDagFormatMenu.addActions(self.dagFormatGroup.actions())
+
+        fsOptsMenu.addMenu(fsDagFormatMenu)
+        fsOptsMenu.addSeparator()
+        fsOptsMenu.addMenu(fsMiscOptsMenu)
+
+        self.ui.fsOptionsButton.setPopupMode(QToolButton.InstantPopup)
+        self.ui.fsOptionsButton.setMenu(fsOptsMenu)
 
         # Offline mode button
         self.ui.offlineButton.setObjectName('filemanagerOfflineButton')
@@ -245,6 +308,19 @@ class FileManager(QWidget):
             return self.displayedItem.offline
 
         return self._offlineMode
+
+    @property
+    def dagGenerationFormat(self):
+        cAction = self.dagFormatGroup.checkedAction()
+        if cAction is self.dagFormatBalancedAction:
+            return 'balanced'
+        elif cAction is self.dagFormatTrickleAction:
+            return 'trickle'
+        return 'unknown'
+
+    @property
+    def useRawLeaves(self):
+        return self.rawLeavesAction.isChecked()
 
     @property
     def displayPath(self):
@@ -402,6 +478,9 @@ class FileManager(QWidget):
         if currentIdx.isValid():
             return self.model.getNameItemFromIdx(currentIdx)
 
+    def onDagFormatChanged(self, action):
+        print(action)
+
     def onIconSize(self, index):
         size = None
 
@@ -557,8 +636,8 @@ class FileManager(QWidget):
         ipfsPath = nameItem.fullPath
         menu = QMenu()
 
-        def explore(multihash):
-            self.gWindow.explore(multihash)
+        def explore(cid):
+            self.gWindow.explore(cid)
 
         def hashmark(mPath, name):
             addHashmark(self.app.marksLocal, mPath, name)
@@ -577,7 +656,7 @@ class FileManager(QWidget):
                                              mediaName=name)
 
         menu.addAction(getIcon('clipboard.png'),
-                       iCopyMultihashToClipboard(),
+                       iCopyCIDToClipboard(),
                        functools.partial(self.app.setClipboardText, dataHash))
         if nameItem.fullPath:
             menu.addAction(getIcon('clipboard.png'),
@@ -589,6 +668,10 @@ class FileManager(QWidget):
             self.onDhtProvide, dataHash, False))
         menu.addAction(getIconIpfs64(), iDhtProvideRecursive(),
                        functools.partial(self.onDhtProvide, dataHash, True))
+        menu.addSeparator()
+
+        menu.addAction(getIcon('ipld.png'), iDagView(),
+                       functools.partial(self.onDagView, dataHash))
         menu.addSeparator()
 
         menu.addAction(getIcon('hashmarks.png'),
@@ -656,7 +739,16 @@ class FileManager(QWidget):
         self.gWindow.addBrowserTab().browseFsPath(
             IPFSPath(path, autoCidConv=True))
 
-    def onDhtProvide(self, multihash, recursive):
+    def onDagView(self, cid):
+        view = dag.DAGViewer(joinIpfs(cid), self.app.mainWindow)
+        self.app.mainWindow.registerTab(
+            view, iDagViewer(),
+            current=True,
+            icon=getIcon('ipld.png'),
+            tooltip=cid
+        )
+
+    def onDhtProvide(self, cid, recursive):
         @ipfsOpFn
         async def dhtProvide(ipfsop, value, recursive=True):
             if await ipfsop.provide(value, recursive=recursive) is True:
@@ -664,7 +756,7 @@ class FileManager(QWidget):
             else:
                 logUser.info('{0}: DHT provide error'.format(value))
 
-        ensure(dhtProvide(multihash, recursive=recursive))
+        ensure(dhtProvide(cid, recursive=recursive))
 
     def editFile(self, ipfsPath):
         self.gWindow.addEditorTab(path=ipfsPath)
@@ -773,19 +865,19 @@ class FileManager(QWidget):
 
         return self.app.task(self.addDirectory, path)
 
-    def scheduleUnlink(self, item, multihash):
+    def scheduleUnlink(self, item, cid):
         reply = questionBox('Unlink',
                             'Do you really want to unlink this item ?')
         if reply:
-            ensure(self.unlinkFileFromHash(item, multihash))
+            ensure(self.unlinkFileFromHash(item, cid))
 
-    def scheduleDelete(self, item, multihash):
+    def scheduleDelete(self, item, cid):
         reply = questionBox(
             'Delete',
-            'Do you really want to delete: <b>{}</b>'.format(multihash)
+            'Do you really want to delete: <b>{}</b>'.format(cid)
         )
         if reply:
-            ensure(self.deleteFromMultihash(item, multihash))
+            ensure(self.deleteFromCID(item, cid))
 
     def updateTree(self):
         self.app.task(self.listFiles, self.displayPath,
@@ -852,7 +944,7 @@ class FileManager(QWidget):
                 if child.entry['Name'] == entry['Name']:
                     if entry['Hash'] != child.entry['Hash']:
                         # The parent has a child item with the same
-                        # filename but a different multihash: this item
+                        # filename but a different cid: this item
                         # was deleted and needs to be purged from the model
                         # to let the new entry show up
                         await modelhelpers.modelDeleteAsync(
@@ -869,11 +961,13 @@ class FileManager(QWidget):
             if entry['Type'] == 1:  # directory
                 icon = self.iconFolder
 
+            cidString = cidConvertBase32(entry['Hash'])
             nItemName = MFSNameItem(entry, entry['Name'], icon)
             nItemName.mimeFromDb(self.app.mimeDb)
             nItemName.setParentHash(parentItemHash)
             nItemSize = MFSItem(sizeFormat(entry['Size']))
-            nItemHash = MFSItem(cidConvertBase32(entry['Hash']))
+            nItemCID = MFSItem(cidString)
+            nItemCID.setToolTip(cidInfosMarkup(cidString))
 
             if not icon and nItemName.mimeTypeName:
                 # If we have a better icon matching the file's type..
@@ -887,7 +981,7 @@ class FileManager(QWidget):
             # Set its path in the MFS
             nItemName.path = os.path.join(parentItem.path, entry['Name'])
 
-            nItem = [nItemName, nItemSize, nItemHash]
+            nItem = [nItemName, nItemSize, nItemCID]
 
             parentItem.appendRow(nItem)
 
@@ -916,41 +1010,41 @@ class FileManager(QWidget):
         self.model.refreshed.emit(parentItem)
 
     @ipfsOp
-    async def deleteFromMultihash(self, ipfsop, item, multihash):
+    async def deleteFromCID(self, ipfsop, item, cid):
         _dir = os.path.dirname(item.path)
 
-        entry = await ipfsop.filesLookupHash(_dir, multihash)
+        entry = await ipfsop.filesLookupHash(_dir, cid)
 
         if entry:
             # Delete the entry in the MFS directory
             await ipfsop.filesDelete(_dir,
                                      entry['Name'], recursive=True)
 
-            # Purge the item's multihash in the model
-            # Purge its parent as well because the parent multihash will change
-            await modelhelpers.modelDeleteAsync(self.model, multihash)
+            # Purge the item's cid in the model
+            # Purge its parent as well because the parent cid will change
+            await modelhelpers.modelDeleteAsync(self.model, cid)
 
             if item.parentHash:
                 await modelhelpers.modelDeleteAsync(
                     self.model, item.parentHash)
 
-            ensure(ipfsop.purge(multihash))
-            log.debug('{0}: deleted'.format(multihash))
+            ensure(ipfsop.purge(cid))
+            log.debug('{0}: deleted'.format(cid))
 
             self.updateTree()
         else:
-            log.debug('Did not find multihash {}'.format(multihash))
+            log.debug('Did not find cid {}'.format(cid))
 
     @ipfsOp
-    async def unlinkFileFromHash(self, op, item, multihash):
+    async def unlinkFileFromHash(self, op, item, cid):
         _dir = os.path.dirname(item.path)
 
         listing = await op.filesList(_dir)
         for entry in listing:
             await op.sleep()
-            if entry['Hash'] == multihash:
+            if entry['Hash'] == cid:
                 await op.filesDelete(_dir, entry['Name'], recursive=True)
-                await modelhelpers.modelDeleteAsync(self.model, multihash)
+                await modelhelpers.modelDeleteAsync(self.model, cid)
 
     @ipfsOp
     async def addFilesSelfEncrypt(self, op, files, parent):
@@ -1003,6 +1097,8 @@ class FileManager(QWidget):
 
             root = await op.addPath(file, wrap=wrapEnabled,
                                     offline=self.offlineMode,
+                                    dagformat=self.dagGenerationFormat,
+                                    rawleaves=self.useRawLeaves,
                                     callback=onEntry)
 
             if root is None:
@@ -1038,6 +1134,8 @@ class FileManager(QWidget):
         dirEntry = await op.addPath(path, callback=onEntry,
                                     hidden=True, recursive=True,
                                     offline=self.offlineMode,
+                                    dagformat=self.dagGenerationFormat,
+                                    rawleaves=self.useRawLeaves,
                                     wrap=wrapEnabled)
 
         if not dirEntry:

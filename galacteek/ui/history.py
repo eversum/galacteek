@@ -13,6 +13,7 @@ from galacteek import ensure
 from galacteek.core.modelhelpers import UneditableItem
 
 from .i18n import iUnknown
+from .i18n import iHashmarks
 
 
 class URLHistory(QObject):
@@ -62,9 +63,9 @@ class HistoryMatchesWidget(QTreeView):
 
     def showMatches(self, marks, hMatches):
         self.model.clear()
-        brush = QBrush(QColor('#bfbfbf'))
+        brush = QBrush(QColor('lightgrey'))
 
-        mItem = UneditableItem('Hashmarks')
+        mItem = UneditableItem(iHashmarks())
         mItem.setBackground(brush)
         mItemE = UneditableItem('')
         mItemE.setBackground(brush)
@@ -75,6 +76,7 @@ class HistoryMatchesWidget(QTreeView):
 
             itemT = UneditableItem(title)
             item = UneditableItem(match['url'])
+            item.setToolTip(match['url'])
             item.setData(match['url'], Qt.EditRole)
 
             mItem.appendRow([itemT, item])
@@ -90,6 +92,7 @@ class HistoryMatchesWidget(QTreeView):
             itemT = UneditableItem(title)
 
             item = UneditableItem(match['url'])
+            item.setToolTip(match['url'])
             item.setData(match['url'], Qt.EditRole)
 
             hItem.appendRow([itemT, item])

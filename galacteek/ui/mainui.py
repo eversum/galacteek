@@ -978,8 +978,8 @@ class MainWindow(QMainWindow):
 
         super(MainWindow, self).keyPressEvent(event)
 
-    def explore(self, multihash):
-        ipfsPath = IPFSPath(multihash, autoCidConv=True)
+    def explore(self, cid):
+        ipfsPath = IPFSPath(cid, autoCidConv=True)
         if ipfsPath.valid:
             ensure(self.exploreIpfsPath(ipfsPath))
         else:
@@ -987,13 +987,13 @@ class MainWindow(QMainWindow):
 
     @ipfsOp
     async def exploreIpfsPath(self, ipfsop, ipfsPath):
-        multihash = await ipfsPath.resolve(ipfsop)
-        if not multihash:
+        cid = await ipfsPath.resolve(ipfsop)
+        if not cid:
             return messageBox(iCannotResolve(str(ipfsPath)))
 
-        tabName = shortPathRepr(multihash)
-        tooltip = 'Multihash explorer: {0}'.format(multihash)
-        view = ipfsview.IPFSHashExplorerStack(self, multihash)
+        tabName = shortPathRepr(cid)
+        tooltip = 'CID explorer: {0}'.format(cid)
+        view = ipfsview.IPFSHashExplorerStack(self, cid)
         self.registerTab(view, tabName, current=True,
                          icon=getIcon('hash.png'), tooltip=tooltip)
 

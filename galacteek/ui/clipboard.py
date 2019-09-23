@@ -56,6 +56,7 @@ from . import dag
 
 from .i18n import iUnknown
 from .i18n import iDagViewer
+from .i18n import iDagView
 from .i18n import iHashmark
 from .i18n import iIpfsQrEncode
 from .i18n import iHelp
@@ -73,10 +74,10 @@ def iClipboardStackItemsCount(count):
         '{} item(s) in the clipboard stack').format(count)
 
 
-def iCopyMultihashToClipboard():
+def iCopyCIDToClipboard():
     return QCoreApplication.translate(
         'FileManagerForm',
-        "Copy multihash to clipboard")
+        "Copy CID to clipboard")
 
 
 def iCopyPathToClipboard():
@@ -145,8 +146,7 @@ def iClipItemMarkupRocks():
 
 
 def iClipItemDagView():
-    return QCoreApplication.translate('clipboardManager',
-                                      'DAG view')
+    return iDagView()
 
 
 def iClipboardHistory():

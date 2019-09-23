@@ -145,9 +145,9 @@ class HashmarksHandler(BaseHandler):
         marks = source.getCategoryMarks(cat)
         return QJsonValue.fromVariant(QVariant(marks))
 
-    @pyqtSlot(str, result=bool)
+    @pyqtSlot(str)
     def deleteHashmark(self, path):
-        return self.marksLocal.delete(path)
+        self.marksLocal.delete(path)
 
 
 class HashmarksPage(IPFSPage):
@@ -159,7 +159,7 @@ class HashmarksPage(IPFSPage):
         self.marksLocal.markAdded.connect(
             lambda path, mark: self.onMarksChanged())
         self.marksLocal.markDeleted.connect(
-            lambda path: self.onMarksChanged())
+            lambda category, path: self.onMarksChanged())
         self.marksLocal.feedMarkAdded.connect(
             lambda path, mark: self.onMarksChanged())
 

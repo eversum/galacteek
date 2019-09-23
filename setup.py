@@ -135,6 +135,7 @@ class build_ui(Command):
         # connection with connectSlotsByName()
         self.uiforms_noSlotConnect = [
             'galacteek/ui/browsertab.ui',
+            'galacteek/ui/dagview.ui',
             'galacteek/ui/files.ui',
             'galacteek/ui/qschemecreatemapping.ui'
         ]

@@ -791,7 +791,7 @@ class ResourceOpenConfirmDialog(QDialog):
             wLabel = QLabel(
                 '<p style="color: red"> '
                 'You are trying to open this object '
-                'from an insecure environment.'
+                'from an insecure context.'
                 '</font>')
             layout.addWidget(wLabel)
             layout.addWidget(ignButton)

@@ -320,5 +320,5 @@ def createMFSModel():
     # Setup the model
     model = MFSItemModel()
     model.setHorizontalHeaderLabels(
-        [iFileName(), iFileSize(), iMultihash()])
+        [iFileName(), iFileSize(), iCID()])
     return model

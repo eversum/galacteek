@@ -278,7 +278,7 @@ class IPFSHashExplorerToolBox(GalacteekTab):
         view.closeRequest.connect(functools.partial(
             self.remove, view))
         view.directoryOpenRequest.connect(
-            lambda multihash: self.viewHash(multihash, addClose=True))
+            lambda cid: self.viewHash(cid, addClose=True))
 
         idx = self.toolbox.addItem(view, getIconIpfsWhite(), hashRef)
         self.toolbox.setCurrentIndex(idx)
@@ -334,7 +334,7 @@ class IPFSHashExplorerStack(GalacteekTab):
         view.closeRequest.connect(functools.partial(
             self.remove, view))
         view.directoryOpenRequest.connect(
-            lambda multihash: self.viewHash(multihash, addClose=True))
+            lambda cid: self.viewHash(cid, addClose=True))
 
         self.stack.insertWidget(self.stack.count(), view)
         self.stack.setCurrentWidget(view)
@@ -466,14 +466,14 @@ class IPFSHashExplorerWidget(QWidget):
 
         self.updateTree()
 
-    def changeMultihash(self, multihash):
-        if cidValid(multihash):
+    def changeMultihash(self, cid):
+        if cidValid(cid):
             self.parentMultihash = self.rootHash
 
             if self.parentMultihash is not None:
                 self.parentMultihashSet.emit(self.parentMultihash)
 
-            self.rootHash = multihash
+            self.rootHash = cid
             self.rootPath = IPFSPath(self.rootHash, autoCidConv=True)
             self.cid = cidhelpers.getCID(self.rootHash)
             self.initModel()
@@ -489,7 +489,7 @@ class IPFSHashExplorerWidget(QWidget):
     def initModel(self):
         self.model.clearModel()
         self.model.setHorizontalHeaderLabels(
-            [iFileName(), iFileSize(), iMimeType(), iMultihash()])
+            [iFileName(), iFileSize(), iMimeType(), iCID()])
         self.itemRoot = self.model.invisibleRootItem()
         self.itemRootIdx = self.model.indexFromItem(self.itemRoot)
 
@@ -741,8 +741,8 @@ class IPFSHashExplorerWidget(QWidget):
             for entry in obj['Links']:
                 await op.sleep()
 
-                multihash = cidConvertBase32(entry['Hash'])
-                if multihash in self.model.entryCache:
+                cid = cidConvertBase32(entry['Hash'])
+                if cid in self.model.entryCache:
                     continue
 
                 nItemName = IPFSNameItem(entry, entry['Name'], None)
@@ -750,7 +750,7 @@ class IPFSHashExplorerWidget(QWidget):
                 if self.mimeDetectionMethod == 'db':
                     nItemName.mimeFromDb(self.app.mimeDb)
                 elif self.mimeDetectionMethod == 'magic':
-                    mType = await detectMimeType(multihash)
+                    mType = await detectMimeType(cid)
                     if mType:
                         nItemName.mimeType = str(mType)
 
@@ -758,9 +758,9 @@ class IPFSHashExplorerWidget(QWidget):
                 nItemSize = IPFSItem(sizeFormat(entry['Size']))
                 nItemSize.setToolTip(str(entry['Size']))
                 nItemMime = IPFSItem(nItemName.mimeType or iUnknown())
-                nItemHash = IPFSItem(multihash)
-                nItemHash.setToolTip(multihash)
-                nItemName.setToolTip(multihash)
+                nItemHash = IPFSItem(cid)
+                nItemHash.setToolTip(cidInfosMarkup(cid))
+                nItemName.setToolTip(cid)
 
                 if nItemName.isDir():
                     nItemName.setIcon(self.iconFolder)
@@ -820,8 +820,8 @@ class IPFSHashExplorerWidgetFollow(IPFSHashExplorerWidget):
 
         self.directoryOpenRequest.connect(self.onOpenDir)
 
-    def onOpenDir(self, multihash):
-        self.changeMultihash(multihash)
+    def onOpenDir(self, cid):
+        self.changeMultihash(cid)
         self.updateTree()
 
     def onBackspacePressed(self):

@@ -214,7 +214,7 @@ class QuickAccessMapping(collections.UserDict):
 
 class IPFSMarks(QObject):
     changed = pyqtSignal()
-    markDeleted = pyqtSignal(str)
+    markDeleted = pyqtSignal(str, str)
     markAdded = pyqtSignal(str, dict)
     feedMarkAdded = pyqtSignal(str, IPFSHashMark)
 
@@ -356,7 +356,7 @@ class IPFSMarks(QObject):
                 yield '/'.join(fullPath)
                 yield from _list(fullPath, parent=parent[p])
 
-        return list(_list([], parent=self._rootCategories))
+        return sorted(list(_list([], parent=self._rootCategories)))
 
     def addCategory(self, category, parent=None):
         if parent is None:
@@ -388,9 +388,10 @@ class IPFSMarks(QObject):
             return spath in sec[marksKey] or spath + '/' in sec[marksKey]
 
     def getCategoryMark(self, marks, path):
-        slashed = path + '/'
-        if path in marks:
-            return IPFSHashMark.fromJson(path, marks[path])
+        unslashed = path.rstrip('/')
+        slashed = unslashed + '/'
+        if unslashed in marks:
+            return IPFSHashMark.fromJson(unslashed, marks[unslashed])
         elif slashed in marks:
             return IPFSHashMark.fromJson(slashed, marks[slashed])
 
@@ -484,11 +485,10 @@ class IPFSMarks(QObject):
         return None
 
     def find(self, mpath, category=None, delete=False):
-        ipfsPath = IPFSPath(normpPreserve(mpath))
-        if not ipfsPath.valid:
+        path = normpPreserve(mpath)
+        if not IPFSPath(path).valid:
             return
 
-        path = ipfsPath.fullPath
         categories = self.getCategories()
 
         for cat in categories:
@@ -502,7 +502,7 @@ class IPFSMarks(QObject):
 
                 if delete is True:
                     del marks[path]
-                    self.markDeleted.emit(path)
+                    self.markDeleted.emit(cat, path)
                     self.changed.emit()
                     return True
 

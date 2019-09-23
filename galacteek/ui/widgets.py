@@ -247,10 +247,11 @@ class LabelWithURLOpener(QLabel):
 
 class PopupToolButton(QToolButton, URLDragAndDropProcessor):
     def __init__(self, icon=None, parent=None, menu=None,
-                 mode=QToolButton.MenuButtonPopup, acceptDrops=False):
+                 mode=QToolButton.MenuButtonPopup, acceptDrops=False,
+                 menuSizeHint=None):
         super(PopupToolButton, self).__init__(parent)
 
-        self.menu = menu if menu else QMenu()
+        self.menu = menu if menu else QMenu(self)
         self.setPopupMode(mode)
         self.setMenu(self.menu)
         self.setAcceptDrops(acceptDrops)
@@ -365,9 +366,22 @@ class HashmarkMgrButton(PopupToolButton, _HashmarksCommon):
 
         self.marks.changed.connect(self.onChanged)
         self.marks.markAdded.connect(self.onMarkAdded)
+        self.marks.markDeleted.connect(self.onMarkDeleted)
 
     def onMarkAdded(self):
         ensure(self.updateIcons())
+
+    def onMarkDeleted(self, category, path):
+        if category in self.cMenus:
+            menu = self.cMenus[category]
+
+            for action in menu.actions():
+                data = action.data()
+                if data and data['path'] == path:
+                    menu.removeAction(action)
+
+            if menu.isEmpty():
+                menu.hide()
 
     def onChanged(self):
         self.updateMenu()
@@ -398,6 +412,7 @@ class HashmarkMgrButton(PopupToolButton, _HashmarksCommon):
                 self.cMenus[category].triggered.connect(self.linkActivated)
                 self.cMenus[category].setObjectName('hashmarksMgrMenu')
                 self.menu.addMenu(self.cMenus[category])
+                self.menu.addSeparator()
 
             menu = self.cMenus[category]
             menu.setIcon(getIcon('stroke-cube.png'))

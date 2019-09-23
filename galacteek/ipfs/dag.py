@@ -55,7 +55,7 @@ class DAGOperations:
         if isinstance(dagNode, dict) and 'data' in dagNode and \
                 'links' in dagNode:
             """ Try and decode the protobuf data """
-            msg = pb.decodeDagNode(dagNode['data'])
+            msg = pb.decodeUnixfsDagNode(dagNode['data'])
             if not msg:
                 return
             return msg['data']
@@ -110,7 +110,7 @@ class DAGOperations:
 
         if isinstance(data, dict) and 'data' in data and 'links' in data:
             """ Try and decode the protobuf data """
-            msg = pb.decodeDagNode(data['data'])
+            msg = pb.decodeUnixfsDagNode(data['data'])
             if not msg:
                 return
             if maxObjSize == 0 or \

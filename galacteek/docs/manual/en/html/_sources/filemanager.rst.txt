@@ -6,14 +6,47 @@ File manager
     :width: 64
     :height: 64
 
-By clicking on the folder icon in the application's toolbar you'll get access to the
-filemanager for importing content in the IPFS repository.
+By clicking on the folder icon in the application's toolbar you'll get
+access to the filemanager for importing content in your IPFS repository
+through the *Mutable File System* (see :term:`MFS`).
 
-Selecting the working directory
--------------------------------
+Settings
+--------
 
-The path selector menu lets you select the current working directory. *Home* is
-the default directory.
+.. image:: ../../../../share/icons/settings.png
+    :width: 64
+    :height: 64
+
+DAG generation format
+^^^^^^^^^^^^^^^^^^^^^
+
+You can choose between the *Balanced* DAG format (the default in IPFS)
+or the *Trickle* format. This option has an impact on how
+:term:`IPFS` will generate the :term:`DAG` structure for the files
+that you import.
+
+Importing some content with the *Trickle* format will generate
+different CIDs compared to when the same content is being
+imported with the default *Balanced* format becauses of the
+differences in the DAG's structure (even though the
+files data is the same).
+
+You might want to use the *Trickle* DAG format for large files
+(for instance video files), making DAG traversal potentially faster.
+
+Use raw blocks for leaf nodes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This option tells IPFS to use raw blocks for the leaf nodes in
+the :term:`DAG`. When using this option, these nodes won't have
+any UnixFS wrapper (it saves space in the repository, this is used
+in the IPFS Wikipedia mirror for instance).
+
+Selecting the working folder
+----------------------------
+
+The folder selector button lets you select the current working folder
+in your filesystem (see :term:`MFS`).
 
 The *Temporary* and *Encrypted files* folders are by default in *offline*
 mode.

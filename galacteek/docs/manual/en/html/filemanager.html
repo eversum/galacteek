@@ -43,12 +43,38 @@
   <div class="section" id="file-manager">
 <h1>File manager<a class="headerlink" href="#file-manager" title="Permalink to this headline">¶</a></h1>
 <a class="reference internal image-reference" href="_images/folder-open.png"><img alt="_images/folder-open.png" src="_images/folder-open.png" style="width: 64px; height: 64px;" /></a>
-<p>By clicking on the folder icon in the application’s toolbar you’ll get access to the
-filemanager for importing content in the IPFS repository.</p>
-<div class="section" id="selecting-the-working-directory">
-<h2>Selecting the working directory<a class="headerlink" href="#selecting-the-working-directory" title="Permalink to this headline">¶</a></h2>
-<p>The path selector menu lets you select the current working directory. <em>Home</em> is
-the default directory.</p>
+<p>By clicking on the folder icon in the application’s toolbar you’ll get
+access to the filemanager for importing content in your IPFS repository
+through the <em>Mutable File System</em> (see <a class="reference internal" href="glossary.html#term-mfs"><span class="xref std std-term">MFS</span></a>).</p>
+<div class="section" id="settings">
+<h2>Settings<a class="headerlink" href="#settings" title="Permalink to this headline">¶</a></h2>
+<a class="reference internal image-reference" href="_images/settings.png"><img alt="_images/settings.png" src="_images/settings.png" style="width: 64px; height: 64px;" /></a>
+<div class="section" id="dag-generation-format">
+<h3>DAG generation format<a class="headerlink" href="#dag-generation-format" title="Permalink to this headline">¶</a></h3>
+<p>You can choose between the <em>Balanced</em> DAG format (the default in IPFS)
+or the <em>Trickle</em> format. This option has an impact on how
+<a class="reference internal" href="glossary.html#term-ipfs"><span class="xref std std-term">IPFS</span></a> will generate the <a class="reference internal" href="glossary.html#term-dag"><span class="xref std std-term">DAG</span></a> structure for the files
+that you import.</p>
+<p>Importing some content with the <em>Trickle</em> format will generate
+different CIDs compared to when the same content is being
+imported with the default <em>Balanced</em> format becauses of the
+differences in the DAG’s structure (even though the
+files data is the same).</p>
+<p>You might want to use the <em>Trickle</em> DAG format for large files
+(for instance video files), making DAG traversal potentially faster.</p>
+</div>
+<div class="section" id="use-raw-blocks-for-leaf-nodes">
+<h3>Use raw blocks for leaf nodes<a class="headerlink" href="#use-raw-blocks-for-leaf-nodes" title="Permalink to this headline">¶</a></h3>
+<p>This option tells IPFS to use raw blocks for the leaf nodes in
+the <a class="reference internal" href="glossary.html#term-dag"><span class="xref std std-term">DAG</span></a>. When using this option, these nodes won’t have
+any UnixFS wrapper (it saves space in the repository, this is used
+in the IPFS Wikipedia mirror for instance).</p>
+</div>
+</div>
+<div class="section" id="selecting-the-working-folder">
+<h2>Selecting the working folder<a class="headerlink" href="#selecting-the-working-folder" title="Permalink to this headline">¶</a></h2>
+<p>The folder selector button lets you select the current working folder
+in your filesystem (see <a class="reference internal" href="glossary.html#term-mfs"><span class="xref std std-term">MFS</span></a>).</p>
 <p>The <em>Temporary</em> and <em>Encrypted files</em> folders are by default in <em>offline</em>
 mode.</p>
 <p>Adding files in the <em>Encrypted files</em> folder will self-encrypt them with

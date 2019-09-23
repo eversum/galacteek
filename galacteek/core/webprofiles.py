@@ -88,7 +88,6 @@ class IPFSProfile(BaseProfile):
     def installScripts(self):
         exSc = self.webScripts.findScript('ipfs-http-client')
         if self.app.settingsMgr.jsIpfsApi is True and exSc.isNull():
-            log.debug('Adding ipfs-http-client scripts')
             for script in self.app.scriptsIpfs:
                 self.webScripts.insert(script)
 

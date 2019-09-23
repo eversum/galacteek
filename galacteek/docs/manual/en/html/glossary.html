@@ -56,42 +56,56 @@ in base58 or base32).</p>
 </div>
 </dd>
 <dt id="term-cidv0">CIDv0</dt>
-<dd>IPFS Content IDentifier (version 0)</dd>
+<dd><p class="first">IPFS Content IDentifier (version 0)</p>
+<p class="last">Version 0 Content IDentifiers are just multihashes
+(see <a class="reference internal" href="#term-multihash"><span class="xref std std-term">multihash</span></a>) and do not have a multibase, as opposed
+to version 1 CIDs. Their string representation is always
+encoded in base 58.</p>
+</dd>
 <dt id="term-cidv1">CIDv1</dt>
-<dd>IPFS Content IDentifier (version 1)</dd>
+<dd><p class="first">IPFS Content IDentifier (version 1)</p>
+<p>CIDv1 differs from CIDv0 and introduces explicit encoding of
+the CID version and the IPLD format:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="n">cid</span><span class="o">-</span><span class="n">version</span><span class="o">&gt;&lt;</span><span class="n">ipld</span><span class="o">-</span><span class="nb">format</span><span class="o">&gt;&lt;</span><span class="n">multihash</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<p class="last">Their string representation can be encoded in different bases
+(base58, base32, etc..), see <a class="reference internal" href="#term-multibase"><span class="xref std std-term">multibase</span></a></p>
+</dd>
 <dt id="term-cid-upgrade">CID upgrade</dt>
 <dd>The process of converting/upgrading a <a class="reference internal" href="#term-cidv0"><span class="xref std std-term">CIDv0</span></a> (CID version 0)
 to a <a class="reference internal" href="#term-cidv1"><span class="xref std std-term">CIDv1</span></a> (CID version 1)</dd>
 <dt id="term-dag">DAG</dt>
 <dd><p class="first">Directed Acyclic Graph. From Wikipedia:</p>
-<div class="last highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">In</span> <span class="n">mathematics</span> <span class="ow">and</span> <span class="n">computer</span> <span class="n">science</span><span class="p">,</span> <span class="n">a</span> <span class="n">directed</span> <span class="n">acyclic</span> <span class="n">graph</span>
-<span class="p">(</span><span class="n">DAG</span> <span class="o">/</span><span class="n">ˈdæɡ</span><span class="o">/</span><span class="p">),</span> <span class="ow">is</span> <span class="n">a</span> <span class="n">finite</span> <span class="n">directed</span> <span class="n">graph</span> <span class="k">with</span> <span class="n">no</span> <span class="n">directed</span> <span class="n">cycles</span><span class="o">.</span>
-
-<span class="n">DAGs</span> <span class="n">can</span> <span class="n">model</span> <span class="n">many</span> <span class="n">different</span> <span class="n">kinds</span> <span class="n">of</span> <span class="n">information</span><span class="o">.</span>
-</pre></div>
-</div>
+<blockquote class="last">
+<div><p>In mathematics and computer science, a directed acyclic graph
+(DAG /ˈdæɡ/), is a finite directed graph with no directed cycles.</p>
+<p>DAGs can model many different kinds of information.</p>
+</div></blockquote>
 </dd>
 <dt id="term-dweb">dweb</dt>
 <dd>The distributed web</dd>
+<dt id="term-dht">DHT</dt>
+<dd><p class="first">Distributed Hash Table</p>
+<p>From Wikipedia:</p>
+<blockquote class="last">
+<div>A distributed hash table (DHT) is a class of a decentralized
+distributed system that provides a lookup service similar to a
+hash table: (key, value) pairs are stored in a DHT, and any
+participating node can efficiently retrieve the value associated
+with a given key</div></blockquote>
+</dd>
+<dt id="term-ens">ENS</dt>
+<dd><p class="first">Ethereum Name Service</p>
+<p class="last"><a class="reference external" href="https://ens.domains/">ENS</a></p>
+</dd>
 <dt id="term-galacteek">galacteek</dt>
 <dd>Browser for the distributed web</dd>
 <dt id="term-go-ipfs">go-ipfs</dt>
 <dd>IPFS daemon implementation in Go</dd>
-<dt id="term-dht">DHT</dt>
-<dd><p class="first">Distributed Hash Table</p>
-<p>From Wikipedia:</p>
-<div class="last highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">A</span> <span class="n">distributed</span> <span class="nb">hash</span> <span class="n">table</span> <span class="p">(</span><span class="n">DHT</span><span class="p">)</span> <span class="ow">is</span> <span class="n">a</span> <span class="k">class</span> <span class="nc">of</span> <span class="n">a</span> <span class="n">decentralized</span>
-<span class="n">distributed</span> <span class="n">system</span> <span class="n">that</span> <span class="n">provides</span> <span class="n">a</span> <span class="n">lookup</span> <span class="n">service</span> <span class="n">similar</span> <span class="n">to</span> <span class="n">a</span>
-<span class="nb">hash</span> <span class="n">table</span><span class="p">:</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span> <span class="n">pairs</span> <span class="n">are</span> <span class="n">stored</span> <span class="ow">in</span> <span class="n">a</span> <span class="n">DHT</span><span class="p">,</span> <span class="ow">and</span> <span class="nb">any</span>
-<span class="n">participating</span> <span class="n">node</span> <span class="n">can</span> <span class="n">efficiently</span> <span class="n">retrieve</span> <span class="n">the</span> <span class="n">value</span> <span class="n">associated</span>
-<span class="k">with</span> <span class="n">a</span> <span class="n">given</span> <span class="n">key</span>
-</pre></div>
-</div>
-</dd>
 <dt id="term-ipfs">IPFS</dt>
 <dd><p class="first">InterPlanetary File System</p>
-<p><a class="reference external" href="https://www.ipfs.io">https://www.ipfs.io</a></p>
-<p class="last">ipns://ipfs.io</p>
+<p class="last"><a class="reference external" href="ipns://ipfs.io">IPFS</a></p>
 </dd>
 <dt id="term-ipfs-path">IPFS path</dt>
 <dd><p class="first">An IPFS path is a full path to an IPFS object. Examples:</p>
@@ -116,6 +130,27 @@ and hash chains.</dd>
 <p class="last">The Mutable Filesystem is an IPFS feature that gives the
 ability to manipulate IPFS objects as if they were part
 of a unix filesystem . This is used by the filemanager.</p>
+</dd>
+<dt id="term-multibase">Multibase</dt>
+<dd><p class="first">Self-describing base encodings.</p>
+<p class="last"><a class="reference external" href="https://multiformats.io">multiformats</a></p>
+</dd>
+<dt id="term-multiformats">Multiformats</dt>
+<dd><p class="first">Excerpt from the project page:</p>
+<blockquote class="last">
+<div>The Multiformats Project is a collection of protocols which aim to
+future-proof systems, today. They do this mainly by enhancing format
+values with self-description. This allows interoperability, protocol
+agility, and helps us avoid lock in.</div></blockquote>
+</dd>
+<dt id="term-multihash">Multihash</dt>
+<dd><p class="first">Self-describing hash.</p>
+<p>A multihash encodes the hash function type, the length of the digest,
+and the digest value (the actual hash). Their format is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="nb">hash</span><span class="o">-</span><span class="n">func</span><span class="o">-</span><span class="nb">type</span><span class="o">&gt;&lt;</span><span class="n">digest</span><span class="o">-</span><span class="n">length</span><span class="o">&gt;&lt;</span><span class="n">digest</span><span class="o">-</span><span class="n">value</span><span class="o">&gt;</span>
+</pre></div>
+</div>
+<p class="last"><a class="reference external" href="https://multiformats.io">multiformats</a></p>
 </dd>
 </dl>
 </div>

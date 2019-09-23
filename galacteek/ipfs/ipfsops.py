@@ -204,10 +204,10 @@ class IPFSOperator(object):
         :return: IPFS entry
         """
         listing = await self.filesList(path)
-        b32Multihash = cidConvertBase32(mhash)
+        b32CID = cidConvertBase32(mhash)
 
         for entry in listing:
-            if cidConvertBase32(entry['Hash']) == b32Multihash:
+            if cidConvertBase32(entry['Hash']) == b32CID:
                 return entry
 
     async def filesRm(self, path, recursive=False):
@@ -592,6 +592,7 @@ class IPFSOperator(object):
 
     async def addPath(self, path, recursive=True, wrap=False,
                       callback=None, cidversion=1, offline=False,
+                      dagformat='balanced', rawleaves=False,
                       hidden=False, only_hash=False):
         """
         Add files from ``path`` in the repo, and returns the top-level
@@ -606,14 +607,21 @@ class IPFSOperator(object):
         :rtype: dict
         """
         added = None
+        exopts = {}
         callbackvalid = asyncio.iscoroutinefunction(callback)
+
+        if dagformat == 'trickle':
+            exopts['trickle'] = True
+
         try:
             async for entry in self.client.add(path, quiet=True,
                                                recursive=recursive,
                                                cid_version=cidversion,
                                                offline=offline, hidden=hidden,
                                                only_hash=only_hash,
-                                               wrap_with_directory=wrap):
+                                               wrap_with_directory=wrap,
+                                               raw_leaves=rawleaves,
+                                               **exopts):
                 await self.sleep()
                 added = entry
                 if callbackvalid:

@@ -614,7 +614,7 @@
              </rect>
             </property>
             <property name="text">
-             <string>Hide IPFS multihashes in tree views</string>
+             <string>Hide CIDs in tree views</string>
             </property>
            </widget>
           </widget>

@@ -11,7 +11,7 @@ There is support for subscribing to Atom feeds on the dweb
 (it will only work with feeds that are hosted on IPFS,
 for example from your profile's Atom feed).
 
-When you subscribe to a Atom feed on the dweb, by default
+When you subscribe to an Atom feed on the dweb, by default
 the entries contained in the feed will automatically be pinned
 to your node.
 

@@ -28,6 +28,7 @@ from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import joinIpns
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.cidhelpers import ipfsRegSearchCid32
+from galacteek.ipfs.cidhelpers import domainValid
 from galacteek.ipfs.ipfsops import APIErrorDecoder
 from galacteek.dweb.render import renderTemplate
 from galacteek.dweb.enswhois import ensContentHash
@@ -235,10 +236,6 @@ class EthDNSResolver:
     def debug(self, msg):
         log.debug('EthDNS resolver: {}'.format(msg))
 
-    def domainValid(self, domain):
-        domainP = r'^([A-Za-z0-9]\.|[A-Za-z0-9][A-Za-z0-9-]{0,61}[A-Za-z0-9]\.){1,3}[A-Za-z]{2,6}$'  # noqa
-        return re.match(domainP, domain)
-
     async def resolveEnsDomain(self, domain, timeout=15):
         """
         Resolve an ENS domain with EthDNS, and return the
@@ -307,8 +304,7 @@ class EthDNSSchemeHandler(BaseURLSchemeHandler):
         domain = rUrl.host()
         uPath = rUrl.path()
 
-        if not domain or len(domain) > 512 or not \
-                self.ethResolver.domainValid(domain):
+        if not domain or len(domain) > 512 or not domainValid(domain):
             logUser.info('EthDNS: invalid domain request')
             return self.urlInvalid(request)
 
@@ -500,8 +496,8 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
             # hostname = base32-encoded CID
             #
             # We keep a list (deque) of CIDs that have been validated.
-            # If you hit a page which references a lot of other resources for
-            # instance, this should be faster than regexp
+            # If you hit a page which references a lot of other resources
+            # for instance, this should be faster than regexp
 
             if host not in self.validCids:
                 if not ipfsRegSearchCid32(host):
@@ -1002,8 +998,7 @@ class EthDNSProxySchemeHandler(NativeIPFSSchemeHandler):
         domain = rUrl.host()
         uPath = rUrl.path()
 
-        if not domain or len(domain) > 512 or not \
-                self.ethResolver.domainValid(domain):
+        if not domain or len(domain) > 512 or not domainValid(domain):
             logUser.info('EthDNS: invalid domain request')
             return self.urlInvalid(request)
 

@@ -886,6 +886,7 @@ class BrowserTab(GalacteekTab):
 
         # URL zone
         self.historySearches = HistoryMatchesWidget(parent=self)
+        self.historySearches.setMinimumHeight(160)
         self.historySearches.hide()
         self.urlZone = URLInputWidget(self.history, self.historySearches, self)
         self.ui.layoutHistory.addWidget(self.historySearches)
@@ -1756,9 +1757,9 @@ class BrowserTab(GalacteekTab):
                     # replace the base58-encoded CID in the URL with
                     # the base32-encoded CIDv1
 
-                    multihash = cidhelpers.cidConvertBase32(rootcid)
-                    if multihash:
-                        inputStr = re.sub(rootcid, multihash, inputStr,
+                    cid = cidhelpers.cidConvertBase32(rootcid)
+                    if cid:
+                        inputStr = re.sub(rootcid, cid, inputStr,
                                           count=1)
                     else:
                         return messageBox(iInvalidCID(rootcid))

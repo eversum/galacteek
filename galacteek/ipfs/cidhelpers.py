@@ -68,12 +68,12 @@ def joinIpns(path):
 
 def stripIpfs(path):
     if isinstance(path, str):
-        return path.lstrip('/ipfs/')
+        return re.sub('^/ipfs/', '', path)
 
 
 def stripIpns(path):
     if isinstance(path, str):
-        return path.lstrip('/ipns/')
+        return re.sub('^/ipns/', '', path)
 
 
 def isIpfsPath(path):
@@ -199,6 +199,12 @@ def cidValid(cid):
         return True
     return False
 
+
+def domainValid(domain):
+    domainP = r'^([A-Za-z0-9]\.|[A-Za-z0-9][A-Za-z0-9-]{0,61}[A-Za-z0-9]\.){1,3}[A-Za-z]{2,6}$'  # noqa
+    return re.match(domainP, domain)
+
+
 # Regexps
 
 
@@ -234,8 +240,8 @@ ipnsPathRe = re.compile(
 class IPFSPath:
     maxLength = 1024
 
-    def __init__(self, input, autoCidConv=False):
-        self._enableBase32 = True
+    def __init__(self, input, autoCidConv=False, enableBase32=True):
+        self._enableBase32 = enableBase32
         self._autoCidConv = autoCidConv
         self._rootCid = None
         self._rootCidV = None
@@ -354,6 +360,14 @@ class IPFSPath:
                 scheme=self.scheme,
                 path=stripIpfs(self.fullPath)
             )
+        elif self.isIpns:
+            if domainValid(self._fqdn):
+                return '{scheme}://{path}'.format(
+                    scheme='ipns',
+                    path=stripIpns(self.fullPath)
+                )
+            else:
+                return self.dwebUrl
         else:
             return self.dwebUrl
 
@@ -444,6 +458,7 @@ class IPFSPath:
             else:
                 self._rscPath = joinIpns(gdict.get('fqdn'))
 
+            self._fqdn = gdict.get('fqdn')
             self._fragment = gdict.get('fragment')
             self._subPath = gdict.get('subpath')
             self._scheme = 'ipns'
