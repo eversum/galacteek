@@ -111,7 +111,8 @@ class IPFSResourceOpener(QObject):
             logUser.info('{path} ({type}): opening'.format(
                 path=rscPath, type=str(mimeType)))
         else:
-            return messageBox(iResourceCannotOpen(rscPath))
+            logUser.info(iResourceCannotOpen(rscPath))
+            return
 
         if mimeType.type == 'application/octet-stream' and not fromEncrypted:
             # Try to decode it with our key if it's a small file

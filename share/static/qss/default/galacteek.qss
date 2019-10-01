@@ -182,7 +182,14 @@ QTreeView#historySearchResults {
 
 QLabel#ipfsStatusLabel {
     padding-left: 10px;
-    font: 9pt "Montserrat";
+    font: 10pt "Inter UI";
+    font-weight: bold;
+}
+
+
+QLabel#lastLogLabel {
+    font: 10pt "Inter UI";
+    color: black;
 }
 
 QLineEdit#urlZone {
@@ -198,4 +205,11 @@ QTreeWidget::item#dagTree {
 
 QTreeWidgetdagTree {
     font: 12pt "Inter UI";
+}
+
+QTextBrowser#logsTextWidget {
+    background-color: lightgrey;
+    font: 12pt "Inter UI";
+    margin: 5px;
+    padding: 0px;
 }

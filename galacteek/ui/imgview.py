@@ -149,13 +149,13 @@ class ImageViewerTab(GalacteekTab):
             lbl.setToolTip(urlString)
             lbl.setStyleSheet('QLabel { font-size: 12pt }')
 
-            clipBtn = QToolButton()
+            clipBtn = QToolButton(self)
             clipBtn.setIcon(getIcon('clipboard.png'))
             clipBtn.setToolTip(iCopyToClipboard())
             clipBtn.clicked.connect(
                 functools.partial(self.app.setClipboardText, str(url)))
 
-            openBtn = QToolButton()
+            openBtn = QToolButton(self)
             openBtn.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
             openBtn.setIcon(iconOpen)
             openBtn.setText(iOpen())

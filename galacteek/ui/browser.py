@@ -21,9 +21,6 @@ from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtCore import QTimer
 
-from PyQt5.QtGui import QPixmap
-from PyQt5.QtGui import QImage
-
 from PyQt5 import QtWebEngineWidgets
 
 from PyQt5.QtWebEngineWidgets import QWebEnginePage
@@ -49,6 +46,7 @@ from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import joinIpns
 from galacteek.ipfs.cidhelpers import cidValid
 from galacteek.core.analyzer import ResourceAnalyzer
+from galacteek.core.asynclib import asyncify
 
 from galacteek.core.schemes import isSchemeRegistered
 from galacteek.core.schemes import SCHEME_ENS
@@ -57,6 +55,7 @@ from galacteek.core.schemes import SCHEME_IPNS
 from galacteek.core.schemes import SCHEME_Z
 from galacteek.core.schemes import DAGProxySchemeHandler
 from galacteek.core.schemes import MultiDAGProxySchemeHandler
+from galacteek.core.schemes import IPFSObjectProxyScheme
 
 from galacteek.core.webprofiles import WP_NAME_IPFS
 from galacteek.core.webprofiles import WP_NAME_MINIMAL
@@ -239,6 +238,42 @@ def iWebProfileWeb3():
     return QCoreApplication.translate(
         'BrowserTabForm',
         'Web3 profile')
+
+
+def iCidTooltipMessage(icon, rootCidV, more, rootCid, thisCid):
+    return QCoreApplication.translate('BrowserTabForm',
+                                      '''
+    <p>
+      <img src='{0}' width='32' height='32'/>
+    </p>
+
+    <p>Root CID: CIDv{1} {2} <b>{3}</b></p>
+
+    <p>This page's CID: <b>{4}</b></p>
+
+    <div style='font-size: 200%;'>
+    <p>
+      <b>Click on the cube</b> to get a view of the DAG for this page
+    </p>
+    </div>
+''').format(icon, rootCidV, more, rootCid, thisCid)
+
+
+def iIpnsTooltipMessage(icon, ipnsKey):
+    return QCoreApplication.translate('BrowserTabForm',
+                                      '''
+        <p>
+          <img src='{0}' width='32' height='32'/>
+        </p>
+
+        <p>IPNS domain/key <b>{1}</b></p>
+
+        <div style='font-size: 200%;'>
+        <p>
+          <b>Click on the cube</b> to get a view of the DAG for this page
+        </p>
+        </div>
+    ''').format(icon, ipnsKey)
 
 
 class RequestInterceptor(QWebEngineUrlRequestInterceptor):
@@ -469,7 +504,7 @@ class WebView(IPFSWebView):
             mediaIpfsPath = None
 
         if ipfsPath.valid:
-            menu = QMenu()
+            menu = QMenu(self)
             menu.addAction(getIcon('clipboard.png'),
                            iCopyPathToClipboard(),
                            functools.partial(self.app.setClipboardText,
@@ -523,7 +558,7 @@ class WebView(IPFSWebView):
 
         elif mediaIpfsPath and mediaIpfsPath.valid:
             # Needs refactor
-            menu = QMenu()
+            menu = QMenu(self)
 
             menu.addSeparator()
             menu.addAction(getIcon('clipboard.png'),
@@ -590,7 +625,7 @@ class WebView(IPFSWebView):
             menu.exec(event.globalPos())
         else:
             # Non-IPFS URL
-            menu = QMenu()
+            menu = QMenu(self)
             scheme = url.scheme()
 
             if scheme in ['http', 'https'] and \
@@ -807,61 +842,133 @@ class URLInputWidget(QLineEdit):
             self.browser.enterUrl(url)
 
 
-class CIDInfosDisplay(QObject):
+class CurrentObjectController(PopupToolButton):
     objectVisited = pyqtSignal(IPFSPath)
 
     dagViewRequested = pyqtSignal(IPFSPath)
 
-    tooltipMessage = '''
-        <p>
-          <img src='{icon}' width='32' height='32'/>
-        </p>
-        <p>Root CID: CIDv{cidv} {more} <b>{cid}</b></p>
-        <div style='font-size: 200%;'>
-        <p>
-          <b>Click on the cube</b> to get a view of the DAG for this page
-        </p>
-        </div>
-    '''
+    def __init__(self, parent=None):
+        super(CurrentObjectController, self).__init__(
+            mode=QToolButton.MenuButtonPopup, parent=parent)
 
-    def __init__(self, label, parent=None):
-        super(CIDInfosDisplay, self).__init__(parent)
+        self.app = QApplication.instance()
 
-        self.cidLabel = label
-        self.cidLabel.mousePressEvent = self.labelMouseEvent
         self.currentPath = None
         self.objectVisited.connect(self.onVisited)
 
-        self.pathCubeOrange = ':/share/icons/cube-nova-orange.png'
-        self.pathCubeAqua = ':/share/icons/cube-nova-aqua.png'
+        self.pathCubeOrange = ':/share/icons/cube-orange.png'
+        self.pathCubeBlue = ':/share/icons/cube-blue.png'
 
-        self.pixmapCubeOrange = QPixmap.fromImage(QImage(self.pathCubeOrange))
-        self.pixmapCubeAqua = QPixmap.fromImage(QImage(self.pathCubeAqua))
+        self.setIcon(getIcon('cube-orange.png'))
+        self.setAutoRaise(True)
 
-    def labelMouseEvent(self, event):
-        if event.button() == Qt.LeftButton and self.currentPath:
-            self.dagViewRequested.emit(self.currentPath)
+        self.dagViewAction = QAction(getIcon('ipld.png'),
+                                     iDagView(), self,
+                                     triggered=self.onDAGView)
+        self.copyCurPathAction = QAction(getIcon('clipboard.png'),
+                                         iCopyPathToClipboard(), self,
+                                         triggered=self.onCopyPathToCb)
+        self.hashmarkRootCidAction = QAction(getIcon('hashmark-black.png'),
+                                             iHashmarkRootObject(), self,
+                                             triggered=self.onHashmarkRoot)
+        self.hashmarkObjectAction = QAction(getIcon('hashmark-black.png'),
+                                            iHashmarkThisPage(), self,
+                                            triggered=self.onHashmarkThisPage)
+
+        self.setDefaultAction(self.dagViewAction)
+
+        self.menu.addAction(self.copyCurPathAction)
+        self.menu.addSeparator()
+        self.menu.addAction(self.dagViewAction)
+        self.menu.addSeparator()
+        self.menu.addAction(self.hashmarkRootCidAction)
+        self.menu.addSeparator()
+        self.menu.addAction(self.hashmarkObjectAction)
+        self.menu.addSeparator()
+
+    def onDAGView(self):
+        self.dagViewRequested.emit(self.currentPath)
+
+    def onCopyPathToCb(self):
+        if self.currentPath:
+            self.app.setClipboardText(str(self.currentPath))
+
+    def onHashmarkThisPage(self):
+        if self.currentPath:
+            addHashmark(self.app.marksLocal,
+                        self.currentPath.fullPath,
+                        '')
+
+    def onHashmarkRoot(self):
+        if self.currentPath:
+            if self.currentPath.isIpfs:
+                rootCidPath = joinIpfs(self.currentPath.rootCidRepr)
+                addHashmark(self.app.marksLocal,
+                            rootCidPath,
+                            rootCidPath)
+            elif self.currentPath.isIpns:
+                root = self.currentPath.root()
+                if not root:
+                    return messageBox(
+                        iInvalidObjectPath(str(self.currentPath)))
+
+                addHashmark(self.app.marksLocal,
+                            str(root), str(root))
 
     def onVisited(self, ipfsPath):
+        ensure(self.displayObjectInfos(ipfsPath))
+
+    @ipfsOp
+    async def displayObjectInfos(self, ipfsop, ipfsPath):
         self.currentPath = ipfsPath
+
+        objCid = None
         cidRepr = ipfsPath.rootCidRepr
 
+        if ipfsPath.isIpfs:
+            # First generic tooltip without resolved CID
+            self.setToolTip(iCidTooltipMessage(
+                self.pathCubeBlue,
+                ipfsPath.rootCid.version, '',
+                cidRepr,
+                iUnknown()
+            ))
+
+            objCid = await ipfsPath.resolve(ipfsop, timeout=5)
+
+        if self.currentPath != ipfsPath:
+            # Current object has changed while resolving, let the new
+            # object's tooltip appear
+            return
+
         if ipfsPath.rootCidUseB32:
-            self.cidLabel.setPixmap(
-                self.pixmapCubeOrange.scaled(16, 16))
-            self.cidLabel.setToolTip(self.tooltipMessage.format(
-                cid=cidRepr, cidv=1, more='(base32)',
-                icon=self.pathCubeOrange))
+            self.setIcon(getIcon('cube-orange.png'))
+
+            self.setToolTip(iCidTooltipMessage(
+                self.pathCubeOrange,
+                1, '(base32)',
+                cidRepr,
+                objCid if objCid else iUnknown()
+            ))
         else:
-            self.cidLabel.setPixmap(
-                self.pixmapCubeAqua.scaled(16, 16))
+            self.setIcon(getIcon('cube-blue.png'))
 
-            if not ipfsPath.rootCid:
-                return
+            if ipfsPath.rootCid:
+                self.setToolTip(iCidTooltipMessage(
+                    self.pathCubeBlue,
+                    ipfsPath.rootCid.version, '',
+                    cidRepr,
+                    objCid if objCid else iUnknown()
+                ))
 
-            self.cidLabel.setToolTip(self.tooltipMessage.format(
-                cid=cidRepr, cidv=ipfsPath.rootCid.version, more='',
-                icon=self.pathCubeAqua))
+            elif ipfsPath.isIpns:
+                self.setToolTip(
+                    iIpnsTooltipMessage(
+                        self.pathCubeBlue,
+                        ipfsPath.ipnsFqdn if ipfsPath.ipnsFqdn else
+                        ipfsPath.ipnsKey
+                    )
+                )
 
 
 class BrowserTab(GalacteekTab):
@@ -892,9 +999,10 @@ class BrowserTab(GalacteekTab):
         self.ui.layoutHistory.addWidget(self.historySearches)
         self.ui.layoutUrl.addWidget(self.urlZone)
 
-        self.cidInfosDisplay = CIDInfosDisplay(self.ui.cidInfoLabel,
-                                               parent=self)
-        self.cidInfosDisplay.dagViewRequested.connect(self.onDagViewRequested)
+        self.curObjectCtrl = CurrentObjectController(self)
+        self.curObjectCtrl.dagViewRequested.connect(self.onDagViewRequested)
+        self.curObjectCtrl.hide()
+        self.ui.layoutObjectInfo.addWidget(self.curObjectCtrl)
 
         initialProfileName = self.app.settingsMgr.defaultWebProfile
         if initialProfileName not in self.app.availableWebProfilesNames():
@@ -936,13 +1044,14 @@ class BrowserTab(GalacteekTab):
                                           triggered=self.onHashmarkPage)
         self.ui.hashmarkThisPage.setDefaultAction(self.hashmarkPageAction)
         self.ui.hashmarkThisPage.setEnabled(False)
+        self.ui.hashmarkThisPage.setAutoRaise(True)
 
         self.ui.hLayoutCtrl.addWidget(self.pageOpsButton)
 
         # Setup the IPFS control tool button (has actions
         # for browsing CIDS and web profiles etc..)
 
-        self.ipfsControlMenu = QMenu()
+        self.ipfsControlMenu = QMenu(self)
         self.webProfilesMenu = QMenu('Web profile')
 
         self.webProfilesGroup = QActionGroup(self.webProfilesMenu)
@@ -1038,7 +1147,7 @@ class BrowserTab(GalacteekTab):
         # PIN tool button
         iconPin = getIcon('pin.png')
 
-        pinMenu = QMenu()
+        pinMenu = QMenu(self)
         pinMenu.addAction(iconPin, iPinThisPage(), self.onPinSingle)
         pinMenu.addAction(iconPin, iPinRecursive(), self.onPinRecursive)
         pinMenu.addSeparator()
@@ -1129,6 +1238,7 @@ class BrowserTab(GalacteekTab):
         self.pageOpsButton = PopupToolButton(
             icon, mode=QToolButton.InstantPopup, parent=self
         )
+        self.pageOpsButton.setAutoRaise(True)
         self.pageOpsButton.menu.addAction(
             icon, iSaveContainedWebPage(), self.onSavePageContained)
 
@@ -1184,7 +1294,6 @@ class BrowserTab(GalacteekTab):
     @ipfsOp
     async def linkPageToMfs(self, ipfsop, ipfsPath, mfsItem, cTitle):
         basename = ipfsPath.basename
-        print(cTitle, basename)
 
         dest = os.path.join(mfsItem.path, cTitle.strip())
 
@@ -1245,7 +1354,7 @@ class BrowserTab(GalacteekTab):
         # Called after a new IPFS object has been loaded in this tab
 
         if ipfsPath.valid:
-            self.cidInfosDisplay.objectVisited.emit(ipfsPath)
+            self.curObjectCtrl.objectVisited.emit(ipfsPath)
             ensure(self.tsVisitPath(ipfsPath.objPath))
 
     @ipfsStatOp
@@ -1456,7 +1565,7 @@ class BrowserTab(GalacteekTab):
             return messageBox(iNotAnIpfsResource())
 
         def htmlReady(htmlCode):
-            logUser.info('Scanning links in page ...')
+
             ensure(self.pinIpfsLinksInPage(htmlCode))
 
         self.webEngineView.webPage.toHtml(htmlReady)
@@ -1477,6 +1586,9 @@ class BrowserTab(GalacteekTab):
         # the HTML parser in the threadpool executor
 
         parser = IPFSLinksParser(basePath)
+        logUser.info('Scanning links in object: {op}'.format(
+            op=basePath))
+
         await self.app.loop.run_in_executor(self.app.executor,
                                             parser.feed, htmlCode)
 
@@ -1555,9 +1667,14 @@ class BrowserTab(GalacteekTab):
         currentPage = self.webEngineView.page()
         currentPage.history().forward()
 
-    def onUrlChanged(self, url):
+    # def onUrlChanged(self, url):
+    @asyncify
+    async def onUrlChanged(self, url):
         if not url.isValid() or url.scheme() in ['data', SCHEME_Z]:
             return
+
+        sHandler = self.webEngineView.webProfile.urlSchemeHandler(
+            url.scheme().encode())
 
         if url.scheme() in [SCHEME_IPFS, SCHEME_IPNS]:
             # ipfs:// or ipns://
@@ -1576,7 +1693,7 @@ class BrowserTab(GalacteekTab):
 
             self.followIpnsAction.setEnabled(
                 self.currentIpfsObject.isIpnsRoot)
-
+            self.curObjectCtrl.show()
         elif url.authority() == self.gatewayAuthority:
             # dweb:/ with IPFS gateway's authority
             # Content loaded from IPFS gateway, this is IPFS content
@@ -1605,15 +1722,24 @@ class BrowserTab(GalacteekTab):
             # Activate the follow action if this is a root IPNS address
             self.followIpnsAction.setEnabled(
                 self.currentIpfsObject.isIpnsRoot)
+            self.curObjectCtrl.show()
         else:
-            self._currentIpfsObject = None
+            if sHandler and issubclass(
+                    sHandler.__class__, IPFSObjectProxyScheme):
+                proxiedPath = await sHandler.urlProxiedPath(url)
+                self._currentIpfsObject = proxiedPath
+                self.ipfsObjectVisited.emit(self.currentIpfsObject)
+                self.ui.hashmarkThisPage.setEnabled(True)
+                self.curObjectCtrl.show()
+            else:
+                # Non-IPFS browsing
+                self._currentIpfsObject = None
+                self.curObjectCtrl.hide()
+
             self.urlZone.clear()
             self.urlZone.insert(url.toString())
             self._currentUrl = url
             self.followIpnsAction.setEnabled(False)
-
-        if url.scheme() in [SCHEME_ENS]:
-            self.history.record(url.toString(), None)
 
         currentPage = self.webView.page()
 
@@ -1763,8 +1889,6 @@ class BrowserTab(GalacteekTab):
                                           count=1)
                     else:
                         return messageBox(iInvalidCID(rootcid))
-            else:
-                return messageBox(iInvalidUrl(inputStr))
 
         url = QUrl(inputStr)
         if not url.isValid() or not url.scheme():

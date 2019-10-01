@@ -407,7 +407,6 @@ class IPFSContext(QObject):
             self.pubsub.reg(psServiceMarks)
 
         self.pubsub.startServices()
-        self.pubsub.status()
 
     @ipfsOp
     async def profilesInit(self, ipfsop):

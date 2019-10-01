@@ -15,7 +15,7 @@ easyFormatString = u(
 
 
 def basicConfig(level='INFO', redirectLogging=False):
-    handler = StreamHandler(sys.stderr, level=level)
+    handler = StreamHandler(sys.stderr, level=level, bubble=True)
     handler.format_string = mainFormatString
     handler.push_application()
 

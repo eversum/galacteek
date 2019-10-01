@@ -623,7 +623,7 @@ class FileManager(QWidget):
             self.ui.treeFiles.hideColumn(2)
 
     def onContextMenuVoid(self, point):
-        menu = QMenu()
+        menu = QMenu(self)
         menu.exec(self.ui.treeFiles.mapToGlobal(point))
 
     def onContextMenu(self, point):
@@ -634,7 +634,7 @@ class FileManager(QWidget):
         nameItem = self.model.getNameItemFromIdx(idx)
         dataHash = self.model.getHashFromIdx(idx)
         ipfsPath = nameItem.fullPath
-        menu = QMenu()
+        menu = QMenu(self)
 
         def explore(cid):
             self.gWindow.explore(cid)
@@ -715,7 +715,7 @@ class FileManager(QWidget):
         menu.addSeparator()
 
         # Populate publish menu
-        publishMenu = QMenu('Publish to IPNS key')
+        publishMenu = QMenu('Publish to IPNS key', self)
         publishMenu.setIcon(getIcon('key-diago.png'))
         for key in self.ipfsKeys:
             if not key['Name'] or key['Name'].startswith(GALACTEEK_NAME):

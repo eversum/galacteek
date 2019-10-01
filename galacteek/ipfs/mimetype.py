@@ -6,6 +6,7 @@ import re
 import aioipfs
 
 from galacteek.ipfs import ipfsOpFn
+from galacteek.ipfs.ipfsops import APIErrorDecoder
 
 
 try:
@@ -152,7 +153,8 @@ class MIMEType(object):
             return self.type == value.type
 
 
-mimeTypeDag = MIMEType('ipfs/dag-pb')
+mimeTypeDagPb = MIMEType('ipfs/dag-pb')
+mimeTypeDagUnknown = MIMEType('ipfs/dag-unknown')
 
 
 def mimeTypeProcess(mTypeText, buff):
@@ -235,12 +237,13 @@ async def detectMimeType(ipfsop, rscPath, bufferSize=512, timeout=12):
             ipfsop.client.cat(rscPath, length=bufferSize), timeout
         )
     except aioipfs.APIError as err:
-        if isinstance(err.message, str) and \
-                err.message.lower() == 'this dag node is a directory':
+        dec = APIErrorDecoder(err)
+
+        if dec.errIsDirectory():
             return MIMEType('inode/directory')
-        elif err.message.lower() == 'unknown node type':
+        elif dec.errUnknownNode():
             # Unknown kind of node, let the caller analyze the DAG
-            return mimeTypeDag
+            return mimeTypeDagUnknown
     else:
         if not buff:
             return None

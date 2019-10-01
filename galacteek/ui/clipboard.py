@@ -33,7 +33,8 @@ from galacteek.ipfs.cidhelpers import shortPathRepr
 from galacteek.ipfs import ipfsOp
 from galacteek.ipfs.stat import StatInfo
 from galacteek.ipfs import megabytes
-from galacteek.ipfs.mimetype import mimeTypeDag
+from galacteek.ipfs.mimetype import mimeTypeDagUnknown
+from galacteek.ipfs.mimetype import mimeTypeDagPb
 from galacteek.crypto.qrcode import IPFSQrDecoder
 from galacteek.crypto.qrcode import IPFSQrEncoder
 
@@ -647,7 +648,8 @@ class ClipboardItemButton(PopupToolButton):
             return self.updateIcon(getMimeIcon('unknown'))
 
         icon = None
-        if self.item.mimeType.isDir or self.item.mimeType == mimeTypeDag:
+        if self.item.mimeType.isDir or self.item.mimeType in \
+                [mimeTypeDagUnknown, mimeTypeDagPb]:
             # It's a directory. Add the explore action and disable
             # the actions that don't apply to a folder
             self.menu.addAction(self.exploreHashAction)

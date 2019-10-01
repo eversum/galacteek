@@ -161,13 +161,14 @@ class GalacteekApplication(QApplication):
     manualAvailable = pyqtSignal(str, dict)
 
     def __init__(self, debug=False, profile='main', sslverify=True,
-                 enableOrbital=False, progName=None):
+                 enableOrbital=False, progName=None, cmdArgs={}):
         QApplication.__init__(self, sys.argv)
 
         QCoreApplication.setApplicationName(GALACTEEK_NAME)
 
         self.setQuitOnLastWindowClosed(False)
 
+        self._cmdArgs = cmdArgs
         self._debugEnabled = debug
         self._appProfile = profile
         self._loop = None
@@ -219,6 +220,10 @@ class GalacteekApplication(QApplication):
 
         self.setStyle()
         self.clipboardInit()
+
+    @property
+    def cmdArgs(self):
+        return self._cmdArgs
 
     @property
     def system(self):
@@ -438,7 +443,7 @@ class GalacteekApplication(QApplication):
         elif reason == QSystemTrayIcon.Context:
             pass
         elif reason == QSystemTrayIcon.DoubleClick:
-            self.mainWindow.show()
+            self.mainWindow.showMaximized()
         else:
             pass
 
@@ -781,7 +786,8 @@ class GalacteekApplication(QApplication):
         self.ipfsSchemeHandler = DWebSchemeHandler(self)
         self.ensSchemeHandler = EthDNSSchemeHandler(self)
         self.ensProxySchemeHandler = EthDNSProxySchemeHandler(self)
-        self.nativeIpfsSchemeHandler = NativeIPFSSchemeHandler(self)
+        self.nativeIpfsSchemeHandler = NativeIPFSSchemeHandler(
+            self, noMutexes=self.cmdArgs.noipfsmutexlock)
         self.qSchemeHandler = MultiObjectHostSchemeHandler(self)
 
     def subUrl(self, path):

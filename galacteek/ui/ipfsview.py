@@ -654,7 +654,7 @@ class IPFSHashExplorerWidget(QWidget):
         rows = selModel.selectedRows()
 
         items = [self.model.getNameItemFromIdx(idx) for idx in rows]
-        menu = QMenu()
+        menu = QMenu(self)
 
         def pinRecursive():
             for item in items:

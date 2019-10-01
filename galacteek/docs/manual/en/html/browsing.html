@@ -56,11 +56,15 @@ will hide the results.</p>
 <p>When you are browsing a valid page over IPFS, you will see an
 orange-colored IPFS cube or a blue-colored IPFS cube to the
 left of the address bar.</p>
+<p>If you are browsing using an <em>indirect</em> scheme (an URL scheme
+that proxies/maps IPFS objects, like <em>ens://</em> or <em>q://</em>), the
+cube will always display information about the “underlying”
+IPFS object that is being accessed.</p>
 <p>When you see an orange cube, it means that you’re browsing
 using the secure <em>ipfs://</em> URL scheme with a base32-encoded
 <a class="reference internal" href="glossary.html#term-cid"><span class="xref std std-term">CID</span></a>.</p>
-<p>When you see a blue/aqua cube, it means that you’re browsing
-using the <em>dweb:/</em> URL scheme.</p>
+<p>When you see a blue cube, it means that you’re browsing
+using the <em>dweb:/</em> URL scheme, or that you’</p>
 <p>Clicking on the cube will open the DAG viewer for the page’s
 IPFS object.</p>
 </div>
@@ -72,13 +76,16 @@ IPFS object.</p>
 <p>These are the <em>native</em> URL schemes that support
 using base32-encoded (lowercase) <a class="reference internal" href="glossary.html#term-cid"><span class="xref std std-term">CID</span></a> strings as
 hostname (with the benefit of the CID becoming the URL’s
-authority). The following URL formats are supported:</p>
+authority). You can use a domain name with both schemes.
+The following URL formats are supported:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ipfs</span><span class="p">:</span><span class="o">//</span><span class="p">{</span><span class="n">cidv1base32</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
+<span class="n">ipfs</span><span class="p">:</span><span class="o">//</span><span class="p">{</span><span class="n">fqdn</span><span class="o">-</span><span class="k">with</span><span class="o">-</span><span class="n">dnslink</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
 <span class="n">ipns</span><span class="p">:</span><span class="o">//</span><span class="p">{</span><span class="n">fqdn</span><span class="o">-</span><span class="k">with</span><span class="o">-</span><span class="n">dnslink</span><span class="p">}</span><span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">resource</span>
 </pre></div>
 </div>
 <p>Examples:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ipfs</span><span class="p">:</span><span class="o">//</span><span class="n">bafybeibp7sff6wwowsimitrxcpdoqnknyreesvtn24qrnx7gxkhqhzj2fi</span><span class="o">/</span>
+<span class="n">ipfs</span><span class="p">:</span><span class="o">//</span><span class="n">awesome</span><span class="o">.</span><span class="n">ipfs</span><span class="o">.</span><span class="n">io</span><span class="o">/</span><span class="n">articles</span><span class="o">/</span>
 <span class="n">ipns</span><span class="p">:</span><span class="o">//</span><span class="n">ipfs</span><span class="o">.</span><span class="n">io</span><span class="o">/</span>
 </pre></div>
 </div>

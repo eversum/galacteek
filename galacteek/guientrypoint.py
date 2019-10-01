@@ -114,7 +114,8 @@ def galacteekGui(args):
         debug=args.debug,
         enableOrbital=args.enableorbital,
         sslverify=False if args.nosslverify else True,
-        progName=progName
+        progName=progName,
+        cmdArgs=args
     )
     loop = gApp.loop
     sManager = gApp.settingsMgr
@@ -221,6 +222,11 @@ def start():
         dest='appimage',
         help='Running from an AppImage')
     parser.add_argument(
+        '--from-dmg',
+        action='store_true',
+        dest='dmg',
+        help='Running from a DMG image')
+    parser.add_argument(
         '--migrate',
         action='store_true',
         dest='migrate',
@@ -235,6 +241,11 @@ def start():
         action='store_true',
         dest='nosslverify',
         help="Don't check for SSL certificate validity (ipfs-search)")
+    parser.add_argument(
+        '--no-ipfsscheme-mutex',
+        action='store_true',
+        dest='noipfsmutexlock',
+        help="Don't use Qt mutexes in the native IPFS scheme handler")
     parser.add_argument(
         '--force-goipfs-download',
         action='store_true',

@@ -131,9 +131,8 @@ class PubsubService(object):
 
     async def filterSelf(self, msg):
         if msg['from'].decode() == self.ipfsCtx.node.id:
-            self.debug('Filtering message sent from our node')
             return True
-        self.debug('Not Filtering message sent from our node')
+
         return False
 
     async def filtered(self, message):

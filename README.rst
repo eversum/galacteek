@@ -108,6 +108,9 @@ Use the *-d* command-line switch to enable debugging output. Using *--profile* g
 you the ability to have separate application profiles (*main* is the default
 profile). Use *--help* for all options.
 
+Use the **--no-ipfsscheme-mutex** switch to disable mutexes in the native IPFS scheme
+handler.
+
 *Development*: Use *--monitor* to enable event-loop monitoring with aiomonitor_
 (install aiomonitor_ manually as it's not a dependency).
 Then connect to the aiomonitor_ interface with **nc localhost 50101**

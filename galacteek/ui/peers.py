@@ -222,7 +222,7 @@ class PeersManager(GalacteekTab):
         if not idx.isValid():
             return
 
-        menu = QMenu()
+        menu = QMenu(self)
         menu.exec(self.ui.tree.mapToGlobal(point))
 
     def onDoubleClick(self, idx):

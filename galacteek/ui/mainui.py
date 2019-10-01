@@ -16,12 +16,15 @@ from PyQt5.QtWidgets import QToolButton
 from PyQt5.QtWidgets import QPushButton
 from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QVBoxLayout
+from PyQt5.QtWidgets import QTextBrowser
+from PyQt5.QtGui import QTextCursor
 
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QTimer
 from PyQt5.QtCore import QDateTime
 from PyQt5.QtCore import QSize
+from PyQt5.QtCore import QPoint
 
 from PyQt5.Qt import QSizePolicy
 
@@ -29,8 +32,10 @@ from PyQt5.QtGui import QKeySequence
 
 from PyQt5 import QtWebEngineWidgets
 
+from galacteek import GALACTEEK_NAME
 from galacteek import ensure
 from galacteek import log
+from galacteek.core.glogger import loggerMain
 from galacteek.core.glogger import loggerUser
 from galacteek.core.glogger import easyFormatString
 from galacteek.core.asynclib import asyncify
@@ -112,6 +117,14 @@ def iAbout():
         <p>galacteek version {0}</p>''').format(__version__)
 
 
+class UserLogsWindow(QMainWindow):
+    hidden = pyqtSignal()
+
+    def hideEvent(self, event):
+        self.hidden.emit()
+        super().hideEvent(event)
+
+
 class MainWindowLogHandler(Handler, StringFormatterHandlerMixin):
     """
     Custom logbook handler that logs to the status bar
@@ -119,17 +132,25 @@ class MainWindowLogHandler(Handler, StringFormatterHandlerMixin):
     Should be moved to a separate module
     """
 
-    def __init__(self, application_name=None, address=None,
+    def __init__(self, logsBrowser, application_name=None, address=None,
                  facility='user', level=0, format_string=None,
-                 filter=None, bubble=False, window=None):
+                 filter=None, bubble=True, window=None):
         Handler.__init__(self, level, filter, bubble)
-        StringFormatterHandlerMixin.__init__(self, format_string)
+        StringFormatterHandlerMixin.__init__(self, easyFormatString)
         self.application_name = application_name
         self.window = window
-        self.format_string = easyFormatString
+        self.logsBrowser = logsBrowser
 
     def emit(self, record):
-        self.window.statusMessage(self.format(record))
+        formatted = self.format(record)
+
+        if record.level_name == 'INFO':
+            self.window.statusMessage(formatted)
+
+        self.logsBrowser.append(formatted)
+
+        if not self.logsBrowser.isVisible():
+            self.logsBrowser.moveCursor(QTextCursor.End)
 
 
 class IPFSInfosDialog(QDialog):
@@ -202,12 +223,12 @@ class DatabasesManager(QObject):
         return self._dbButton
 
     def buildButton(self):
-        dbButton = QToolButton()
+        dbButton = QToolButton(self)
         dbButton.setIconSize(QSize(24, 24))
         dbButton.setIcon(self.icon)
         dbButton.setPopupMode(QToolButton.MenuButtonPopup)
 
-        self.databasesMenu = QMenu()
+        self.databasesMenu = QMenu(self)
         self.mainFeedAction = QAction(self.icon,
                                       'General discussions feed', self,
                                       triggered=self.onMainFeed)
@@ -320,8 +341,28 @@ class MainWindow(QMainWindow):
             self.app.desktopGeometry.height() / 2)
         )
 
-        loggerUser.handlers.append(
-            MainWindowLogHandler(window=self, level='DEBUG'))
+        # User logs widget
+        self.logsPopupWindow = UserLogsWindow()
+        self.logsPopupWindow.setWindowTitle('{}: logs'.format(GALACTEEK_NAME))
+        self.logsPopupWindow.hide()
+
+        self.logsBrowser = QTextBrowser(self.logsPopupWindow)
+        self.logsBrowser.setObjectName('logsTextWidget')
+        self.logsPopupWindow.setCentralWidget(self.logsBrowser)
+        self.logsBrowser.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        self.logsPopupWindow.setMinimumSize(QSize(
+            (2 * self.app.desktopGeometry.width()) / 3,
+            self.app.desktopGeometry.height() / 2
+        ))
+
+        self.userLogsHandler = MainWindowLogHandler(
+            self.logsBrowser, window=self,
+            level='DEBUG' if self.app.debugEnabled else 'INFO')
+
+        loggerMain.handlers.append(self.userLogsHandler)
+        loggerUser.handlers.append(self.userLogsHandler)
 
         self.tabnFManager = iFileManager()
         self.tabnKeys = iKeys()
@@ -341,10 +382,10 @@ class MainWindow(QMainWindow):
                                        QKeySequence('Ctrl+q'))
         self.quitButton.setToolTip('Quit')
 
-        self.menuManual = QMenu(iManual())
+        self.menuManual = QMenu(iManual(), self)
 
         # Global pin-all button
-        self.pinAllGlobalButton = QToolButton()
+        self.pinAllGlobalButton = QToolButton(self)
         self.pinAllGlobalButton.setIcon(getIcon('pin.png'))
         self.pinAllGlobalButton.setObjectName('pinGlobalButton')
         self.pinAllGlobalButton.setToolTip(iGlobalAutoPinning())
@@ -366,11 +407,11 @@ class MainWindow(QMainWindow):
         self.qaToolbar.setOrientation(self.toolbarMain.orientation())
 
         # Browse button
-        self.browseButton = QToolButton()
+        self.browseButton = QToolButton(self)
         self.browseButton.setPopupMode(QToolButton.MenuButtonPopup)
         self.browseButton.setObjectName('buttonBrowseIpfs')
         self.browseButton.clicked.connect(self.onOpenBrowserTabClicked)
-        menu = QMenu()
+        menu = QMenu(self)
         menu.addAction(getIconIpfsIce(), 'Browse',
                        self.onOpenBrowserTabClicked)
         menu.addAction(getIconIpfsIce(), 'Browse (auto-pin)',
@@ -381,7 +422,7 @@ class MainWindow(QMainWindow):
         self.browseButton.setIcon(getIconIpfs64())
 
         # File manager button
-        self.fileManagerButton = QToolButton()
+        self.fileManagerButton = QToolButton(self)
         self.fileManagerButton.setToolTip(iFileManager())
         self.fileManagerButton.setIcon(getIcon('folder-open.png'))
         self.fileManagerButton.clicked.connect(self.onFileManagerClicked)
@@ -391,7 +432,7 @@ class MainWindow(QMainWindow):
         self.fileManagerWidget = files.FileManager(parent=self)
 
         # Text editor button
-        self.textEditorButton = QToolButton()
+        self.textEditorButton = QToolButton(self)
         self.textEditorButton.setToolTip(iTextEditor())
         self.textEditorButton.setIcon(getIcon('text-editor.png'))
         self.textEditorButton.clicked.connect(self.addEditorTab)
@@ -402,11 +443,11 @@ class MainWindow(QMainWindow):
         self.atomFeedsViewWidget = AtomFeedsView(self.app.modelAtomFeeds)
 
         # Edit-Profile button
-        self.menuUserProfile = QMenu()
+        self.menuUserProfile = QMenu(self)
         self.profilesActionGroup = QActionGroup(self)
 
         # Profile button
-        self.profileMenu = QMenu()
+        self.profileMenu = QMenu(self)
         iconProfile = getIcon('profile-user.png')
         self.profileMenu.addAction(iconProfile,
                                    'Edit profile',
@@ -442,7 +483,7 @@ class MainWindow(QMainWindow):
         self.sharedHashmarkMgrButton.setToolTip(iSharedHashmarks())
 
         # Peers button
-        self.peersButton = QToolButton()
+        self.peersButton = QToolButton(self)
         self.peersButton.setIcon(getIcon('peers.png'))
         self.peersButton.clicked.connect(self.onPeersMgrClicked)
 
@@ -459,10 +500,10 @@ class MainWindow(QMainWindow):
 
         # Settings button
         settingsIcon = getIcon('settings.png')
-        self.settingsToolButton = QToolButton()
+        self.settingsToolButton = QToolButton(self)
         self.settingsToolButton.setIcon(settingsIcon)
         self.settingsToolButton.setPopupMode(QToolButton.InstantPopup)
-        menu = QMenu()
+        menu = QMenu(self)
         menu.addAction(settingsIcon, iSettings(),
                        self.onSettings)
         menu.addSeparator()
@@ -475,11 +516,11 @@ class MainWindow(QMainWindow):
 
         self.settingsToolButton.setMenu(menu)
 
-        self.helpToolButton = QToolButton()
+        self.helpToolButton = QToolButton(self)
         self.helpToolButton.setObjectName('helpToolButton')
         self.helpToolButton.setIcon(getIcon('information.png'))
         self.helpToolButton.setPopupMode(QToolButton.InstantPopup)
-        menu = QMenu()
+        menu = QMenu(self)
         menu.addMenu(self.menuManual)
         menu.addSeparator()
         menu.addAction('Donate', self.onHelpDonate)
@@ -493,7 +534,7 @@ class MainWindow(QMainWindow):
         self.ipfsSearchButton.setIcon(self.ipfsSearchButton.iconNormal)
         self.ipfsSearchButton.clicked.connect(self.addIpfsSearchView)
 
-        self.mPlayerButton = QToolButton()
+        self.mPlayerButton = QToolButton(self)
         self.mPlayerButton.setIcon(getIcon('multimedia.png'))
         self.mPlayerButton.setToolTip(iMediaPlayer())
         self.mPlayerButton.clicked.connect(self.onOpenMediaPlayer)
@@ -561,7 +602,7 @@ class MainWindow(QMainWindow):
 
         # Chat room
         self.chatRoomWidget = chat.ChatRoomWidget(self)
-        self.chatRoomButton = QToolButton()
+        self.chatRoomButton = QToolButton(self)
         self.chatRoomButton.setIcon(getIcon('chat.png'))
         self.chatRoomButton.clicked.connect(self.onOpenChatWidget)
         self.toolbarTools.addWidget(self.chatRoomButton)
@@ -577,7 +618,7 @@ class MainWindow(QMainWindow):
         self.pubsubStatusButton = QPushButton()
         self.pubsubStatusButton.setIcon(getIcon('network-offline.png'))
         self.ipfsInfosButton = QPushButton()
-        self.ipfsInfosButton.setIcon(getIcon('information.png'))
+        self.ipfsInfosButton.setIcon(getIcon('ipfs-repo.png'))
         self.ipfsInfosButton.setToolTip(iIpfsInfos())
         self.ipfsInfosButton.clicked.connect(self.onIpfsInfos)
 
@@ -587,7 +628,21 @@ class MainWindow(QMainWindow):
         self.ethereumStatusBtn = EthereumStatusButton(parent=self)
 
         self.statusbar = self.statusBar()
+        self.userLogsButton = QToolButton(self)
+        self.userLogsButton.setToolTip('Logs')
+        self.userLogsButton.setIcon(getIcon('information.png'))
+        self.userLogsButton.setCheckable(True)
+        self.userLogsButton.toggled.connect(self.onShowUserLogs)
+        self.logsPopupWindow.hidden.connect(
+            functools.partial(self.userLogsButton.setChecked, False))
+
+        self.lastLogLabel = QLabel(self.statusbar)
+        self.lastLogLabel.setAlignment(Qt.AlignLeft)
+        self.lastLogLabel.setObjectName('lastLogLabel')
+        self.statusbar.insertWidget(0, self.lastLogLabel, 1)
+
         self.statusbar.addPermanentWidget(self.ipfsStatusLabel)
+        self.statusbar.addPermanentWidget(self.userLogsButton)
         self.statusbar.addPermanentWidget(self.ipfsInfosButton)
         self.statusbar.addPermanentWidget(self.ethereumStatusBtn)
         self.statusbar.addPermanentWidget(self.pinningStatusButton)
@@ -684,6 +739,18 @@ class MainWindow(QMainWindow):
 
     def onOpenEventLog(self):
         self.addEventLogTab(current=True)
+
+    def onShowUserLogs(self, checked):
+        lowerPos = self.mapToGlobal(QPoint(self.width(), self.height()))
+
+        popupPoint = QPoint(
+            lowerPos.x() - self.logsPopupWindow.width() - 64,
+            lowerPos.y() - self.logsPopupWindow.height() - 64
+        )
+
+        self.logsPopupWindow.move(popupPoint)
+        self.logsBrowser.moveCursor(QTextCursor.End)
+        self.logsPopupWindow.setVisible(checked)
 
     def onProfileEditDialog(self):
         runDialog(ProfileEditDialog, self.app.ipfsCtx.currentProfile,
@@ -879,11 +946,14 @@ class MainWindow(QMainWindow):
                 self.textEditorButton,
                 self.mPlayerButton,
                 self.atomButton,
+                self.hashmarkMgrButton,
+                self.sharedHashmarkMgrButton,
                 self.profileEditButton]:
             btn.setEnabled(flag)
 
     def statusMessage(self, msg):
-        self.statusbar.showMessage(msg)
+        self.lastLogLabel.setText(msg)
+        self.lastLogLabel.setToolTip(msg)
 
     def registerTab(self, tab, name, icon=None, current=False,
                     tooltip=None):

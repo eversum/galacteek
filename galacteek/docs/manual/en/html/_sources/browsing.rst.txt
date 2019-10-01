@@ -21,12 +21,17 @@ When you are browsing a valid page over IPFS, you will see an
 orange-colored IPFS cube or a blue-colored IPFS cube to the
 left of the address bar.
 
+If you are browsing using an *indirect* scheme (an URL scheme
+that proxies/maps IPFS objects, like *ens://* or *q://*), the
+cube will always display information about the "underlying"
+IPFS object that is being accessed.
+
 When you see an orange cube, it means that you're browsing
 using the secure *ipfs://* URL scheme with a base32-encoded
 :term:`CID`.
 
-When you see a blue/aqua cube, it means that you're browsing
-using the *dweb:/* URL scheme.
+When you see a blue cube, it means that you're browsing
+using the *dweb:/* URL scheme, or that you'
 
 Clicking on the cube will open the DAG viewer for the page's
 IPFS object.
@@ -40,14 +45,17 @@ ipfs:// and ipns://
 These are the *native* URL schemes that support
 using base32-encoded (lowercase) :term:`CID` strings as
 hostname (with the benefit of the CID becoming the URL's
-authority). The following URL formats are supported::
+authority). You can use a domain name with both schemes.
+The following URL formats are supported::
 
     ipfs://{cidv1base32}/path/to/resource
+    ipfs://{fqdn-with-dnslink}/path/to/resource
     ipns://{fqdn-with-dnslink}/path/to/resource
 
 Examples::
 
     ipfs://bafybeibp7sff6wwowsimitrxcpdoqnknyreesvtn24qrnx7gxkhqhzj2fi/
+    ipfs://awesome.ipfs.io/articles/
     ipns://ipfs.io/
 
 If you use a valid base58-encoded :term:`CID` (whatever the CID version)

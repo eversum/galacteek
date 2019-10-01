@@ -21,7 +21,8 @@ from PyQt5.QtWidgets import QInputDialog
 from PyQt5.QtWidgets import QMenu
 
 from galacteek import ensure
-from galacteek.ipfs.mimetype import mimeTypeDag
+from galacteek.ipfs.mimetype import mimeTypeDagUnknown
+from galacteek.ipfs.mimetype import mimeTypeDagPb
 from galacteek.ipfs.cidhelpers import getCID
 
 from .i18n import iIpfsQrCodes
@@ -163,8 +164,8 @@ def getIconFromMimeType(mimeType, defaultIcon=None):
         mIcon = 'video/x-generic'
     elif mimeType.isAudio:
         mIcon = 'audio/x-generic'
-    elif mimeType == mimeTypeDag:
-        mIcon = mimeTypeDag.type
+    elif mimeType in [mimeTypeDagUnknown, mimeTypeDagPb]:
+        mIcon = mimeType.type
 
     icon = getMimeIcon(mIcon)
     return icon if icon else getMimeIcon(

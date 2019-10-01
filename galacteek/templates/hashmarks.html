@@ -86,6 +86,16 @@
         }
       }
 
+      function deleteHashmark(category, path) {
+        var cmarks = document.getElementById(category + '_marks');
+        var mark = document.getElementById(path);
+
+        if (mark) {
+          window.hashmarks.deleteHashmark(path);
+          cmarks.removeChild(mark);
+        }
+      }
+
       function hideShow(category) {
         var cat = document.getElementById(category)
         var cat_button = document.getElementById(category + '_button')
@@ -137,7 +147,7 @@
 
         <ul class="marks" id="{{ category }}_marks" style="list-style: none">
     {% for path, mark in hashmarks %}
-    <li>
+    <li id="{{ path }}">
         <p style="text-align: left">
       {% if mark.icon and ipfsConnParams %}
       {% set iconpath = mark.icon|ipfspathnorm %}
@@ -152,7 +162,7 @@
 
             <a href="#" style="margin: 2px" title="Explore path"
                onclick="event.preventDefault(); window.galacteek.explorePath('{{ path }}');"><img width="16" height="16" src='qrc:///share/icons/folder-open-black.png'/></a>
-            <a href="#" style="margin: 2px" title="Delete" onclick="event.preventDefault(); window.hashmarks.deleteHashmark('{{ path }}');">Delete</a>
+            <a href="#" style="margin: 2px" title="Delete" onclick="event.preventDefault(); deleteHashmark('{{ category }}', '{{ path }}');">Delete</a>
           </span>
         </p>
       </li>

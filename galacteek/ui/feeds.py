@@ -96,7 +96,7 @@ class AtomFeedsView(QWidget):
         item = self.model.itemFromIndex(idx)
 
         if isinstance(item, AtomFeedItem):
-            menu = QMenu()
+            menu = QMenu(self)
             menu.addAction('Remove feed',
                            functools.partial(self.removeFeed, item))
 

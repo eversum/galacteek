@@ -14,7 +14,7 @@ class StatInfo:
             'LinksSize' in self.stat
 
     @property
-    def multihash(self):
+    def cid(self):
         return self.stat.get('Hash')
 
     @property

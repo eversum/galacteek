@@ -422,7 +422,7 @@ class IPFSOperator(object):
             self.debug('resolve timeout for {0}'.format(path))
             return None
         except aioipfs.APIError as e:
-            self.debug('resolve error: {}'.format(e.message))
+            self.debug('resolve error: {0}: {1}'.format(path, e.message))
             return None
         else:
             if isDict(resolved):
@@ -437,7 +437,7 @@ class IPFSOperator(object):
             self.debug('resolve timeout for {0}'.format(path))
             return None
         except aioipfs.APIError as e:
-            self.debug('resolve error: {}'.format(e.message))
+            self.debug('resolve error: {0}: {1}'.format(path, e.message))
             return None
         else:
             return resolved

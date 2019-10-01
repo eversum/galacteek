@@ -158,8 +158,6 @@ class HashmarksPage(IPFSPage):
         self.marksNetwork = marksNetwork
         self.marksLocal.markAdded.connect(
             lambda path, mark: self.onMarksChanged())
-        self.marksLocal.markDeleted.connect(
-            lambda category, path: self.onMarksChanged())
         self.marksLocal.feedMarkAdded.connect(
             lambda path, mark: self.onMarksChanged())
 

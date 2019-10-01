@@ -275,7 +275,7 @@ class IPFSObjectToolButton(QToolButton):
         button = event.button()
 
         if button == Qt.RightButton:
-            menu = QMenu()
+            menu = QMenu(self)
             menu.addAction('Remove', lambda: self.deleteRequest.emit())
             menu.exec(self.mapToGlobal(event.pos()))
 
@@ -303,7 +303,7 @@ class HashmarkToolButton(QToolButton):
         button = event.button()
 
         if button == Qt.RightButton:
-            menu = QMenu()
+            menu = QMenu(self)
             menu.addAction('Remove', lambda: self.deleteRequest.emit())
             menu.exec(self.mapToGlobal(event.pos()))
 
@@ -469,7 +469,7 @@ class HashmarksLibraryButton(PopupToolButton, _HashmarksCommon):
         if self.searchMenu is not None:
             return
 
-        self.searchMenu = QMenu('Search')
+        self.searchMenu = QMenu('Search', self)
         self.menu.addMenu(self.searchMenu)
 
         self.searchLine = QLineEdit()
@@ -483,7 +483,7 @@ class HashmarksLibraryButton(PopupToolButton, _HashmarksCommon):
         pos = self.searchLine.mapToGlobal(QPoint(0, 0))
         text = self.searchLine.text()
 
-        resultsMenu = QMenu()
+        resultsMenu = QMenu(self)
         resultsMenu.triggered.connect(
             lambda action: self.linkActivated(
                 action, closeMenu=True))
@@ -521,7 +521,7 @@ class HashmarksLibraryButton(PopupToolButton, _HashmarksCommon):
                 continue
 
             if category not in self.cMenus:
-                self.cMenus[category] = QMenu(category)
+                self.cMenus[category] = QMenu(category, self)
                 self.cMenus[category].triggered.connect(self.linkActivated)
                 self.cMenus[category].setObjectName('hashmarksLibraryMenu')
                 self.menu.addMenu(self.cMenus[category])
@@ -660,8 +660,8 @@ class IconSelector(QComboBox):
         ':/share/icons/ipfs-cube-64.png',
         ':/share/icons/ipfs-logo-128-white.png',
         ':/share/icons/code-fork.png',
-        ':/share/icons/cube-nova-aqua.png',
-        ':/share/icons/cube-nova-orange.png',
+        ':/share/icons/cube-blue.png',
+        ':/share/icons/cube-orange.png',
         ':/share/icons/cubehouse.png',
         ':/share/icons/fragments.png',
         ':/share/icons/go-home.png',

@@ -26,6 +26,7 @@ class PinningMaster(object):
         self._statusFilePath = statusFilePath
         self._checkPinned = checkPinned
         self._sCleanupLast = None
+        self._maxStalledMessages = 48
 
         ctx.app.marksLocal.markAdded.connect(self.onMarkAdded)
 
@@ -85,7 +86,7 @@ class PinningMaster(object):
             count += len(items)
         return count
 
-    async def cleanupStatus(self, pinnedExpires=60 * 30):
+    async def cleanupStatus(self, pinnedExpires=60 * 2):
         now = int(time.time())
 
         if isinstance(self._sCleanupLast, int):
@@ -139,7 +140,7 @@ class PinningMaster(object):
             for qname, queue in self.pinStatus.items():
                 if path in queue:
                     self.debug('Deleting item {item}'.format(
-                        item=self.pinStatus[qname]))
+                        item=self.pinStatus[qname][path]))
                     del self._pinStatus[qname][path]
                     self.ipfsCtx.pinItemRemoved.emit(qname, path)
         self._emitItemsCount()
@@ -164,17 +165,38 @@ class PinningMaster(object):
         pItem = self.pathRegister(qname, path, recursive)
 
         try:
+            stalledCn = 0
+            lastPTime = None
+
             async for pinned in op.client.pin.add(path, recursive=recursive):
-                self.debug('Pinning progress {0}: {1}'.format(path, pinned))
                 await asyncio.sleep(0)
+
+                now = time.time()
 
                 if pItem['cancel'] is True:
                     raise Cancelled()
 
-                with await self.lock:
-                    pItem['status'] = pinned
+                pins = pinned.get('Pins', None)
+                progress = pinned.get('Progress', None)
 
-                self.ipfsCtx.pinItemStatusChanged.emit(qname, path, pItem)
+                if progress:
+                    lastPTime = now
+                    self.debug('Progress {0}: {1}'.format(path, progress))
+
+                if pinned != pItem['status']:
+                    pItem['status'] = pinned
+                    self.ipfsCtx.pinItemStatusChanged.emit(qname, path, pItem)
+                else:
+                    if pins is None and progress is None and not lastPTime:
+                        # Never received any progress status yet
+                        stalledCn += 1
+
+                    if stalledCn >= self._maxStalledMessages:
+                        self.debug('{0}: stalled (removing)'.format(path))
+                        await self.pathDelete(path)
+                        return (path, 2, 'Stalled')
+
+                    await asyncio.sleep(1)
         except aioipfs.APIError as err:
             self.debug('Pinning error {path}: {msg}'.format(
                 path=path, msg=err.message))

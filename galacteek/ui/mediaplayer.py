@@ -140,7 +140,7 @@ class MediaPlayerTab(GalacteekTab):
         self.playlist = QMediaPlaylist()
         self.model = ListModel(self.playlist)
 
-        self.playlistsMenu = QMenu()
+        self.playlistsMenu = QMenu(self)
         self.playlistsMenu.triggered.connect(self.onPlaylistsMenu)
 
         self.pListWidget = QWidget(self)
@@ -151,7 +151,7 @@ class MediaPlayerTab(GalacteekTab):
             QToolButton.InstantPopup)
         self.uipList.loadPlaylistButton.setMenu(self.playlistsMenu)
 
-        self.clipMenu = QMenu()
+        self.clipMenu = QMenu(self)
         self.copyPathAction = QAction(getIconIpfsIce(),
                                       iCopyPlaylistPath(), self,
                                       triggered=self.onCopyPlaylistPath)
@@ -201,7 +201,7 @@ class MediaPlayerTab(GalacteekTab):
         self.player.positionChanged.connect(self.mediaPositionChanged)
         self.pListView.activated.connect(self.onListActivated)
 
-        self.togglePList = QToolButton()
+        self.togglePList = QToolButton(self)
         self.togglePList.setIcon(self.style().standardIcon(
             QStyle.SP_ArrowRight))
         self.togglePList.setFixedSize(32, 128)

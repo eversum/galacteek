@@ -140,17 +140,17 @@ def cidUpgrade(cid):
         return cid.to_v1()
 
 
-def cidConvertBase32(multihash):
+def cidConvertBase32(cid):
     """
     Convert a base58-encoded CID to a base32 string
 
     If it's a CIDv0, it's upgraded to CIDv1 first
 
-    :param str multihash: The multihash string
+    :param str cid: The cid string
     :rtype: str
     """
 
-    cid = getCID(multihash)
+    cid = getCID(cid)
     if not cid:
         return None
 
@@ -160,8 +160,7 @@ def cidConvertBase32(multihash):
 
         cid = cidUpgrade(cid)
         if not cid:
-            log.debug('Impossible to convert CIDv0: {}'.format(
-                multihash))
+            log.debug('Impossible to convert CIDv0: {}'.format(cid))
             return None
 
     return cid.encode('base32').decode()
@@ -223,7 +222,7 @@ ipfsPathDedRe58 = re.compile(
     flags=re.MULTILINE | re.UNICODE)
 
 ipnsPathDedRe = re.compile(
-    r'^(\s*)?(?:ipns://)(?P<fullpath>(?P<fqdn>[\w.-]{1,128})\/?(?P<subpath>[\w<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[\w\-\+\_\.\/]{1,256})?$',  # noqa
+    r'^(\s*)?(?:(ipns|ipfs)://)(?P<fullpath>(?P<fqdn>[\w.-]{1,128})\/?(?P<subpath>[\w<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[\w\-\+\_\.\/]{1,256})?$',  # noqa
     flags=re.MULTILINE | re.UNICODE)
 
 ipfsCidRe = re.compile(
@@ -251,7 +250,8 @@ class IPFSPath:
         self._subPath = None
         self._fragment = None
         self._scheme = None
-        self._resolvedMultihash = None
+        self._resolvedCid = None
+        self._ipnsId = None
         self._valid = self.__analyze()
 
     @property
@@ -271,8 +271,22 @@ class IPFSPath:
         return self._scheme
 
     @property
-    def resolvedMultihash(self):
-        return self._resolvedMultihash
+    def ipnsId(self):
+        return self._ipnsId
+
+    @property
+    def ipnsFqdn(self):
+        if domainValid(self.ipnsId):
+            return self.ipnsId
+
+    @property
+    def ipnsKey(self):
+        if not self.ipnsFqdn:
+            return self.ipnsId
+
+    @property
+    def resolvedCid(self):
+        return self._resolvedCid
 
     @property
     def rootCidV(self):
@@ -361,7 +375,7 @@ class IPFSPath:
                 path=stripIpfs(self.fullPath)
             )
         elif self.isIpns:
-            if domainValid(self._fqdn):
+            if domainValid(self._ipnsId):
                 return '{scheme}://{path}'.format(
                     scheme='ipns',
                     path=stripIpns(self.fullPath)
@@ -458,7 +472,7 @@ class IPFSPath:
             else:
                 self._rscPath = joinIpns(gdict.get('fqdn'))
 
-            self._fqdn = gdict.get('fqdn')
+            self._ipnsId = gdict.get('fqdn')
             self._fragment = gdict.get('fragment')
             self._subPath = gdict.get('subpath')
             self._scheme = 'ipns'
@@ -487,10 +501,9 @@ class IPFSPath:
         else:
             return False
 
-        if self._autoCidConv:
+        if self._autoCidConv and self.rootCid.version == 0:
             # Automatic V0-to-V1 conversion
-            if self.rootCid.version == 0:
-                self._rootCid = cidUpgrade(self._rootCid)
+            self._rootCid = cidUpgrade(self._rootCid)
 
         if self.rootCid.version == 1 and self._enableBase32:
             # rootCidRepr will convert it to base32
@@ -517,15 +530,21 @@ class IPFSPath:
     def parent(self):
         return self.child('../', normalize=True)
 
-    async def resolve(self, ipfsop, noCache=False):
+    def root(self):
+        n = self
+        while n.valid and n.subPath:
+            n = n.parent()
+
+        return n if n.valid else None
+
+    async def resolve(self, ipfsop, noCache=False, timeout=10):
         """
-        Resolve this object's path to a multihash
+        Resolve this object's path to a CID
         """
 
-        timeout = 15
-        if self.resolvedMultihash and noCache is False:
+        if self.resolvedCid and noCache is False:
             # Return cached value
-            return self.resolvedMultihash
+            return self.resolvedCid
 
         haveResolve = await ipfsop.hasCommand('resolve')
 
@@ -538,16 +557,16 @@ class IPFSPath:
                     resolved = stripIpfs(resolved)
 
                     if cidValid(resolved):
-                        self._resolvedMultihash = resolved
-                        return self.resolvedMultihash
+                        self._resolvedCid = resolved
+                        return self.resolvedCid
 
             # Use object stat
             info = StatInfo(await ipfsop.objStat(
                 self.objPath, timeout=timeout))
 
-            if info.valid and cidValid(info.multihash):
-                self._resolvedMultihash = info.multihash
-                return self.resolvedMultihash
+            if info.valid and cidValid(info.cid):
+                self._resolvedCid = info.cid
+                return self.resolvedCid
         except aioipfs.APIError:
             log.debug('Error resolving {0}'.format(self.objPath))
             return None

@@ -178,6 +178,18 @@ class BaseURLSchemeHandler(QWebEngineUrlSchemeHandler):
         return request.fail(QWebEngineUrlRequestJob.RequestAborted)
 
 
+class IPFSObjectProxyScheme:
+    """
+    For schemes that proxy/map IPFS objects
+    """
+
+    async def urlProxiedPath(self, url):
+        """
+        Return the object mapped for `url`
+        """
+        raise Exception('Implement urlProxiedPath()')
+
+
 class ENSWhoisSchemeHandler(BaseURLSchemeHandler):
     """
     Deprecated ENS resolver (that was using api.whoisens.org)
@@ -349,10 +361,12 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
 
     contentReady = pyqtSignal(str, QWebEngineUrlRequestJob, str, bytes)
 
-    def __init__(self, app, parent=None, validCidQSize=32, reqTimeout=60 * 10):
+    def __init__(self, app, parent=None, validCidQSize=32, reqTimeout=60 * 10,
+                 noMutexes=False):
         super(NativeIPFSSchemeHandler, self).__init__(parent)
 
         self.app = app
+        self.noMutexes = noMutexes
         self.requests = {}
         self.validCids = collections.deque([], validCidQSize)
         self.requestTimeout = reqTimeout
@@ -369,16 +383,14 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
         self.reply(uid, request, ctype, data)
 
     def reply(self, uid, request, ctype, data, parent=None):
-        """
-        We're using a mutex here but it shouldn't be necessary
-        """
-
         if uid not in self.requests:
             # Destroyed ?
             return
 
         mutex = self.requests[uid]['mutex']
-        mutex.lock()
+
+        if mutex and not self.noMutexes:
+            mutex.lock()
 
         try:
             buf = self.requests[uid]['iodev']
@@ -387,11 +399,15 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
             buf.seek(0)
             buf.close()
             request.reply(ctype.encode('ascii'), buf)
-            mutex.unlock()
+
+            if mutex and not self.noMutexes:
+                mutex.unlock()
         except Exception:
+            if mutex and not self.noMutexes:
+                mutex.unlock()
+
             log.debug('Error buffering request data')
             request.fail(QWebEngineUrlRequestJob.RequestFailed)
-            mutex.unlock()
 
     async def directoryListing(self, request, client, path):
         currentIpfsPath = IPFSPath(path)
@@ -469,23 +485,19 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
             return data
 
     async def renderData(self, request, data, uid):
-        rUrl = request.requestUrl()
         cType = await detectMimeTypeFromBuffer(data[0:512])
 
         if cType:
             self.contentReady.emit(uid, request, cType.type, data)
         else:
-            self.debug('Impossible to detect MIME type for {0}'.format(
-                rUrl.toString()))
+            self.debug('Impossible to detect MIME type for URL: {0}'.format(
+                request.requestUrl().toString()))
+            self.contentReady.emit(
+                uid, request, 'application/octet-stream', data)
 
     @ipfsOp
     async def handleRequest(self, ipfsop, request, uid):
         rUrl = request.requestUrl()
-
-        if not rUrl.isValid():
-            self.debug('Invalid URL: {}'.format(rUrl.toString()))
-            return self.urlInvalid(request)
-
         scheme = rUrl.scheme()
         host = rUrl.host()
 
@@ -493,19 +505,22 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
             return self.urlInvalid(request)
 
         if scheme == SCHEME_IPFS:
-            # hostname = base32-encoded CID
+            # hostname = base32-encoded CID or FQDN
             #
             # We keep a list (deque) of CIDs that have been validated.
             # If you hit a page which references a lot of other resources
             # for instance, this should be faster than regexp
 
-            if host not in self.validCids:
-                if not ipfsRegSearchCid32(host):
-                    return self.urlInvalid(request)
+            if domainValid(host):
+                ipfsPathS = joinIpns(host) + rUrl.path()
+            else:
+                if host not in self.validCids:
+                    if not ipfsRegSearchCid32(host):
+                        return self.urlInvalid(request)
 
-                self.validCids.append(host)
+                    self.validCids.append(host)
 
-            ipfsPathS = joinIpfs(host) + rUrl.path()
+                ipfsPathS = joinIpfs(host) + rUrl.path()
         elif scheme == SCHEME_IPNS:
             ipfsPathS = joinIpns(host) + rUrl.path()
         else:
@@ -561,11 +576,16 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
             return await self.renderData(request, data, uid)
 
     def requestStarted(self, request):
+        if not request.requestUrl().isValid():
+            self.debug('Invalid URL: {}'.format(
+                request.requestUrl().toString()))
+            return self.urlInvalid(request)
+
         uid = str(uuid.uuid4())
         self.requests[uid] = {
             'request': request,
             'iodev': QBuffer(parent=request),
-            'mutex': QMutex()
+            'mutex': QMutex() if not self.noMutexes else None
         }
 
         request.destroyed.connect(
@@ -573,7 +593,7 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
         ensure(self.handleRequest(request, uid))
 
 
-class ObjectProxySchemeHandler(NativeIPFSSchemeHandler):
+class ObjectProxySchemeHandler(NativeIPFSSchemeHandler, IPFSObjectProxyScheme):
     """
     This scheme handler acts as a "proxy" to an IPFS path.
 
@@ -594,26 +614,25 @@ class ObjectProxySchemeHandler(NativeIPFSSchemeHandler):
 
         self.proxiedPath = ipfsPath
 
+    async def urlProxiedPath(self, url):
+        return self.proxiedPath.child(url.path())
+
     @ipfsOp
     async def handleRequest(self, ipfsop, request, uid):
         if not self.proxiedPath.valid:
             return request.fail(QWebEngineUrlRequestJob.UrlInvalid)
 
         rUrl = request.requestUrl()
+        ipfsPath = await self.urlProxiedPath(rUrl)
 
-        if not rUrl.isValid():
-            return self.urlInvalid(request)
-
-        path = rUrl.path()
-        ipfsPath = self.proxiedPath.child(path)
-
-        if not ipfsPath.valid:
+        if not ipfsPath or not ipfsPath.valid:
             return self.urlInvalid(request)
 
         return await self.fetchFromPath(ipfsop, request, ipfsPath, uid)
 
 
-class MultiObjectHostSchemeHandler(NativeIPFSSchemeHandler):
+class MultiObjectHostSchemeHandler(NativeIPFSSchemeHandler,
+                                   IPFSObjectProxyScheme):
     """
     Somehow similar to ObjectProxySchemeHandler, but this handler
     is host-based, the host being the name of a user-defined
@@ -635,6 +654,25 @@ class MultiObjectHostSchemeHandler(NativeIPFSSchemeHandler):
         self.lock = asyncio.Lock()
         self.mappings = {}
         self._resolverTask = None
+
+    async def urlProxiedPath(self, rUrl):
+        host = rUrl.host()
+
+        if host not in self.mappings:
+            return None
+
+        mapping = self.mappings[host]
+        rCached = mapping['rcache']
+        mappedTo = mapping['path']
+
+        usedPath = rCached if rCached and rCached.valid else mappedTo
+
+        if not usedPath.valid:
+            return None
+
+        path = rUrl.path()
+        ipfsPath = usedPath.child(path)
+        return ipfsPath
 
     def onMappingsChanged(self):
         ensure(self.updateMappings())
@@ -683,27 +721,12 @@ class MultiObjectHostSchemeHandler(NativeIPFSSchemeHandler):
     async def handleRequest(self, ipfsop, request, uid):
         rUrl = request.requestUrl()
 
-        if not rUrl.isValid() or not rUrl.host():
+        if not rUrl.host():
             return self.urlInvalid(request)
 
-        host = rUrl.host()
+        ipfsPath = await self.urlProxiedPath(rUrl)
 
-        if host not in self.mappings:
-            return self.urlNotFound(request)
-
-        mapping = self.mappings[host]
-        rCached = mapping['rcache']
-        mappedTo = mapping['path']
-
-        usedPath = rCached if rCached and rCached.valid else mappedTo
-
-        if not usedPath.valid:
-            return self.urlInvalid(request)
-
-        path = rUrl.path()
-        ipfsPath = usedPath.child(path)
-
-        if not ipfsPath.valid:
+        if not ipfsPath or not ipfsPath.valid:
             return self.urlInvalid(request)
 
         return await self.fetchFromPath(ipfsop, request, ipfsPath, uid)
@@ -756,11 +779,6 @@ class DAGProxySchemeHandler(NativeIPFSSchemeHandler):
             return request.fail(QWebEngineUrlRequestJob.UrlInvalid)
 
         rUrl = request.requestUrl()
-
-        if not rUrl.isValid():
-            self.debug('Invalid URL: {}'.format(rUrl.toString()))
-            return self.urlInvalid(request)
-
         path = rUrl.path()
         ipfsPathS = joinIpfs(self.proxied.dagCid) + path
 
@@ -908,11 +926,6 @@ class MultiDAGProxySchemeHandler(NativeIPFSSchemeHandler):
             return self.urlInvalid(request)
 
         rUrl = request.requestUrl()
-
-        if not rUrl.isValid():
-            self.debug('Invalid URL: {}'.format(rUrl.toString()))
-            return self.urlInvalid(request)
-
         path = rUrl.path()
 
         for dag in self.proxied:
@@ -970,7 +983,7 @@ class MultiDAGProxySchemeHandler(NativeIPFSSchemeHandler):
             return await self.renderData(request, data, uid)
 
 
-class EthDNSProxySchemeHandler(NativeIPFSSchemeHandler):
+class EthDNSProxySchemeHandler(NativeIPFSSchemeHandler, IPFSObjectProxyScheme):
     """
     ENS scheme handler (resolves ENS domains through EthDNS with aiodns)
 
@@ -989,20 +1002,12 @@ class EthDNSProxySchemeHandler(NativeIPFSSchemeHandler):
     def debug(self, msg):
         log.debug('EthDNS proxy: {}'.format(msg))
 
-    @ipfsOp
-    async def handleRequest(self, ipfsop, request, uid):
-        rUrl = request.requestUrl()
-        if not rUrl.isValid():
-            return self.urlInvalid(request)
-
+    async def urlProxiedPath(self, rUrl):
         domain = rUrl.host()
         uPath = rUrl.path()
 
         if not domain or len(domain) > 512 or not domainValid(domain):
-            logUser.info('EthDNS: invalid domain request')
-            return self.urlInvalid(request)
-
-        logUser.info('EthDNS: resolving {0}'.format(domain))
+            return None
 
         now = time.time()
         lastDnsLink = lastResolved = None
@@ -1015,6 +1020,7 @@ class EthDNSProxySchemeHandler(NativeIPFSSchemeHandler):
         linkExpired = lastResolved and (now - lastResolved) > self._ensExpires
 
         if not lastDnsLink or linkExpired:
+            logUser.info('EthDNS: resolving {0}'.format(domain))
             path = await self.ethResolver.resolveEnsDomain(domain)
         else:
             path = lastDnsLink
@@ -1029,10 +1035,21 @@ class EthDNSProxySchemeHandler(NativeIPFSSchemeHandler):
                     'rlast': now
                 }
 
-            sPath = path.child(uPath) if uPath else path
-            logUser.info('EthDNS: {domain} resolved to {res}'.format(
-                domain=domain, res=sPath.ipfsUrl))
-            return await self.fetchFromPath(ipfsop, request, sPath, uid)
+            return path.child(uPath) if uPath else path
+
+    @ipfsOp
+    async def handleRequest(self, ipfsop, request, uid):
+        rUrl = request.requestUrl()
+        domain = rUrl.host()
+
+        if not domain or len(domain) > 512 or not domainValid(domain):
+            logUser.info('EthDNS: invalid domain request')
+            return self.urlInvalid(request)
+
+        path = await self.urlProxiedPath(rUrl)
+
+        if path and path.valid:
+            return await self.fetchFromPath(ipfsop, request, path, uid)
         else:
             logUser.info('EthDNS: {domain} resolve failed'.format(
                 domain=domain))

@@ -33,7 +33,7 @@ feedgen = ">=0.7.0"
 feedparser = ">=5.2.0"
 async-timeout = ">=3.0.1"
 aiosqlite = ">=0.10.0"
-web3 = ">=5.1.0"
+web3 = "==5.1.0"
 aiodns = ">=2.0.0"
 
 [dev-packages]

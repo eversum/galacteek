@@ -305,7 +305,7 @@ class TextEditorWidget(QWidget):
             toggled=self.onEditToggled, parent=self
         )
 
-        self.saveButton = QToolButton()
+        self.saveButton = QToolButton(self)
         self.saveButton.setIcon(getIcon('save-file.png'))
         self.saveButton.clicked.connect(self.onSave)
         self.saveButton.setToolTip(iSave())

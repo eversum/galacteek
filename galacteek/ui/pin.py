@@ -170,6 +170,27 @@ class PinStatusWidget(GalacteekTab):
                 items['cancelButton'].setEnabled(False)
 
         self.resort()
+        self.purgeFinishedItems()
+
+    def purgeFinishedItems(self):
+        maxFinished = 16
+        ret = modelSearch(self.model,
+                          search=iPinned(),
+                          columns=[self.COL_STATUS])
+
+        if len(ret) > maxFinished:
+            rows = []
+            for idx in ret:
+                item = self.model.itemFromIndex(idx)
+                if not item:
+                    continue
+                rows.append(item.row())
+
+            try:
+                for row in list(sorted(rows))[int(maxFinished / 2):]:
+                    self.model.removeRow(row)
+            except:
+                pass
 
     def onCancel(self, qname, path):
         self.removeItem(path)
@@ -182,12 +203,14 @@ class PinStatusWidget(GalacteekTab):
         if not items:
             btnCancel = QToolButton()
             btnCancel.setText(iCancel())
-            btnCancel.clicked.connect(lambda: self.onCancel(qname, path))
+            btnCancel.clicked.connect(
+                functools.partial(self.onCancel, qname, path))
             btnCancel.setFixedWidth(140)
 
             itemTs = UneditableItem(str(statusInfo['ts_queued']))
             itemQ = UneditableItem(qname)
             itemP = UneditableItem(path)
+            itemP.setToolTip(path)
             itemStatus = UneditableItem(iPinning())
             itemNodes = UneditableItem(str(nodesProcessed))
             itemC = UneditableItem('')
@@ -312,8 +335,11 @@ class PinBatchWidget(QWidget):
         self.ui.cancelButton.show()
 
     def onPinFinished(self, future):
-        self.ui.cancelButton.hide()
-        self.ui.proceedButton.setText('Done')
+        try:
+            self.ui.cancelButton.hide()
+            self.ui.proceedButton.setText('Done')
+        except:
+            pass
 
     def onCancel(self):
         if self._pinTask:
@@ -348,4 +374,4 @@ class PinBatchWidget(QWidget):
                     qname='browser-batch')
                 disableRow(pItem, noPinBox, pSingleBox, pRecBox)
 
-            await ipfsop.sleep(0.2)
+            await ipfsop.sleep(0.3)

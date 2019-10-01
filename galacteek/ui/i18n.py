@@ -141,6 +141,11 @@ def iHashmarkThisPage():
     return QCoreApplication.translate('GalacteekWindow', 'Hashmark this page')
 
 
+def iHashmarkRootObject():
+    return QCoreApplication.translate(
+        'GalacteekWindow', 'Hashmark root object')
+
+
 def iHashmarks():
     return QCoreApplication.translate('GalacteekWindow', 'Hashmarks')
 

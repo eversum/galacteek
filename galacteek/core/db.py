@@ -293,12 +293,14 @@ class AtomFeedsDatabase(QObject):
         with await self.lock:
             path = IPFSPath(feedSql['url'])
             resolved = await ipfsop.resolve(path.objPath)
+
             if not resolved:
                 # TODO
                 return
 
             await ipfsop.sleep()
 
+            needParse = True
             historyObj = await self.feedObjectHistory(
                 feedSql['id'], resolved)
 
@@ -307,13 +309,16 @@ class AtomFeedsDatabase(QObject):
                     feedSql['id'], resolved)
             else:
                 historyObjId = historyObj['id']
+                needParse = False
 
             atomFeed = self.feedFromId(feedSql['feed_id'])
 
-            if not atomFeed:
+            if not atomFeed or needParse:
                 try:
                     atomFeed = await self.parser.parse(resolved)
                 except AtomParseFeedError:
+                    log.debug('Atom: failed to parse {p}'.format(
+                        p=resolved))
                     return False
 
             self._handled_by_id[atomFeed.id] = atomFeed
@@ -453,4 +458,4 @@ class AtomFeedsDatabase(QObject):
             for feed in feeds:
                 await self.processFeed(feed)
 
-            await asyncio.sleep(300)
+            await asyncio.sleep(60)

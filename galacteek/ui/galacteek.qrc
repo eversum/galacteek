@@ -1,5 +1,8 @@
 <RCC>
   <qresource>
+    <file>../../share/icons/ipfs-repo.png</file>
+    <file>../../share/icons/cube-blue.png</file>
+    <file>../../share/icons/cube-orange.png</file>
     <file>../../share/icons/help.png</file>
     <file>../../share/icons/blockchain1.png</file>
     <file>../../share/icons/blockchain2.png</file>
