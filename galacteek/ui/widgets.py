@@ -412,7 +412,6 @@ class HashmarkMgrButton(PopupToolButton, _HashmarksCommon):
                 self.cMenus[category].triggered.connect(self.linkActivated)
                 self.cMenus[category].setObjectName('hashmarksMgrMenu')
                 self.menu.addMenu(self.cMenus[category])
-                self.menu.addSeparator()
 
             menu = self.cMenus[category]
             menu.setIcon(getIcon('stroke-cube.png'))

@@ -737,8 +737,7 @@ class QSchemeCreateMappingDialog(QDialog):
             self.done(1)
             messageBox(
                 'You can now use the quick-access URL '
-                '<b>q://{name}</b>'.format(name=name),
-                richText=True
+                '<b>q://{name}</b>'.format(name=name)
             )
         else:
             messageBox(

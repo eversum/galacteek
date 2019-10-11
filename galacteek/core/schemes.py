@@ -359,7 +359,13 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
     by the 'onContent' callback.
     """
 
-    contentReady = pyqtSignal(str, QWebEngineUrlRequestJob, str, bytes)
+    # contentReady signal (handled by onContent())
+    contentReady = pyqtSignal(
+        str, QWebEngineUrlRequestJob, IPFSPath, str, bytes)
+
+    # objectServed signal: emitted when an object has been fetched and
+    # served to a QtWebEngine request
+    objectServed = pyqtSignal(IPFSPath, str, float)
 
     def __init__(self, app, parent=None, validCidQSize=32, reqTimeout=60 * 10,
                  noMutexes=False):
@@ -379,10 +385,7 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
         if uid in self.requests:
             del self.requests[uid]
 
-    def onContent(self, uid, request, ctype, data):
-        self.reply(uid, request, ctype, data)
-
-    def reply(self, uid, request, ctype, data, parent=None):
+    def onContent(self, uid, request, ipfsPath, ctype, data):
         if uid not in self.requests:
             # Destroyed ?
             return
@@ -399,6 +402,8 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
             buf.seek(0)
             buf.close()
             request.reply(ctype.encode('ascii'), buf)
+
+            self.objectServed.emit(ipfsPath, ctype, time.time())
 
             if mutex and not self.noMutexes:
                 mutex.unlock()
@@ -484,11 +489,11 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
         else:
             return data
 
-    async def renderData(self, request, data, uid):
+    async def renderData(self, request, ipfsPath, data, uid):
         cType = await detectMimeTypeFromBuffer(data[0:512])
 
         if cType:
-            self.contentReady.emit(uid, request, cType.type, data)
+            self.contentReady.emit(uid, request, ipfsPath, cType.type, data)
         else:
             self.debug('Impossible to detect MIME type for URL: {0}'.format(
                 request.requestUrl().toString()))
@@ -561,7 +566,7 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
                     str(ipfsPath)
                 )
                 if data:
-                    return await self.renderData(request, data, uid)
+                    return await self.renderData(request, ipfsPath, data, uid)
 
             if dec.errUnknownNode():
                 # DAG / TODO
@@ -571,9 +576,9 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
                     ipfsPath
                 )
                 if data:
-                    return await self.renderData(request, data, uid)
+                    return await self.renderData(request, ipfsPath, data, uid)
         else:
-            return await self.renderData(request, data, uid)
+            return await self.renderData(request, ipfsPath, data, uid)
 
     def requestStarted(self, request):
         if not request.requestUrl().isValid():
@@ -967,7 +972,7 @@ class MultiDAGProxySchemeHandler(NativeIPFSSchemeHandler):
                     str(ipfsPath)
                 )
                 if data:
-                    return await self.renderData(request, data, uid)
+                    return await self.renderData(request, ipfsPath, data, uid)
 
             if dec.errUnknownNode():
                 # UNK DAG / TODO
@@ -978,9 +983,9 @@ class MultiDAGProxySchemeHandler(NativeIPFSSchemeHandler):
                     dag=dag
                 )
                 if data:
-                    return await self.renderData(request, data, uid)
+                    return await self.renderData(request, ipfsPath, data, uid)
         else:
-            return await self.renderData(request, data, uid)
+            return await self.renderData(request, ipfsPath, data, uid)
 
 
 class EthDNSProxySchemeHandler(NativeIPFSSchemeHandler, IPFSObjectProxyScheme):

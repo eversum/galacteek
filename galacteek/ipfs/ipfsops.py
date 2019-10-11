@@ -593,7 +593,7 @@ class IPFSOperator(object):
     async def addPath(self, path, recursive=True, wrap=False,
                       callback=None, cidversion=1, offline=False,
                       dagformat='balanced', rawleaves=False,
-                      hidden=False, only_hash=False):
+                      hidden=False, only_hash=False, chunker=None):
         """
         Add files from ``path`` in the repo, and returns the top-level
         entry (the root directory), optionally wrapping it with a
@@ -612,6 +612,9 @@ class IPFSOperator(object):
 
         if dagformat == 'trickle':
             exopts['trickle'] = True
+
+        if isinstance(chunker, str):
+            exopts['chunker'] = chunker
 
         try:
             async for entry in self.client.add(path, quiet=True,

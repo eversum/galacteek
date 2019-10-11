@@ -124,6 +124,10 @@ def iOfflineMode():
     return QCoreApplication.translate('FileManagerForm', 'Offline mode')
 
 
+def iChunker():
+    return QCoreApplication.translate('FileManagerForm', 'Chunker')
+
+
 def iDhtProvide():
     return QCoreApplication.translate(
         'FileManagerForm',
@@ -213,6 +217,8 @@ class FileManager(QWidget):
         fsDagFormatMenu = QMenu(iDAGGenerationFormat(), self)
         fsDagFormatMenu.setIcon(getIcon('ipld.png'))
 
+        fsChunkerMenu = self.buildChunkerMenu()
+
         fsMiscOptsMenu = QMenu('Options', self)
         fsMiscOptsMenu.setIcon(getIcon('folder-black.png'))
 
@@ -239,6 +245,8 @@ class FileManager(QWidget):
         fsDagFormatMenu.addActions(self.dagFormatGroup.actions())
 
         fsOptsMenu.addMenu(fsDagFormatMenu)
+        fsOptsMenu.addSeparator()
+        fsOptsMenu.addMenu(fsChunkerMenu)
         fsOptsMenu.addSeparator()
         fsOptsMenu.addMenu(fsMiscOptsMenu)
 
@@ -339,6 +347,58 @@ class FileManager(QWidget):
     @property
     def inEncryptedFolder(self):
         return self.displayedItem is self.model.itemEncrypted
+
+    def buildChunkerMenu(self):
+        # Build the menu to select the chunking strategy
+        fsChunkerMenu = QMenu(iChunker(), self)
+
+        self.chunkingAlg = 'size-262144'
+        self.chunkerGroup = QActionGroup(fsChunkerMenu)
+        self.chunkerGroup.triggered.connect(self.onChunkerChanged)
+
+        # Fixed block size algorithm
+        sizes = [int(32768 * x) for x in range(4, 32, 4)]
+
+        for size in sizes:
+            action = QAction('Fixed-size chunker (block size: {} kb)'.format(
+                int(size / 1024)), self.chunkerGroup)
+            action.setData('size-{}'.format(size))
+            action.setCheckable(True)
+
+            # Check the default chunker
+            if size == 262144:
+                action.setChecked(True)
+
+        # Rabin.
+        # This is just a small selection of block sizes people might
+        # want to try. For each minimum block size we calculate a number
+        # of maximum block sizes (the average is always the median value)
+
+        msizes = [int(32768 * x) for x in range(2, 16, 2)]
+
+        for msize in msizes:
+            maxsizes = [int(msize * z) for z in range(2, 6, 1)]
+
+            for maxs in maxsizes:
+                if maxs >= (1024 * 1024):
+                    break
+
+                avgs = msize + int((maxs - msize) / 2)
+
+                action = QAction(
+                    'Rabin chunker '
+                    '(min: {mbs} kb, avg: {avgbs} kb, max: {maxbs} kb)'.format(
+                        mbs=int(msize / 1024),
+                        avgbs=int(avgs / 1024),
+                        maxbs=int(maxs / 1024)
+                    ), self.chunkerGroup
+                )
+
+                action.setCheckable(True)
+                action.setData('rabin-{0}-{1}-{2}'.format(msize, avgs, maxs))
+
+        fsChunkerMenu.addActions(self.chunkerGroup.actions())
+        return fsChunkerMenu
 
     def createFileManager(self):
         self.fManagerModel = QFileSystemModel()
@@ -479,7 +539,10 @@ class FileManager(QWidget):
             return self.model.getNameItemFromIdx(currentIdx)
 
     def onDagFormatChanged(self, action):
-        print(action)
+        pass
+
+    def onChunkerChanged(self, action):
+        self.chunkingAlg = action.data()
 
     def onIconSize(self, index):
         size = None
@@ -1099,6 +1162,7 @@ class FileManager(QWidget):
                                     offline=self.offlineMode,
                                     dagformat=self.dagGenerationFormat,
                                     rawleaves=self.useRawLeaves,
+                                    chunker=self.chunkingAlg,
                                     callback=onEntry)
 
             if root is None:
@@ -1136,6 +1200,7 @@ class FileManager(QWidget):
                                     offline=self.offlineMode,
                                     dagformat=self.dagGenerationFormat,
                                     rawleaves=self.useRawLeaves,
+                                    chunker=self.chunkingAlg,
                                     wrap=wrapEnabled)
 
         if not dirEntry:

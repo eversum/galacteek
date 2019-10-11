@@ -34,6 +34,16 @@ files data is the same).
 You might want to use the *Trickle* DAG format for large files
 (for instance video files), making DAG traversal potentially faster.
 
+Chunker
+^^^^^^^
+
+From the *Chunker* menu you can choose the chunking algorithm.
+It defines which strategy IPFS will use to break files into blocks:
+
+- **Fixed size**: files are split into fixed-size blocks
+- **Rabin**: fingerprinting chunker (you can specify a minimum, average
+  and maximum block size)
+
 Use raw blocks for leaf nodes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -116,7 +126,7 @@ File context menu
 Right-clicking an entry in the file manager will popup a menu giving you a few
 options:
 
-- *Copy multihash to the clipboard*
+- *Copy CID to the clipboard*
 - *Copy full path to the clipboard*
 - *Announce (DHT provide)*: announce to the network that you provide this
   file/directory
@@ -139,5 +149,5 @@ Keyboard shortcuts
 The following keyboard shortcuts are available within the files manager:
 
 - **Mod + c** or **Mod + y**: Copy selected item's IPFS path to the clipboard
-- **Mod + a**: Copy selected item's multihash (CID) to the clipboard
+- **Mod + a**: Copy selected item's CID to the clipboard
 - **Mod+x**: Explore item if it is a directory

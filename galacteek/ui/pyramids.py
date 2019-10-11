@@ -208,7 +208,7 @@ class MultihashPyramidsToolBar(QToolBar):
             pass
         else:
             if key:
-                log.debug('Removing IPNS key: {}'.format(key))
+                log.info('Removing IPNS key: {}'.format(key))
                 await ipfsop.keysRemove(key['Name'])
 
     def onAddPyramid(self):
@@ -346,6 +346,12 @@ class MultihashPyramidToolButton(PopupToolButton):
 
     def debug(self, msg):
         log.debug('{pyramid}: {msg}'.format(
+            pyramid=self.pyramid.path,
+            msg=msg
+        ))
+
+    def info(self, msg):
+        log.info('{pyramid}: {msg}'.format(
             pyramid=self.pyramid.path,
             msg=msg
         ))
@@ -538,7 +544,7 @@ class MultihashPyramidToolButton(PopupToolButton):
                 self.debug('Invalid path! Cannot publish')
                 return False
 
-            self.debug('publishing mark {mark} (obj: {obj}) to {ipns}'.format(
+            self.info('publishing mark {mark} (obj: {obj}) to {ipns}'.format(
                 mark=latestMark.path,
                 obj=ipfsPath.objPath,
                 ipns=self.pyramid.ipnsKey
@@ -570,7 +576,7 @@ class MultihashPyramidToolButton(PopupToolButton):
                 return True
             else:
                 self._publishFailedCount += 1
-                self.debug('Publish failed: ({count} errors)'.format(
+                self.info('Publish failed: ({count} error(s))'.format(
                     count=self._publishFailedCount))
                 return False
 

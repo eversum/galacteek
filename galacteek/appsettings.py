@@ -88,7 +88,7 @@ def setDefaultSettings(gApp):
     sManager.setDefaultSetting(section, CFG_KEY_STORAGEMAX, 50)
     sManager.setDefaultSetting(section, CFG_KEY_ROUTINGMODE, 'dht')
     sManager.setDefaultSetting(section, CFG_KEY_PUBSUB_ROUTER,
-                               ROUTER_TYPE_FLOOD)
+                               ROUTER_TYPE_GOSSIP)
     sManager.setDefaultSetting(section, CFG_KEY_NICE, 20)
     sManager.setDefaultTrue(section, CFG_KEY_CORS)
     sManager.setDefaultTrue(section, CFG_KEY_ENABLED)

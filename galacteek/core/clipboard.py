@@ -217,7 +217,7 @@ class ClipboardTracker(QObject):
         if not isinstance(text, str) or len(text) > 1024:
             return
 
-        text = text.strip().rstrip('/')
+        text = text.strip()
 
         path = IPFSPath(text, autoCidConv=True)
         if path.valid:

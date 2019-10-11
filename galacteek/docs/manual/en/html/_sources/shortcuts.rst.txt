@@ -7,16 +7,16 @@ Keyboard shortcuts
 Main window keyboard shortcuts
 ------------------------------
 
-- **Mod + t**: Open a new IPFS browsing tab
+- **Mod + t**: Open a new browser tab
 - **Mod + s**: Search with ipfs-search
 - **Mod + w**: Close current tab
-- **Mod + m**: Open the IPFS hashmarks manager
-- **Mod + f**: Open the file manager
+- **Mod + m**: Open the hashmarks manager
 - **Mod + u**: Show pinning status
 
 Browser keyboard shortcuts
 --------------------------
 
+- **Mod + f**: Find text in page
 - **Mod + b**: Bookmark current page
 - **Mod + x**: Show/hide javascript output console
 - **Mod + l**: Focus the URL zone
@@ -29,7 +29,7 @@ IPFS views keyboard shortcuts (filemanager, explorer, dag viewer)
 -----------------------------------------------------------------
 
 - **Mod + c** or **Mod + y**: Copy selected item's IPFS path to the clipboard
-- **Mod + a**: Copy selected item's multihash (CID) to the clipboard
+- **Mod + a**: Copy selected item's CID to the clipboard
 - **Mod + w**: Close tab/hash view
 
 Clipboard shortcuts

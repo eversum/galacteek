@@ -340,7 +340,7 @@ class IPFSPath:
     @property
     def basename(self):
         if self.valid:
-            return os.path.basename(self.objPath)
+            return os.path.basename(self.objPath.rstrip('/'))
 
     @property
     def objPath(self):

@@ -1,10 +1,12 @@
 import functools
 
 from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QFile
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtCore import QCoreApplication
 
 from PyQt5.QtGui import QImage
+from PyQt5.QtGui import QMovie
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtGui import QPalette
 from PyQt5.QtGui import QKeySequence
@@ -19,12 +21,15 @@ from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtWidgets import QToolButton
 from PyQt5.QtWidgets import QSpacerItem
 from PyQt5.QtWidgets import QLayout
+from PyQt5.QtWidgets import QApplication
 
 from galacteek import ensure
 from galacteek import logUser
 from galacteek.crypto.qrcode import IPFSQrDecoder
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.cidhelpers import IPFSPath
+from galacteek.ipfs.stat import StatInfo
+from galacteek.ipfs.mimetype import MIMEType
 
 from .widgets import GalacteekTab
 from .widgets import IPFSUrlLabel
@@ -100,7 +105,7 @@ class ImageViewerTab(GalacteekTab):
             lambda: self.view.fitWindow(self.fitWindow.isChecked()))
         self.pinButton.clicked.connect(self.view.pinImage)
 
-    def onImageLoaded(self, path):
+    def onImageLoaded(self, path, mimeType):
         self.pinButton.setEnabled(True)
         self.pathLabel.path = path
         self.pathClipB.path = path
@@ -171,25 +176,31 @@ class ImageViewerTab(GalacteekTab):
 
 
 class ImageView(QScrollArea):
-    imageLoaded = pyqtSignal(IPFSPath)
+    imageLoaded = pyqtSignal(IPFSPath, MIMEType)
+
     qrCodesPresent = pyqtSignal(list)
 
     def __init__(self, parent=None):
         super(ImageView, self).__init__(parent)
 
+        self.app = QApplication.instance()
+        self.image = QImage()
+
+        self.clip = None
+        self.clipFirstPixmap = None
+        self.clipCurrentPixmap = None
+
         self.currentImgPath = None
         self.setObjectName('ImageView')
+
         self.qrDecoder = IPFSQrDecoder()
-        self.image = QImage()
-        self.labelImage = QLabel(self)
+        self.labelImage = QLabel()
         self.setAlignment(Qt.AlignCenter)
+        self.labelImage.setAlignment(Qt.AlignCenter)
 
         self.setBackgroundRole(QPalette.Dark)
         self.labelImage.setSizePolicy(
             QSizePolicy.Ignored, QSizePolicy.Ignored)
-        self.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Expanding)
-
         self.labelImage.setScaledContents(True)
         self.scaleFactor = 1.0
         self.setWidget(self.labelImage)
@@ -245,6 +256,12 @@ class ImageView(QScrollArea):
         self.zoomOut()
 
     def resizePixmap(self):
+        if self.clip:
+            if self.clipFirstPixmap:
+                self.labelImage.resize(
+                    self.scaleFactor * self.clipFirstPixmap.size())
+            return
+
         pixmap = self.labelImage.pixmap()
 
         if pixmap == 0 or pixmap is None:
@@ -268,25 +285,58 @@ class ImageView(QScrollArea):
             if not imgData:
                 raise Exception('Failed to load image')
 
-            img = QImage()
-            img.loadFromData(imgData)
-            self.image = img
+            mimeType, statInfo = await self.app.rscAnalyzer(
+                IPFSPath(imgPath))
 
-            self.labelImage.setPixmap(QPixmap.fromImage(self.image))
+            if mimeType is None:
+                raise Exception('Failed to load image')
+
+            stat = StatInfo(statInfo)
+
+            if str(mimeType) == 'image/gif':
+                fp = self.app.tempDir.filePath(stat.cid)
+
+                tmpFile = QFile(fp)
+                if tmpFile.open(QFile.WriteOnly):
+                    tmpFile.write(imgData)
+
+                    self.clip = QMovie(fp)
+                    self.labelImage.setMovie(self.clip)
+                    self.clip.frameChanged.connect(self.onMovieFrameChanged)
+                    self.clip.error.connect(self.onMovieError)
+                    self.clip.start()
+                    self.labelImage.adjustSize()
+            else:
+                img = QImage()
+                img.loadFromData(imgData)
+                self.image = img
+
+                self.labelImage.setPixmap(QPixmap.fromImage(self.image))
+                self.labelImage.adjustSize()
+                self.resizePixmap()
+
+                if self.qrDecoder:
+                    # See if we have any QR codes in the image
+                    urls = self.qrDecoder.decode(imgData)
+                    if urls:
+                        self.qrCodesPresent.emit(urls)
+
             self.labelImage.adjustSize()
-            self.resizePixmap()
-
             self.currentImgPath = IPFSPath(imgPath)
-
-            self.imageLoaded.emit(self.currentImgPath)
-
-            if self.qrDecoder:
-                # See if we have any QR codes in the image
-                urls = self.qrDecoder.decode(imgData)
-                if urls:
-                    self.qrCodesPresent.emit(urls)
+            self.imageLoaded.emit(self.currentImgPath, mimeType)
 
         except Exception:
             logUser.debug('Failed to load image: {path}'.format(
                 path=imgPath))
             messageBox(iImageCannotLoad(imgPath))
+
+    def onMovieFrameChanged(self, num):
+        if self.clip:
+            self.clipCurrentPixmap = self.clip.currentPixmap()
+
+            if self.clipFirstPixmap is None:
+                self.clipFirstPixmap = self.clipCurrentPixmap
+
+    def onMovieError(self, err):
+        if self.clip:
+            messageBox(self.clip.lastErrorString())

@@ -15,7 +15,7 @@ The clipboard manager
 
 From the application's toolbar you can access the clipboard manager button.
 It records the computer's clipboard activity and keeps an history of all the
-IPFS multihashes/paths that have been stored in it since the application was
+IPFS CIDs or paths that have been stored in it since the application was
 started.
 
 It supports **drag and drop**, so drag-and-dropping a link to an IPFS

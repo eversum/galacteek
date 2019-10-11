@@ -76,7 +76,7 @@ class ZbarIPFSQrDecoder(ImageReader):
                 if len(decoded) not in range(1, 1024):
                     continue
 
-                path = IPFSPath(decoded)
+                path = IPFSPath(decoded, autoCidConv=True)
                 if path.valid and path not in urls:
                     urls.append(path)
 

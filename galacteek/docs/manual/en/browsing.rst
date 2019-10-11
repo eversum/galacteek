@@ -31,7 +31,7 @@ using the secure *ipfs://* URL scheme with a base32-encoded
 :term:`CID`.
 
 When you see a blue cube, it means that you're browsing
-using the *dweb:/* URL scheme, or that you'
+using the *dweb:/* URL scheme.
 
 Clicking on the cube will open the DAG viewer for the page's
 IPFS object.

@@ -45,7 +45,6 @@ from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import joinIpns
 from galacteek.ipfs.cidhelpers import cidValid
-from galacteek.core.analyzer import ResourceAnalyzer
 from galacteek.core.asynclib import asyncify
 
 from galacteek.core.schemes import isSchemeRegistered
@@ -126,8 +125,14 @@ def iPinRecursive():
     return QCoreApplication.translate('BrowserTabForm', 'PIN (recursive)')
 
 
-def iLinkToMfsFolder():
-    return QCoreApplication.translate('BrowserTabForm', 'Link to folder (MFS)')
+def iSaveSelectedText():
+    return QCoreApplication.translate(
+        'BrowserTabForm', 'Save selected text to IPFS')
+
+
+def iLinkToQaToolbar():
+    return QCoreApplication.translate(
+        'BrowserTabForm', 'Link to Quick Access toolbar')
 
 
 def iFollow():
@@ -482,9 +487,9 @@ class WebView(IPFSWebView):
         return menu
 
     def contextMenuEvent(self, event):
-        # TODO: cleanup and refactoring provably
+        # TODO: cleanup and refactoring
 
-        analyzer = ResourceAnalyzer(parent=self)
+        analyzer = self.app.rscAnalyzer
         currentPage = self.page()
         contextMenuData = currentPage.contextMenuData()
         url = contextMenuData.linkUrl()
@@ -492,6 +497,15 @@ class WebView(IPFSWebView):
         mediaUrl = contextMenuData.mediaUrl()
 
         if not url.isValid() and not mediaUrl.isValid():
+
+            selectedText = self.webPage.selectedText()
+
+            if selectedText:
+                menu = QMenu(self)
+                menu.addAction(iSaveSelectedText(), self.onSaveSelection)
+                menu.exec(event.globalPos())
+                return
+
             menu = self.contextMenuCreateDefault()
             menu.exec(event.globalPos())
             return
@@ -625,6 +639,7 @@ class WebView(IPFSWebView):
             menu.exec(event.globalPos())
         else:
             # Non-IPFS URL
+
             menu = QMenu(self)
             scheme = url.scheme()
 
@@ -642,6 +657,22 @@ class WebView(IPFSWebView):
                 )
 
             menu.exec(event.globalPos())
+
+    @asyncify
+    async def onSaveSelection(self):
+        selectedText = self.webPage.selectedText()
+
+        if selectedText:
+            await self.saveSelectedText(selectedText)
+
+    @ipfsOp
+    async def saveSelectedText(self, ipfsop, rawText):
+        try:
+            entry = await ipfsop.addString(rawText)
+        except Exception:
+            pass
+        else:
+            self.app.setClipboardText(entry['Hash'])
 
     def hashmarkPath(self, path):
         ipfsPath = IPFSPath(path, autoCidConv=True)
@@ -684,6 +715,7 @@ class BrowserKeyFilter(QObject):
     zoominPressed = pyqtSignal()
     zoomoutPressed = pyqtSignal()
     focusUrlPressed = pyqtSignal()
+    findInPagePressed = pyqtSignal()
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.KeyPress:
@@ -693,9 +725,6 @@ class BrowserKeyFilter(QObject):
             if modifiers & Qt.ControlModifier:
                 if key == Qt.Key_B:
                     self.hashmarkPressed.emit()
-                    return True
-                if key == Qt.Key_S:
-                    self.savePagePressed.emit()
                     return True
                 if key == Qt.Key_R:
                     self.reloadPressed.emit()
@@ -711,6 +740,9 @@ class BrowserKeyFilter(QObject):
                     return True
                 if key == Qt.Key_Minus:
                     self.zoomoutPressed.emit()
+                    return True
+                if key == Qt.Key_F:
+                    self.findInPagePressed.emit()
                     return True
 
             if key == Qt.Key_F5:
@@ -865,6 +897,9 @@ class CurrentObjectController(PopupToolButton):
         self.dagViewAction = QAction(getIcon('ipld.png'),
                                      iDagView(), self,
                                      triggered=self.onDAGView)
+        self.qaLinkAction = QAction(getIconIpfsWhite(),
+                                    iLinkToQaToolbar(), self,
+                                    triggered=self.onQaLink)
         self.copyCurPathAction = QAction(getIcon('clipboard.png'),
                                          iCopyPathToClipboard(), self,
                                          triggered=self.onCopyPathToCb)
@@ -879,12 +914,19 @@ class CurrentObjectController(PopupToolButton):
 
         self.menu.addAction(self.copyCurPathAction)
         self.menu.addSeparator()
+        self.menu.addAction(self.qaLinkAction)
+        self.menu.addSeparator()
         self.menu.addAction(self.dagViewAction)
         self.menu.addSeparator()
         self.menu.addAction(self.hashmarkRootCidAction)
         self.menu.addSeparator()
         self.menu.addAction(self.hashmarkObjectAction)
         self.menu.addSeparator()
+
+    def onQaLink(self):
+        if self.currentPath:
+            self.app.mainWindow.qaToolbar.ipfsObjectDropped.emit(
+                self.currentPath)
 
     def onDAGView(self):
         self.dagViewRequested.emit(self.currentPath)
@@ -999,6 +1041,18 @@ class BrowserTab(GalacteekTab):
         self.ui.layoutHistory.addWidget(self.historySearches)
         self.ui.layoutUrl.addWidget(self.urlZone)
 
+        # Search
+        self.ui.searchInPage.returnPressed.connect(self.onSearchInPage)
+        self.ui.searchInPage.textEdited.connect(self.onSearchInPageEdit)
+        self.ui.searchPrev.clicked.connect(self.onSearchInPagePrev)
+        self.ui.searchNext.clicked.connect(self.onSearchInPageNext)
+        self.ui.searchButton.clicked.connect(self.onSearchInPage)
+        self.ui.searchCancel.clicked.connect(self.onSearchCancel)
+        self.ui.findToolButton.setCheckable(True)
+        self.ui.findToolButton.toggled.connect(self.searchControlsSetVisible)
+        self.searchControlsSetVisible(False)
+
+        # Current object controller
         self.curObjectCtrl = CurrentObjectController(self)
         self.curObjectCtrl.dagViewRequested.connect(self.onDagViewRequested)
         self.curObjectCtrl.hide()
@@ -1174,6 +1228,7 @@ class BrowserTab(GalacteekTab):
         evfilter.zoominPressed.connect(self.onZoomIn)
         evfilter.zoomoutPressed.connect(self.onZoomOut)
         evfilter.focusUrlPressed.connect(self.onFocusUrl)
+        evfilter.findInPagePressed.connect(self.onToggleSearchControls)
         self.installEventFilter(evfilter)
 
         self.resolveTimer = QTimer(self)
@@ -1246,20 +1301,11 @@ class BrowserTab(GalacteekTab):
 
     @ipfsOp
     async def createPageOpsMfsMenu(self, ipfsop):
-        self.mfsMenu = QMenu(iLinkToMfsFolder(), self)
+        self.mfsMenu = ipfsop.ctx.currentProfile.createMfsMenu(
+            title=iLinkToMfsFolder(), parent=self
+        )
         self.mfsMenu.setIcon(getIcon('folder-open-black.png'))
         self.mfsMenu.triggered.connect(self.onMoveToMfsMenuTriggered)
-
-        profile = ipfsop.ctx.currentProfile
-        filesystem = profile.filesModel.fsCore
-
-        for item in filesystem:
-            icon = item.icon()
-            action = QAction(icon, item.text(), self)
-            action.setData(item)
-            self.mfsMenu.addAction(action)
-            self.mfsMenu.addSeparator()
-
         self.pageOpsButton.menu.addSeparator()
         self.pageOpsButton.menu.addMenu(self.mfsMenu)
 
@@ -1420,6 +1466,62 @@ class BrowserTab(GalacteekTab):
 
     def onShowBrowserHelp(self):
         self.app.manuals.browseManualPage('browsing.html')
+
+    def searchControlsSetVisible(self, view):
+        for w in [self.ui.searchInPage,
+                  self.ui.searchCancel,
+                  self.ui.searchButton,
+                  self.ui.searchLabel,
+                  self.ui.searchPrev,
+                  self.ui.searchNext]:
+            w.setVisible(view)
+
+        if view is True:
+            self.ui.searchInPage.setFocus(Qt.OtherFocusReason)
+
+        self.ui.findToolButton.setChecked(view)
+
+    def onToggleSearchControls(self):
+        self.searchControlsSetVisible(not self.ui.searchInPage.isVisible())
+
+    def onSearchInPageEdit(self, text):
+        self.ui.searchInPage.setStyleSheet(
+            'QLineEdit { color: black; }'
+        )
+
+    def onSearchInPage(self):
+        self.searchInPage()
+
+    def searchReset(self):
+        self.ui.searchInPage.clear()
+        self.searchInPage()
+
+    def searchInPage(self, flags=0):
+        text = self.ui.searchInPage.text()
+        self.webEngineView.webPage.findText(
+            text, QWebEnginePage.FindFlags(flags),
+            self.searchCallback
+        )
+
+    def searchCallback(self, found):
+        if not found:
+            self.ui.searchInPage.setStyleSheet(
+                'QLineEdit { color: red; }'
+            )
+        else:
+            self.ui.searchInPage.setStyleSheet(
+                'QLineEdit { color: black; }'
+            )
+
+    def onSearchInPageNext(self):
+        self.searchInPage()
+
+    def onSearchInPagePrev(self):
+        self.searchInPage(QWebEnginePage.FindBackward)
+
+    def onSearchCancel(self):
+        self.searchReset()
+        self.searchControlsSetVisible(False)
 
     def onJsConsoleToggle(self, checked):
         self.jsConsoleWidget.setVisible(checked)
@@ -1727,10 +1829,12 @@ class BrowserTab(GalacteekTab):
             if sHandler and issubclass(
                     sHandler.__class__, IPFSObjectProxyScheme):
                 proxiedPath = await sHandler.urlProxiedPath(url)
-                self._currentIpfsObject = proxiedPath
-                self.ipfsObjectVisited.emit(self.currentIpfsObject)
-                self.ui.hashmarkThisPage.setEnabled(True)
-                self.curObjectCtrl.show()
+
+                if proxiedPath and proxiedPath.valid:
+                    self._currentIpfsObject = proxiedPath
+                    self.ipfsObjectVisited.emit(self.currentIpfsObject)
+                    self.ui.hashmarkThisPage.setEnabled(True)
+                    self.curObjectCtrl.show()
             else:
                 # Non-IPFS browsing
                 self._currentIpfsObject = None

@@ -13,6 +13,9 @@ from PyQt5.QtGui import QKeySequence
 from PyQt5.QtGui import QMovie
 from PyQt5.QtGui import QIcon
 
+from PyQt5.QtCore import QRect
+from PyQt5.QtCore import QPropertyAnimation
+from PyQt5.QtCore import QEasingCurve
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import QSize
 from PyQt5.QtCore import QFile
@@ -61,6 +64,7 @@ from .i18n import iDagView
 from .i18n import iHashmark
 from .i18n import iIpfsQrEncode
 from .i18n import iHelp
+from .i18n import iLinkToMfsFolder
 
 
 def iClipboardEmpty():
@@ -313,7 +317,7 @@ class ClipboardManager(PopupToolButton):
             itemName = item.path
 
         elif isIpfsPath(item.path):
-            itemName = os.path.basename(item.path)
+            itemName = item.ipfsPath.basename
         else:
             itemName = item.path
 
@@ -452,6 +456,7 @@ class ClipboardItemButton(PopupToolButton):
         super().__init__(mode=QToolButton.InstantPopup, parent=parent)
 
         self._item = None
+        self._animatedOnce = False
         self.app = QApplication.instance()
         self.setObjectName('currentClipItem')
         self.setIcon(getMimeIcon('unknown'))
@@ -459,7 +464,7 @@ class ClipboardItemButton(PopupToolButton):
         self.setToolTip(iClipboardNoValidAddress())
         self.setEnabled(False)
         self.rscOpener = rscOpener
-        self.loadingClip = QMovie(':/share/icons/loading.gif')
+        self.loadingClip = QMovie(':/share/clips/loading.gif')
         self.loadingClip.finished.connect(
             functools.partial(self.loadingClip.start))
         self.menu.setToolTipsVisible(True)
@@ -531,6 +536,8 @@ class ClipboardItemButton(PopupToolButton):
             shortcut=QKeySequence('Ctrl+p'),
             triggered=self.onPin)
 
+        self.geoAnimation = QPropertyAnimation(self, b'geometry')
+
     @property
     def item(self):
         return self._item
@@ -553,7 +560,8 @@ class ClipboardItemButton(PopupToolButton):
             item.mimeTypeDetected.connect(self.mimeDetected)
 
     def onLoadingFrame(self, num):
-        self.setIcon(QIcon(self.loadingClip.currentPixmap()))
+        if self.isVisible():
+            self.setIcon(QIcon(self.loadingClip.currentPixmap()))
 
     def onHashmark(self):
         if self.item:
@@ -562,7 +570,7 @@ class ClipboardItemButton(PopupToolButton):
 
     def onSetAsHome(self):
         self.app.settingsMgr.setSetting(CFG_SECTION_BROWSER, CFG_KEY_HOMEURL,
-                                        'dweb:{}'.format(self.item.fullPath))
+                                        self.item.ipfsPath.ipfsUrl)
 
     def onOpenWithProgram(self):
         def onAccept(dlg):
@@ -648,8 +656,8 @@ class ClipboardItemButton(PopupToolButton):
             return self.updateIcon(getMimeIcon('unknown'))
 
         icon = None
-        if self.item.mimeType.isDir or self.item.mimeType in \
-                [mimeTypeDagUnknown, mimeTypeDagPb]:
+
+        if self.item.mimeType.isDir:
             # It's a directory. Add the explore action and disable
             # the actions that don't apply to a folder
             self.menu.addAction(self.exploreHashAction)
@@ -666,7 +674,7 @@ class ClipboardItemButton(PopupToolButton):
             self.menu.addAction(self.markupRocksAction)
 
         elif self.item.mimeType.isImage:
-            self.updateIcon(getMimeIcon('image/x-generic'))
+            self.updateIcon(getMimeIcon('image/x-generic'), animate=False)
             ensure(self.analyzeImage())
 
         elif self.item.mimeType.isAtomFeed:
@@ -679,9 +687,56 @@ class ClipboardItemButton(PopupToolButton):
         if mIcon:
             self.updateIcon(mIcon)
 
-    def updateIcon(self, icon):
+        self.mfsMenu = ipfsop.ctx.currentProfile.createMfsMenu(
+            title=iLinkToMfsFolder(), parent=self)
+        self.mfsMenu.triggered.connect(self.onCopyToMfs)
+        self.menu.addSeparator()
+        self.menu.addMenu(self.mfsMenu)
+
+        if self.item.mimeType in [mimeTypeDagUnknown, mimeTypeDagPb]:
+            self.downloadAction.setEnabled(False)
+            self.mfsMenu.setEnabled(False)
+
+    def onCopyToMfs(self, action):
+        ensure(self.copyToMfs(action.data()))
+
+    @ipfsOp
+    async def copyToMfs(self, ipfsop, mfsItem):
+        dest = os.path.join(mfsItem.path, self.item.ipfsPath.basename)
+
+        try:
+            await ipfsop.client.files.cp(
+                self.item.path,
+                dest
+            )
+        except aioipfs.APIError:
+            # TODO
+            pass
+
+    def updateIcon(self, icon, animate=True):
         self.item.mimeIcon = icon
         self.setIcon(icon)
+
+        if animate and not self._animatedOnce:
+            self.animate()
+            self._animatedOnce = True
+
+    def animate(self):
+        # Geometry animation
+
+        self.geoAnimation.stop()
+        size = self.size()
+        self.geoAnimation.setDuration(1700)
+        self.geoAnimation.setKeyValueAt(
+            0, QRect(0, 0, size.width() / 4, size.height() / 4))
+        self.geoAnimation.setKeyValueAt(
+            0.4, QRect(0, 0, size.width() / 3, size.height() / 3))
+        self.geoAnimation.setKeyValueAt(
+            0.8, QRect(0, 0, size.width() / 2, size.height() / 2))
+        self.geoAnimation.setKeyValueAt(
+            1, QRect(0, 0, size.width(), size.height()))
+        self.geoAnimation.setEasingCurve(QEasingCurve.OutElastic)
+        self.geoAnimation.start()
 
     @ipfsOp
     async def analyzeFeed(self, ipfsop):

@@ -30,7 +30,7 @@
         margin-right: 20px;
       }
 
-      input[type=text] {
+      input.standard[type=text] {
          font: 14pt "Montserrat";
           background-color: #C3D7DF;
           background-image: url('qrc:///share/icons/ipfs-cube-64.png');
@@ -351,7 +351,7 @@
     <div width="100%" class="container">
       <div style="float: left; width='40%'">
         <form onsubmit="window.runSearch();">
-          <input type="text" name="query" id="searchquery" width="300"/>
+          <input type="text" class="standard" name="query" id="searchquery" width="300"/>
           <select name="contenttype" id="contenttype">
             <option value="all">All</option>
             <option value="images">Images</option>

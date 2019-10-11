@@ -1,5 +1,7 @@
 <RCC>
   <qresource>
+    <file>../../share/clips/funky-cube-1.gif</file>
+    <file>../../share/clips/rotating-cube.gif</file>
     <file>../../share/icons/ipfs-repo.png</file>
     <file>../../share/icons/cube-blue.png</file>
     <file>../../share/icons/cube-orange.png</file>
@@ -40,8 +42,8 @@
     <file>../../share/icons/pyramid-blue.png</file>
     <file>../../share/icons/download.png</file>
     <file>../../share/icons/hashmark-black.png</file>
-    <file>../../share/icons/loading.gif</file>
     <file>../../share/icons/open.png</file>
+    <file>../../share/clips/loading.gif</file>
     <file>../../share/qr-codes/qr.wikipedia.mezcla.png</file>
     <file>../../share/qr-codes/qr.ipfs.io.png</file>
     <file>../../share/icons/search-engine-zoom.png</file>

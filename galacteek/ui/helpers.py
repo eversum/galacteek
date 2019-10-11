@@ -6,6 +6,7 @@ import multihash
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtGui import QImage
 from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QMovie
 
 from PyQt5.QtCore import QStandardPaths
 from PyQt5.QtCore import Qt
@@ -19,6 +20,10 @@ from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QFileDialog
 from PyQt5.QtWidgets import QInputDialog
 from PyQt5.QtWidgets import QMenu
+from PyQt5.QtWidgets import QLabel
+from PyQt5.QtWidgets import QDialog
+from PyQt5.QtWidgets import QVBoxLayout
+from PyQt5.QtWidgets import QDialogButtonBox
 
 from galacteek import ensure
 from galacteek.ipfs.mimetype import mimeTypeDagUnknown
@@ -177,12 +182,19 @@ def getHomePath():
     return pList[0] if len(pList) > 0 else os.getenv('HOME')
 
 
-def messageBox(message, richText=False, title=None):
-    msgBox = QMessageBox()
-    msgBox.setText(message)
+def messageBox(message, title=None):
+    msgBox = QDialog()
 
-    if richText:
-        msgBox.setTextFormat(Qt.RichText)
+    buttonBox = QDialogButtonBox(
+        QDialogButtonBox.Ok,
+        msgBox
+    )
+    buttonBox.accepted.connect(functools.partial(msgBox.done, 1))
+
+    layout = QVBoxLayout()
+    layout.addWidget(QLabel(message))
+    layout.addWidget(buttonBox)
+    msgBox.setLayout(layout)
 
     if title:
         msgBox.setWindowTitle(title)
@@ -345,6 +357,7 @@ def cidInfosMarkup(cidString):
         return '<p>Invalid CID</p>'
 
     return '''
+    <p>CID: <b>{cids}</b></p>
     <p>CID version {cidv}</p>
 
     <p>Codec: <b>{codec}</b></p>
@@ -353,10 +366,34 @@ def cidInfosMarkup(cidString):
         (<b>{mhashfuncvaluehex}</b>)</p>
     <p>Multihash digest: <b>{mhashdigest}</b></p>
     <p>Multihash: <b>{mhashascii}</b></p>
-    '''.format(cidv=cid.version,
+    '''.format(cids=cidString,
+               cidv=cid.version,
                codec=cid.codec,
                mhashfunc=mhash.func.name,
                mhashfuncvalue=mhash.func.value,
                mhashfuncvaluehex=hex(mhash.func.value),
                mhashdigest=binascii.b2a_hex(mhash.digest).decode('ascii'),
                mhashascii=binascii.b2a_hex(cid.multihash).decode('ascii'))
+
+
+class RotatingCubeClip(QMovie):
+    def __init__(self, filename='rotating-cube.gif', speed=100):
+        super(RotatingCubeClip, self).__init__(
+            ':/share/clips/{}'.format(filename))
+        self.setSpeed(speed)
+
+    def createIcon(self):
+        return QIcon(self.currentPixmap())
+
+    def playing(self):
+        return self.state() == QMovie.Running
+
+
+class RotatingCubeClipSimple(RotatingCubeClip):
+    def __init__(self, **kw):
+        super().__init__(filename='rotating-cube.gif', **kw)
+
+
+class RotatingCubeClipFunky(RotatingCubeClip):
+    def __init__(self, **kw):
+        super().__init__(filename='funky-cube-1.gif', **kw)

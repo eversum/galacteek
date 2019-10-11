@@ -45,6 +45,7 @@ from galacteek.core.db import SqliteDatabase
 from galacteek.core.models.atomfeeds import AtomFeedsModel
 from galacteek.core.signaltowers import DAGSignalsTower
 from galacteek.core.signaltowers import URLSchemesTower
+from galacteek.core.analyzer import ResourceAnalyzer
 
 from galacteek.core.schemes import SCHEME_MANUAL
 from galacteek.core.schemes import DWebSchemeHandler
@@ -593,6 +594,8 @@ class GalacteekApplication(QApplication):
             'schemes': URLSchemesTower(self)
         }
 
+        self.rscAnalyzer = ResourceAnalyzer(parent=self)
+
     def setupAsyncLoop(self):
         """
         Install the quamash event loop and enable debugging
@@ -787,7 +790,8 @@ class GalacteekApplication(QApplication):
         self.ensSchemeHandler = EthDNSSchemeHandler(self)
         self.ensProxySchemeHandler = EthDNSProxySchemeHandler(self)
         self.nativeIpfsSchemeHandler = NativeIPFSSchemeHandler(
-            self, noMutexes=self.cmdArgs.noipfsmutexlock)
+            self, noMutexes=self.cmdArgs.noipfsmutexlock
+        )
         self.qSchemeHandler = MultiObjectHostSchemeHandler(self)
 
     def subUrl(self, path):

@@ -23,16 +23,20 @@ from galacteek.ipfs.stat import StatInfo
 from galacteek.ipfs.mimetype import MIMEType
 from galacteek.ipfs.mimetype import detectMimeType
 from galacteek.ipfs.mimetype import detectMimeTypeFromBuffer
+from galacteek.ipfs.mimetype import mimeTypeDagUnknown
 
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.cidhelpers import shortPathRepr
 
+from .dag import DAGViewer
 from .textedit import TextEditorTab
 from .dialogs import ResourceOpenConfirmDialog
+from .helpers import getIcon
 from .helpers import getMimeIcon
 from .helpers import messageBox
 from .helpers import runDialog
 from .imgview import ImageViewerTab
+from .i18n import iDagViewer
 
 
 def iResourceCannotOpen(path):
@@ -112,6 +116,16 @@ class IPFSResourceOpener(QObject):
                 path=rscPath, type=str(mimeType)))
         else:
             logUser.info(iResourceCannotOpen(rscPath))
+            return
+
+        if mimeType == mimeTypeDagUnknown:
+            view = DAGViewer(rscPath, self.app.mainWindow)
+            self.app.mainWindow.registerTab(
+                view, iDagViewer(),
+                current=True,
+                icon=getIcon('ipld.png'),
+                tooltip=rscPath
+            )
             return
 
         if mimeType.type == 'application/octet-stream' and not fromEncrypted:

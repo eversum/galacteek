@@ -64,10 +64,10 @@ def iConnectStatus(id, agent, peerscount):
         id, agent, peerscount)
 
 
-def iItemsInPinningQueue(items):
+def iItemsInPinningQueue(itemsCount):
     return QCoreApplication.translate(
         'GalacteekWindow',
-        'Items in pinning queue: {}'.format(items))
+        'Items queued for pinning: {}'.format(itemsCount))
 
 
 def iHelp():
@@ -131,6 +131,11 @@ def iPinError(path, errmsg):
 
 def iManual():
     return QCoreApplication.translate('GalacteekWindow', 'Manual')
+
+
+def iLinkToMfsFolder():
+    return QCoreApplication.translate(
+        'GalacteekWindow', 'Link to folder (MFS)')
 
 
 def iHashmark():

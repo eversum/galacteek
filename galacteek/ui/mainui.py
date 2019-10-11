@@ -17,7 +17,6 @@ from PyQt5.QtWidgets import QPushButton
 from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtWidgets import QTextBrowser
-from PyQt5.QtGui import QTextCursor
 
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import Qt
@@ -29,6 +28,7 @@ from PyQt5.QtCore import QPoint
 from PyQt5.Qt import QSizePolicy
 
 from PyQt5.QtGui import QKeySequence
+from PyQt5.QtGui import QTextCursor
 
 from PyQt5 import QtWebEngineWidgets
 
@@ -323,6 +323,56 @@ class CentralWidget(QWidget):
         self.setLayout(self.wLayout)
 
 
+class BrowseButton(QToolButton):
+    """
+    Browse button. When the button is hovered we play the
+    rotating cube clip.
+    """
+
+    def __init__(self, parent):
+        super().__init__(parent)
+
+        self.rotatingCubeClip = RotatingCubeClipSimple()
+        self.rotatingCubeClip.finished.connect(
+            functools.partial(self.rotatingCubeClip.start))
+        self.rotatingCubeClip.frameChanged.connect(self.onCubeClipFrame)
+        self.normalIcon()
+
+    def setMenu(self, menu):
+        super(BrowseButton, self).setMenu(menu)
+
+        menu.triggered.connect(lambda action: self.normalIcon())
+        menu.aboutToHide.connect(self.normalIcon)
+
+    def onCubeClipFrame(self, no):
+        menu = self.menu()
+        icon = self.rotatingCubeClip.createIcon()
+
+        self.setIcon(icon)
+
+        if menu and menu.isVisible():
+            for action in self.menu().actions():
+                action.setIcon(icon)
+
+    def rotateCube(self):
+        if not self.rotatingCubeClip.playing():
+            self.rotatingCubeClip.start()
+
+    def normalIcon(self):
+        self.rotatingCubeClip.stop()
+        self.setIcon(getIconIpfs64())
+
+    def enterEvent(self, event):
+        self.rotateCube()
+        super(BrowseButton, self).enterEvent(event)
+
+    def leaveEvent(self, event):
+        if not self.menu().isVisible():
+            self.normalIcon()
+
+        super(BrowseButton, self).leaveEvent(event)
+
+
 class MainWindow(QMainWindow):
     def __init__(self, app):
         super(MainWindow, self).__init__()
@@ -407,10 +457,14 @@ class MainWindow(QMainWindow):
         self.qaToolbar.setOrientation(self.toolbarMain.orientation())
 
         # Browse button
-        self.browseButton = QToolButton(self)
+
+        self.browseButton = BrowseButton(self)
         self.browseButton.setPopupMode(QToolButton.MenuButtonPopup)
         self.browseButton.setObjectName('buttonBrowseIpfs')
         self.browseButton.clicked.connect(self.onOpenBrowserTabClicked)
+
+        self.browseButton.rotateCube()
+
         menu = QMenu(self)
         menu.addAction(getIconIpfsIce(), 'Browse',
                        self.onOpenBrowserTabClicked)
@@ -426,7 +480,7 @@ class MainWindow(QMainWindow):
         self.fileManagerButton.setToolTip(iFileManager())
         self.fileManagerButton.setIcon(getIcon('folder-open.png'))
         self.fileManagerButton.clicked.connect(self.onFileManagerClicked)
-        self.fileManagerButton.setShortcut(QKeySequence('Ctrl+f'))
+        self.fileManagerButton.setShortcut(QKeySequence('Ctrl+Alt+f'))
 
         # File manager
         self.fileManagerWidget = files.FileManager(parent=self)
@@ -827,6 +881,8 @@ class MainWindow(QMainWindow):
 
     def onRepoReady(self):
         self.enableButtons()
+
+        self.browseButton.normalIcon()
 
         ensure(self.displayConnectionInfo())
         ensure(self.qaToolbar.init())
@@ -1242,3 +1298,8 @@ class MainWindow(QMainWindow):
         tab = AtomFeedsViewTab(self, view=self.atomFeedsViewWidget)
         self.registerTab(tab, self.tabnFeeds,
                          icon=getIcon('atom-feed.png'), current=True)
+
+    def onIpfsObjectServed(self, ipfsPath, cType, reqTime):
+        # TODO
+        # Called when an object was served by the native IPFS scheme handler
+        pass

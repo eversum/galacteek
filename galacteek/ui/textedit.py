@@ -651,6 +651,11 @@ class TextEditorWidget(QWidget):
                 'created': isoformat(datet)
             }))
 
+        if self.currentDocument and self.currentDocument.filename:
+            p = os.path.join(self.localPath, self.currentDocument.filename)
+            async with aiofiles.open(p, 'w+t') as fd:
+                await fd.write(self.currentDocument.toPlainText())
+
         await self.sync()
         self.fsControlButton.setEnabled(True)
 

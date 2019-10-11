@@ -11,6 +11,8 @@ import aiofiles
 from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtCore import QFile
 from PyQt5.QtCore import QIODevice
+from PyQt5.QtWidgets import QMenu
+from PyQt5.QtWidgets import QAction
 
 from galacteek import log
 from galacteek import logUser
@@ -847,3 +849,15 @@ class UserProfile(QObject):
             await ipfsop.filesLink(wEntry, self.pathWebPages, name=pageTitle)
 
         ensure(linkWebPage(entry, title))
+
+    def createMfsMenu(self, title='MFS', parent=None):
+        mfsMenu = QMenu(title, parent)
+
+        for item in self.filesModel.fsCore:
+            icon = item.icon()
+            action = QAction(icon, item.text(), self)
+            action.setData(item)
+            mfsMenu.addAction(action)
+            mfsMenu.addSeparator()
+
+        return mfsMenu

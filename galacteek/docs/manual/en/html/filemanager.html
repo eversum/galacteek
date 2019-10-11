@@ -63,6 +63,16 @@ files data is the same).</p>
 <p>You might want to use the <em>Trickle</em> DAG format for large files
 (for instance video files), making DAG traversal potentially faster.</p>
 </div>
+<div class="section" id="chunker">
+<h3>Chunker<a class="headerlink" href="#chunker" title="Permalink to this headline">¶</a></h3>
+<p>From the <em>Chunker</em> menu you can choose the chunking algorithm.
+It defines which strategy IPFS will use to break files into blocks:</p>
+<ul class="simple">
+<li><strong>Fixed size</strong>: files are split into fixed-size blocks</li>
+<li><strong>Rabin</strong>: fingerprinting chunker (you can specify a minimum, average
+and maximum block size)</li>
+</ul>
+</div>
 <div class="section" id="use-raw-blocks-for-leaf-nodes">
 <h3>Use raw blocks for leaf nodes<a class="headerlink" href="#use-raw-blocks-for-leaf-nodes" title="Permalink to this headline">¶</a></h3>
 <p>This option tells IPFS to use raw blocks for the leaf nodes in
@@ -125,7 +135,7 @@ recursively announce the entire graph).</p>
 <p>Right-clicking an entry in the file manager will popup a menu giving you a few
 options:</p>
 <ul class="simple">
-<li><em>Copy multihash to the clipboard</em></li>
+<li><em>Copy CID to the clipboard</em></li>
 <li><em>Copy full path to the clipboard</em></li>
 <li><em>Announce (DHT provide)</em>: announce to the network that you provide this
 file/directory</li>
@@ -148,7 +158,7 @@ data on their node, it will still be available)</li>
 <p>The following keyboard shortcuts are available within the files manager:</p>
 <ul class="simple">
 <li><strong>Mod + c</strong> or <strong>Mod + y</strong>: Copy selected item’s IPFS path to the clipboard</li>
-<li><strong>Mod + a</strong>: Copy selected item’s multihash (CID) to the clipboard</li>
+<li><strong>Mod + a</strong>: Copy selected item’s CID to the clipboard</li>
 <li><strong>Mod+x</strong>: Explore item if it is a directory</li>
 </ul>
 </div>

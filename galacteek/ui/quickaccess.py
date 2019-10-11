@@ -14,7 +14,6 @@ from galacteek.ipfs import ipfsOp
 from galacteek.ipfs.stat import StatInfo
 from galacteek.ipfs import kilobytes
 from galacteek.ipfs.cidhelpers import IPFSPath
-from galacteek.core.analyzer import ResourceAnalyzer
 
 from .helpers import getIcon
 from .helpers import getMimeIcon
@@ -55,7 +54,7 @@ class QuickAccessToolBar(QToolBar, URLDragAndDropProcessor):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.setMinimumWidth(400)
         self.setAcceptDrops(True)
-        self.analyzer = ResourceAnalyzer(parent=self)
+        self.analyzer = self.app.rscAnalyzer
         self._config = {
             'objects': []
         }
