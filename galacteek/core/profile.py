@@ -230,7 +230,7 @@ class ProfileError(Exception):
 
 
 class SharedHashmarksManager(QObject):
-    hashmarksLoaded = pyqtSignal(IPFSMarks)
+    hashmarksLoaded = pyqtSignal(str, IPFSMarks)
 
     def __init__(self, parent):
         super(SharedHashmarksManager, self).__init__(parent)
@@ -250,7 +250,7 @@ class SharedHashmarksManager(QObject):
     async def scanningTask(self):
         while True:
             await self.scan()
-            await asyncio.sleep(180)
+            await asyncio.sleep(60)
 
     @ipfsOp
     async def scan(self, ipfsop):
@@ -273,14 +273,14 @@ class SharedHashmarksManager(QObject):
                 marksCiphered = await self.loadFromPath(fPath)
 
                 marks = IPFSMarks(None, data=marksCiphered.root)
-                self.hashmarksLoaded.emit(marks)
+                self.hashmarksLoaded.emit(uid, marks)
                 self._loaded.append(marksHash)
             except BaseException as err:
                 log.debug('Could not load hashmarks from CID {0}: {1}'.format(
                     marksHash, str(err)))
             else:
                 logUser.info('Loaded hashmarks from peer {0}'.format(uid))
-                await asyncio.sleep(2)
+                await asyncio.sleep(1)
 
     async def store(self, ipfsop, sender, marksJson):
         mfsPath = os.path.join(self.profile.pathHMarksLibrary, sender)
@@ -297,9 +297,9 @@ class SharedHashmarksManager(QObject):
                 marks = CipheredHashmarks(
                     mfsPath, self.profile.rsaAgent)
                 await marks.load()
+                self._state[sender] = marks
                 marks._root = marksJson
                 marks.changed.emit()
-                self._state[sender] = marks
             else:
                 marks = self._state[sender]
                 marks._root = marksJson
@@ -425,7 +425,8 @@ class UserProfile(QObject):
             self.pathWebPages,
             self.pathDWebApps,
             self.pathTmp,
-            self.pathEncryptedFiles
+            self.pathEncryptedFiles,
+            self.pathEDagsPyramids
         ]
 
     @property
@@ -499,6 +500,14 @@ class UserProfile(QObject):
     @property
     def pathData(self):
         return os.path.join(self.root, 'data')
+
+    @property
+    def pathEDags(self):
+        return os.path.join(self.pathData, 'edags')
+
+    @property
+    def pathEDagsPyramids(self):
+        return os.path.join(self.pathEDags, 'pyramids')
 
     @property
     def pathHMarksLibrary(self):
@@ -814,8 +823,12 @@ class UserProfile(QObject):
             await self.userWebsite.update()
 
     @ipfsOp
-    async def storeHashmarks(self, ipfsop, senderPeerId, marksJson):
+    async def storeHashmarksFromJson(self, ipfsop, senderPeerId, marksJson):
         await self.sharedHManager.store(ipfsop, senderPeerId, marksJson)
+
+    @ipfsOp
+    async def storeHashmarks(self, ipfsop, senderPeerId, ipfsMarks):
+        await self.sharedHManager.store(ipfsop, senderPeerId, ipfsMarks.root)
 
     def onQrImageEncoded(self, encrypt, imgPath):
         @ipfsOpFn
@@ -861,3 +874,11 @@ class UserProfile(QObject):
             mfsMenu.addSeparator()
 
         return mfsMenu
+
+    def edagMetadataPath(self, name):
+        return os.path.join(
+            self.pathEDags, '{0}.edag.json'.format(name))
+
+    def edagPyramidMetadataPath(self, name):
+        return os.path.join(
+            self.pathEDagsPyramids, '{0}.edag.json'.format(name))

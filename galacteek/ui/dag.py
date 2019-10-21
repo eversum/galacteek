@@ -5,8 +5,11 @@ from PyQt5.QtWidgets import QTreeWidgetItem
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QAction
 from PyQt5.QtWidgets import QPushButton
+from PyQt5.QtWidgets import QMenu
 
 from PyQt5.QtCore import QCoreApplication
+
+from PyQt5.QtGui import QKeySequence
 
 from galacteek import ensure
 from galacteek import log
@@ -49,7 +52,7 @@ class DAGViewer(GalacteekTab):
     def __init__(self, dagPath, *args, **kw):
         super(DAGViewer, self).__init__(*args, **kw)
 
-        self.dagPath = dagPath
+        self.dagPath = cidhelpers.IPFSPath(dagPath, autoCidConv=True)
         self._buttons = []
 
         self.dagWidget = QWidget()
@@ -59,15 +62,36 @@ class DAGViewer(GalacteekTab):
 
         self.configureTree()
 
+        self.reloadAction = QAction(getIcon('ipld.png'),
+                                    'Reload',
+                                    self,
+                                    shortcut=QKeySequence('Ctrl+r'),
+                                    triggered=self.onReload)
+
+        self.viewParentAction = QAction(getIcon('ipld.png'),
+                                        iParentDagView(),
+                                        triggered=self.onViewParent)
+
+        self.collapseTreeAction = QAction('Collapse tree',
+                                          self,
+                                          triggered=self.onCollapseTree)
+        self.expandTreeAction = QAction('Expand tree',
+                                        self,
+                                        triggered=self.onExpandTree)
+        self.ui.dagControlButton.setMenu(QMenu(self))
+
+        self.ui.dagControlButton.menu().addAction(self.reloadAction)
+        self.ui.dagControlButton.menu().addAction(self.viewParentAction)
+        self.ui.dagControlButton.menu().addSeparator()
+        self.ui.dagControlButton.menu().addAction(self.collapseTreeAction)
+        self.ui.dagControlButton.menu().addAction(self.expandTreeAction)
+
         evfilter = IPFSTreeKeyFilter(self.ui.dagTree)
         evfilter.copyHashPressed.connect(self.onCopyItemHash)
         self.ui.dagTree.installEventFilter(evfilter)
 
         self.ui.dagTree.itemDoubleClicked.connect(self.onItemDoubleClicked)
         self.ui.dagTree.setHeaderLabels([iKey(), iValue(), ''])
-        self.ui.dagPath.setText(iDagInfo(self.dagPath))
-        self.ui.collapseButton.clicked.connect(self.onCollapseTree)
-        self.ui.expandButton.clicked.connect(self.onExpandTree)
 
         self.rootItem = self.ui.dagTree.invisibleRootItem()
         self.app.task(self.loadDag, self.dagPath, self.rootItem)
@@ -75,8 +99,18 @@ class DAGViewer(GalacteekTab):
     def configureTree(self):
         # Resize section 1 to be slightly wider than the length of
         # a CIDv1 in base32
+
+        self.ipldMetric = self.fontMetrics().size(0, 'IPLD rules')
+        self.unixMetric = self.fontMetrics().size(0, 'IPLD rules')
         cidSize = self.fontMetrics().size(0, 'a' * (59 + 20))
         self.ui.dagTree.header().resizeSection(1, cidSize.width())
+
+    def onReload(self):
+        self.app.task(self.loadDag, self.dagPath, self.rootItem)
+
+    def onViewParent(self):
+        parent = self.dagPath.parent()
+        self.app.task(self.loadDag, parent, self.rootItem)
 
     def onCollapseTree(self):
         self.ui.dagTree.collapseAll()
@@ -98,13 +132,31 @@ class DAGViewer(GalacteekTab):
                 ensure(self.app.resourceOpener.open(path))
 
     @ipfsOp
-    async def loadDag(self, ipfsop, hashRef, item=None):
+    async def loadDag(self, ipfsop, path, item=None):
+        """
+        Load the DAG from an IPFSPath
+
+        :param IPFSPath path: object path to load
+        """
+
         if item is None:
             item = self.rootItem
-        await asyncio.sleep(0)
-        dagNode = await ipfsop.dagGet(hashRef)
+
+        if not path.valid:
+            return messageBox(iInvalidCID())
+
+        self.viewParentAction.setEnabled(not path.isRoot)
+        self.reloadAction.setEnabled(path.isIpns)
+
+        dagNode = await ipfsop.dagGet(path.objPath)
         if not dagNode:
-            return messageBox(iDagError(hashRef))
+            return messageBox(iDagError(path.objPath))
+
+        await asyncio.sleep(0)
+
+        self.dagPath = path
+        self.ui.dagTree.clear()
+        self.ui.dagPath.setText(iDagInfo(self.dagPath.objPath))
 
         await self.displayItem(dagNode, item)
         item.setExpanded(True)
@@ -137,8 +189,7 @@ class DAGViewer(GalacteekTab):
 
                 if dType in [UNIXFS_DT_FILE, UNIXFS_DT_RAW] and node['data']:
                     buttonSave = QPushButton(self)
-                    buttonSave.setMaximumWidth(
-                        self.fontMetrics().size(0, 'UNIX').width())
+                    buttonSave.setMaximumWidth(self.unixMetric.width())
 
                     buttonSave.setIcon(getIcon('save-file.png'))
                     buttonSave.clicked.connect(functools.partial(
@@ -163,14 +214,14 @@ class DAGViewer(GalacteekTab):
                 if dkey == '/':
                     # Merkle-link
                     linkValue = str(dval)
-                    if not cidhelpers.cidValid(linkValue):
+
+                    path = cidhelpers.IPFSPath(linkValue, autoCidConv=True)
+                    if not path.valid:
                         continue
 
-                    path = cidhelpers.IPFSPath(linkValue)
                     button = PopupToolButton(icon=getIcon('ipld.png'),
                                              parent=self)
-                    button.setMaximumWidth(
-                        self.fontMetrics().size(0, 'IPLD rules').width())
+                    button.setMaximumWidth(self.ipldMetric.width())
                     actionView = QAction(getIcon('ipld.png'),
                                          "View link's node", self,
                                          triggered=functools.partial(
@@ -190,8 +241,7 @@ class DAGViewer(GalacteekTab):
 
                     dictItem = QTreeWidgetItem(item)
                     dictItem.setText(0, iMerkleLink())
-                    dictItem.setText(1, cidhelpers.cidConvertBase32(linkValue))
-                    dictItem.setToolTip(1, cidInfosMarkup(linkValue))
+                    dictItem.setText(1, path.rootCidRepr)
                     self.ui.dagTree.setItemWidget(dictItem, 2, button)
 
                     dictItem.setBackground(0, dagLinkColor)
@@ -218,7 +268,6 @@ class DAGViewer(GalacteekTab):
                 listItem.setExpanded(True)
                 await self.displayItem(data[i], listItem)
         elif isinstance(data, str):
-            # Not a UnixFS node, leaf node ?
             rawItem = QTreeWidgetItem(item)
             rawItem.setText(0, 'Leaf node')
             rawItem.setText(1, data[0:128])

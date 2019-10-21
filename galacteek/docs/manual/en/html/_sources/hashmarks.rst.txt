@@ -25,7 +25,7 @@ Hashmarks are given a category, a title, description and icon (that
 will be stored within IPFS). Flagging a hashmark as *shared* means
 that it will be shared on the network with other peers (off by default).
 Received hashmarks are RSA-encrypted in your IPFS repository with
-your profile's RSA key.
+your profile's RSA key, and searchable from the hashmarks library.
 
 Local Hashmarks menu
 --------------------
@@ -38,28 +38,40 @@ From the toolbar, clicking on the hashmarks icon opens a menu
 giving access to all your local hashmarks, by category.
 
 Clicking an item will trigger the opening of the corresponding
-resource, depending on its type (the file type of the resource
+object, depending on its type (the file type of the object
 is automatically detected and cached by the application). There
 are built-in viewers/renderers for things like text files,
 images, multimedia files etc.. For files that cannot be
 rendered by the application (for example PDF files), the system's
 default application will be used to open the file.
 
-Shared Hashmarks menu
----------------------
+Searching
+---------
 
 .. image:: ../../../../share/icons/hashmarks-library.png
     :width: 64
     :height: 64
 
-This menu shows the hashmarks that have been received on the
-network from other peers.
+The hashmarks library button gives you the ability to search
+for content in the global hashmarks database (local hashmarks
+and hashmarks sent from other peers). To quickly access
+the hashmarks search you can press **Mod+Control+h**
+(**Alt+Control+h** on Linux or **Command+Control+h**
+on MacOS), or just click on the hashmarks library button
+in the toolbar.
+
+Your search query will be applied to the title, description,
+comment or object path (so you can search for CIDs) of hashmarks.
+The search is case-insensitive.
+
+After typing a search query, run the search by pressing
+**Shift + Return**.
 
 Following IPNS keys
 ===================
 
 There is basic support for following IPNS names/keys. When browsing
-a root IPNS URL (e.g **/ipns/awesome.ipfs.io**), open the IPFS CID
+an IPNS path (e.g **/ipns/awesome.ipfs.io**), open the IPFS
 menu on the left, and click on **Follow IPNS resource**).
 
 The IPNS name or key will be periodically resolved (the resolve frequency

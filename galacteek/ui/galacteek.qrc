@@ -1,6 +1,8 @@
 <RCC>
   <qresource>
+    <file>../../share/icons/galacteek-incandescent.png</file>
     <file>../../share/clips/funky-cube-1.gif</file>
+    <file>../../share/clips/rotating-cube-redflash-140-6fps.gif</file>
     <file>../../share/clips/rotating-cube.gif</file>
     <file>../../share/icons/ipfs-repo.png</file>
     <file>../../share/icons/cube-blue.png</file>
@@ -117,7 +119,6 @@
     <file>../../share/static/css/ipfs-ui.css</file>
     <file>../../share/static/css/orbital.css</file>
     <file>../../share/icons/orbitdb.png</file>
-    <file>../../share/icons/star-navy.png</file>
     <file>../../share/icons/folder-open-black.png</file>
     <file>../../share/icons/ipld-logo.png</file>
     <file>../../share/icons/window.png</file>

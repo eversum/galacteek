@@ -29,16 +29,28 @@
         </widget>
        </item>
        <item>
-        <widget class="QToolButton" name="collapseButton">
-         <property name="text">
-          <string>Collapse tree</string>
+        <widget class="QToolButton" name="dagControlButton">
+         <property name="minimumSize">
+          <size>
+           <width>32</width>
+           <height>32</height>
+          </size>
          </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QToolButton" name="expandButton">
          <property name="text">
-          <string>Expand tree</string>
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="galacteek.qrc">
+           <normaloff>:/share/icons/ipld.png</normaloff>:/share/icons/ipld.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>24</width>
+           <height>24</height>
+          </size>
+         </property>
+         <property name="popupMode">
+          <enum>QToolButton::InstantPopup</enum>
          </property>
         </widget>
        </item>
@@ -77,6 +89,8 @@
    </item>
   </layout>
  </widget>
- <resources/>
+ <resources>
+  <include location="galacteek.qrc"/>
+ </resources>
  <connections/>
 </ui>

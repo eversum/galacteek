@@ -89,9 +89,10 @@ def isIpnsPath(path):
 def shortCidRepr(cid):
     cidStr = str(cid)
     if cid.version == 0:
-        return '...{0}'.format(cidStr[3 * int(len(cidStr) / 5):])
+        return '... {0}'.format(cidStr[3 * int(len(cidStr) / 5):])
     else:
-        return '...{0}'.format(cidStr[4 * int(len(cidStr) / 5):])
+        b32Cid = cidConvertBase32(cidStr)
+        return '... {0}'.format(b32Cid[4 * int(len(b32Cid) / 5):])
 
 
 def shortPathRepr(path):
@@ -125,9 +126,9 @@ def isMultihash(hashstring):
         return False
 
 
-def getCID(hashstring):
+def getCID(cidStr):
     try:
-        return make_cid(hashstring)
+        return make_cid(cidStr)
     except BaseException:
         return None
 
@@ -170,7 +171,7 @@ def cidValid(cid):
     """
     Check if the passed argument is a valid IPFS CID
 
-    :param cidstring: the CID to validate, can be a string or a BaseCID
+    :param cid: the CID to validate, can be a string or a BaseCID
     :return: if the value is a valid CID or not
     :rtype: bool
     """
@@ -187,15 +188,13 @@ def cidValid(cid):
 
     if c is None:
         return False
-    if c.version == 0:
+    if c.version in [0, 1]:
         # Ensure that we can decode the multihash
         try:  # can raise ValueError
             if multihash.decode(c.multihash):
                 return True
         except BaseException:
             return False
-    elif c.version == 1:
-        return True
     return False
 
 
@@ -206,34 +205,33 @@ def domainValid(domain):
 
 # Regexps
 
-
 ipfsPathRe = re.compile(
-    r'^(\s*)?(?:fs:(\/*)|ipfs:|dweb:(\/*)?|https?://[\w:.-]*)?(?P<fullpath>/ipfs/(?P<rootcid>[a-zA-Z0-9]{46,59})\/?(?P<subpath>[\w<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[\w\-\+\_\.\/]{1,256})?$',  # noqa
-    flags=re.MULTILINE | re.UNICODE)
+    r'^(\s*)?(?:fs:|dweb:|https?://[\w:.-]+)?(?P<fullpath>/ipfs/(?P<rootcid>[a-zA-Z0-9]{46,59})/?(?P<subpath>[\w<>":;,?!\*%&=@\$~/\s\.\-_\\\'()\+]{1,1024})?)#?(?P<fragment>[\w_\.\-\+,=/]{1,256})?$',  # noqa
+    flags=re.UNICODE)
 
 # For ipfs://<cid-base32>
 ipfsPathDedRe = re.compile(
-    r'^(\s*)?(?:ipfs://)(?P<fullpath>(?P<rootcid>[a-z2-7]{59})\/?(?P<subpath>[\w<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[\w\-\+\_\.\/]{1,256})?$',  # noqa
-    flags=re.MULTILINE | re.UNICODE)
+    r'^(\s*)?(?:ipfs://)(?P<fullpath>(?P<rootcid>[a-z2-7]{59})/?(?P<subpath>[\w<>"*:;,?!%&=@\$~/\s\.\-_\\\'\+()]{1,1024})?)#?(?P<fragment>[\w_\+\.\-,=/]{1,256})?$',  # noqa
+    flags=re.UNICODE)
 
 # For rewriting (unlawful) ipfs://<cidv0> or ipfs://<cidv1-base58> to base32
 ipfsPathDedRe58 = re.compile(
-    r'^(\s*)?(?:ipfs://)(?P<fullpath>(?P<rootcid>[a-zA-Z0-9]{46,59})\/?(?P<subpath>[\w<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[\w\-\+\_\.\/]{1,256})?$',  # noqa
-    flags=re.MULTILINE | re.UNICODE)
+    r'^(\s*)?(?:ipfs://)(?P<fullpath>(?P<rootcid>[a-zA-Z0-9]{46,59})/?(?P<subpath>[\w<>"*:;,?!%&=@\$~/\s\.\-_\'\\\+()]{1,1024})?)#?(?P<fragment>[\w\-\+_\.,=/]{1,256})?$',  # noqa
+    flags=re.UNICODE)
 
 ipnsPathDedRe = re.compile(
-    r'^(\s*)?(?:(ipns|ipfs)://)(?P<fullpath>(?P<fqdn>[\w.-]{1,128})\/?(?P<subpath>[\w<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[\w\-\+\_\.\/]{1,256})?$',  # noqa
-    flags=re.MULTILINE | re.UNICODE)
+    r'^(\s*)?(?:(ipns|ipfs)://)(?P<fullpath>(?P<fqdn>[\w.-]+)/?(?P<subpath>[\w<>"*:;,\\?!%&=@\$~/\s\.\-_\'\+()]{1,1024})?)#?(?P<fragment>[\w\-\+_\.,=/]{1,256})?$',  # noqa
+    flags=re.UNICODE)
 
 ipfsCidRe = re.compile(
-    r'^(\s*)?(?P<cid>[a-zA-Z0-9]{46,59})$', flags=re.MULTILINE)
+    r'^(\s*)?(?P<cid>[a-zA-Z0-9]{46,59})$')
 
 ipfsCid32Re = re.compile(
-    r'^(\s*)?(?P<cid>[a-z2-7]{59})$', flags=re.MULTILINE)
+    r'^(\s*)?(?P<cid>[a-z2-7]{59})$')
 
 ipnsPathRe = re.compile(
-    r'^(\s*)?(?:fs:(\/*)|ipfs:|dweb:(\/*)?|https?://[\w:.-]*)?(?P<fullpath>/ipns/(?P<fqdn>[\w.-]{1,128})\/?(?P<subpath>[\w<>\"\*:;,\\\?\!\%&=@$~\/\s\.\-\_\'\\\+\(\)]{1,1024})?)\#?(?P<fragment>[\w\+\-\_\.\/]{1,256})?$',  # noqa
-    flags=re.MULTILINE | re.UNICODE)
+    r'^(\s*)?(?:fs:|dweb:|https?://[\w:.-]+)?(?P<fullpath>/ipns/(?P<fqdn>[\w\.-]+)/?(?P<subpath>[\w<>"*:;,?!%&=@\$~/\s\.\-_\'\\\+()]{1,1024})?)#?(?P<fragment>[\w\+\-_\.,=/]{1,256})?$',  # noqa
+    flags=re.UNICODE)
 
 
 class IPFSPath:
@@ -310,6 +308,10 @@ class IPFSPath:
     @property
     def isIpfs(self):
         return self.valid is True and self.scheme == 'ipfs'
+
+    @property
+    def isRoot(self):
+        return self.isIpfsRoot or self.isIpnsRoot
 
     @property
     def isIpfsRoot(self):
@@ -494,6 +496,9 @@ class IPFSPath:
         return False
 
     def parseCid(self, cidStr):
+        if not cidValid(cidStr):
+            return False
+
         self._rootCid = getCID(cidStr)
         if self.rootCid:
             self._rootCidV = self.rootCid.version if \
@@ -536,6 +541,26 @@ class IPFSPath:
             n = n.parent()
 
         return n if n.valid else None
+
+    def shortRepr(self):
+        if self.isIpfsRoot:
+            return shortCidRepr(self._rootCid)
+
+        if self.isIpnsRoot:
+            return self.objPath
+
+        if self.isIpfs or self.isIpns:
+            basename = self.basename
+
+            if not basename:
+                return ''
+
+            if len(basename) > 16:
+                return '... {0}'.format(basename[3 * int(len(basename) / 5):])
+            elif len(basename) > 24:
+                return '... {0}'.format(basename[4 * int(len(basename) / 5):])
+            else:
+                return basename
 
     async def resolve(self, ipfsop, noCache=False, timeout=10):
         """

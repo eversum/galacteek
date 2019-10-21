@@ -6,12 +6,12 @@ from galacteek.core.ipfsmarks import *
 
 @pytest.fixture
 def bmarks(tmpdir):
-    return IPFSMarks(str(tmpdir.join('bm')))
+    return IPFSMarks(str(tmpdir.join('bm')), autosave=False)
 
 
 @pytest.fixture
 def bmarks2(tmpdir):
-    return IPFSMarks(str(tmpdir.join('bm2')))
+    return IPFSMarks(str(tmpdir.join('bm2')), autosave=False)
 
 
 class TestMarks:
@@ -24,7 +24,8 @@ class TestMarks:
              '/ipfs/Qma8TPVjdZ3CReqwyQ9Wvv3oggRRi3FrEyWufenu92SuUV/src/',
              )])
     @pytest.mark.parametrize('title', ['Broken glass'])
-    def test_simpleadd(self, bmarks, path1, path2, path3, path4, title):
+    @pytest.mark.asyncio
+    async def test_simpleadd(self, bmarks, path1, path2, path3, path4, title):
         assert bmarks.add(path1, title=title, tags=['dev'])
         assert bmarks.add(path1, title=title) is False
         assert bmarks.add(path2, title=title)
@@ -48,11 +49,21 @@ class TestMarks:
         assert bmarks.delete(path2) is not None
         assert bmarks.find(path2) is None
 
-        assert bmarks.searchByMetadata({
+        sResults = []
+        async for mark in bmarks.searchAllByMetadata({
+            'description': 'code some'
+        }):
+            sResults.append(mark)
+
+            assert mark.isValid() is True
+
+        assert len(sResults) == 1
+
+        assert bmarks.searchSingleByMetadata({
             'title': 'Rand.*'
         }).path == path3
 
-        mark = bmarks.searchByMetadata({
+        mark = bmarks.searchSingleByMetadata({
             'description': 'Some.*'
         })
         assert mark.path == path4
@@ -95,8 +106,11 @@ class TestMarks:
             '/ipfs/QmT1TPVjdZ9CvngwyQ9WygDoRgRRibFrEyWufenu92SuUb',
         )])
     def test_follow(self, bmarks, feed1, mark1):
+        mark = IPFSHashMark.make(mark1, title='ok')
+        assert mark.isValid() is True
+
         bmarks.follow(feed1, 'test', resolveevery=60)
-        bmarks.feedAddMark(feed1, IPFSHashMark.make(mark1, title='ok'))
+        bmarks.feedAddMark(feed1, mark)
         assert bmarks.feedAddMark(
             feed1, IPFSHashMark.make(
                 mark1, title='ok2')) is False
@@ -108,12 +122,34 @@ class TestMarks:
             '/ipfs/Qma1TPVjdZ9CReqwyQ9Wvv3oRgRRi5FrEyWufenu92SuUV/www'
         )])
     @pytest.mark.parametrize('title', ['Broken glass'])
-    @pytest.mark.asyncio
-    async def test_mergeshared(self, event_loop, bmarks, bmarks2,
-                               path1, path2, title):
+    def test_mergeshared(self, event_loop, bmarks, bmarks2,
+                         path1, path2, title):
         assert bmarks.add(path1, title=title, share=True, pinSingle=True)
         assert bmarks.add(path2, title=title, share=True, pinRecursive=True)
         bmarks2.merge(bmarks, share=True, reset=True)
+
+    @pytest.mark.parametrize('path1,path2', [
+        (
+            '/ipfs/QmT1TPVjdZ9CRnqwyQ9WygDoRgRRibFrEyWufenu92SuUV',
+            '/ipfs/Qma1TPVjdZ9CReqwyQ9Wvv3oRgRRi5FrEyWufenu92SuUV/www'
+        )])
+    @pytest.mark.asyncio
+    async def test_validation(self, event_loop, bmarks, path1, path2):
+        mark1 = IPFSHashMark.make(
+            path1, title='Test', tags=['#test'])
+        assert mark1.isValid()
+
+        mark2 = IPFSHashMark.make(
+            path2, title='Test', tags=[None, '#otro'])
+        assert mark2.isValid() is False
+
+        mark3 = IPFSHashMark.make(
+            path1, title=None)
+        assert mark3.isValid() is False
+
+        bmarks.insertMark(mark1, 'test/valid')
+        assert bmarks.isValid()
+        assert bmarks.insertMark(mark2, 'test/invalid') is False
 
 
 class TestHashPlones:
@@ -134,16 +170,16 @@ class TestHashPlones:
                                         ipnskey='abcd', description='Pyramid1')
 
         with qtbot.waitSignal(bmarks.pyramidAddedMark, timeout=2000):
-            pyramid = bmarks.pyramidAdd('my/pyramids/pyramid1', path1)
+            bmarks.pyramidAdd('my/pyramids/pyramid1', path1)
             mark = bmarks.pyramidGetLatestHashmark('my/pyramids/pyramid1')
             assert mark.path == path1
 
-            pyramid = bmarks.pyramidAdd('my/pyramids/pyramid1', path2)
+            bmarks.pyramidAdd('my/pyramids/pyramid1', path2)
             mark = bmarks.pyramidGetLatestHashmark('my/pyramids/pyramid1')
             assert mark.path == path2
 
         with qtbot.waitSignal(bmarks.pyramidNeedsPublish, timeout=2000):
-            pyramid = bmarks.pyramidAdd('my/pyramids/pyramid1', path3)
+            bmarks.pyramidAdd('my/pyramids/pyramid1', path3)
 
         pyramid = bmarks.pyramidGet('my/pyramids/pyramid1')
         assert pyramid.marksCount == 3
@@ -151,4 +187,8 @@ class TestHashPlones:
         assert pyramid.marksCount == 2
         assert pyramid.latest == path2
 
-        bmarks.dump()
+        for x in range(0, 22):
+            bmarks.pyramidAdd('my/pyramids/pyramid1', path1)
+
+            if x > 13:
+                assert pyramid.marksCount == 16

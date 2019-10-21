@@ -16,10 +16,14 @@ the left side of the screen (vertical position) or to the top
 The left side of the toolbar offers the following controls
 (from left to right):
 
-- Browse button
-- Local and shared :ref:`hashmarks`
-- Filemanager and mediaplayer
-- Peers, profile and chat
+- Main browse button
+- Hashmarks manager (see :ref:`hashmarks`)
+- Hashmarks search
+- Atom feeds
+- Filemanager
+- Editor
+- Peers
+- Profile
 - Quick access section
 
 Quick access

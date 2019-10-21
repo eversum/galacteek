@@ -147,6 +147,7 @@ class MediaPlayerTab(GalacteekTab):
         self.uipList = ui_mediaplaylist.Ui_MediaPlaylist()
         self.uipList.setupUi(self.pListWidget)
         self.uipList.savePlaylistButton.clicked.connect(self.onSavePlaylist)
+        self.uipList.savePlaylistButton.setEnabled(False)
         self.uipList.loadPlaylistButton.setPopupMode(
             QToolButton.InstantPopup)
         self.uipList.loadPlaylistButton.setMenu(self.playlistsMenu)
@@ -164,10 +165,8 @@ class MediaPlayerTab(GalacteekTab):
         self.clipMenu.addAction(self.loadPathAction)
 
         self.uipList.clipPlaylistButton.setPopupMode(
-            QToolButton.MenuButtonPopup)
+            QToolButton.InstantPopup)
         self.uipList.clipPlaylistButton.setMenu(self.clipMenu)
-        self.uipList.clipPlaylistButton.clicked.connect(
-            self.onLoadPlaylistPath)
         self.uipList.clearButton.clicked.connect(self.onClearPlaylist)
 
         self.uipList.nextButton.clicked.connect(self.onPlaylistNext)
@@ -196,10 +195,12 @@ class MediaPlayerTab(GalacteekTab):
         self.player.error.connect(self.onError)
         self.player.stateChanged.connect(self.onStateChanged)
         self.player.metaDataChanged.connect(self.onMetaData)
-        self.playlist.currentIndexChanged.connect(self.playlistPositionChanged)
         self.player.durationChanged.connect(self.mediaDurationChanged)
         self.player.positionChanged.connect(self.mediaPositionChanged)
         self.pListView.activated.connect(self.onListActivated)
+        self.playlist.currentIndexChanged.connect(self.playlistPositionChanged)
+        self.playlist.mediaInserted.connect(self.playlistMediaInserted)
+        self.playlist.mediaRemoved.connect(self.playlistMediaRemoved)
 
         self.togglePList = QToolButton(self)
         self.togglePList.setIcon(self.style().standardIcon(
@@ -212,7 +213,7 @@ class MediaPlayerTab(GalacteekTab):
         self.clipboardButton.setIcon(getIconClipboard())
         self.clipboardButton.setEnabled(False)
 
-        self.processClipboardItem(self.app.clipTracker.current)
+        self.processClipboardItem(self.app.clipTracker.current, force=True)
         self.app.clipTracker.currentItemChanged.connect(self.onClipItemChange)
 
         self.playButton = QToolButton(clicked=self.onPlayClicked)
@@ -333,7 +334,10 @@ class MediaPlayerTab(GalacteekTab):
 
     @ipfsOp
     async def loadPlaylistFromPath(self, ipfsop, path):
-        obj = await ipfsop.jsonLoad(path)
+        try:
+            obj = await ipfsop.jsonLoad(path)
+        except Exception:
+            return messageBox(iCannotLoadPlaylist())
 
         if obj is None:
             return messageBox(iCannotLoadPlaylist())
@@ -352,6 +356,14 @@ class MediaPlayerTab(GalacteekTab):
         except Exception:
             return messageBox(iCannotLoadPlaylist())
 
+    def playlistMediaInserted(self, start, end):
+        self.uipList.savePlaylistButton.setEnabled(
+            self.playlist.mediaCount() > 0)
+
+    def playlistMediaRemoved(self, start, end):
+        self.uipList.savePlaylistButton.setEnabled(
+            self.playlist.mediaCount() > 0)
+
     def playlistGetPaths(self):
         return [u.path() for u in self.playlistGetUrls()]
 
@@ -365,7 +377,7 @@ class MediaPlayerTab(GalacteekTab):
     def onClipItemChange(self, item):
         self.processClipboardItem(item)
 
-    def processClipboardItem(self, item):
+    def processClipboardItem(self, item, force=False):
         if not item:
             return
 
@@ -373,15 +385,16 @@ class MediaPlayerTab(GalacteekTab):
             if cItem.mimeCategory in ['audio', 'video', 'image']:
                 self.clipboardMediaItem = cItem
                 self.clipboardButton.setEnabled(True)
-                self.loadPathAction.setEnabled(True)
                 self.clipboardButton.setToolTip(cItem.path)
             else:
                 self.clipboardButton.setEnabled(False)
-                self.loadPathAction.setEnabled(False)
                 self.clipboardButton.setToolTip(iClipboardEmpty())
 
-        item.mimeTypeAvailable.connect(
-            lambda mType: analyzeMimeType(item))
+        if force:
+            analyzeMimeType(item)
+        else:
+            item.mimeTypeAvailable.connect(
+                lambda mType: analyzeMimeType(item))
 
     def onClipboardClicked(self):
         if self.clipboardMediaItem:

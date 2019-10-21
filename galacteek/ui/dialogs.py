@@ -112,7 +112,7 @@ class AddHashmarkDialog(QDialog):
         self.ui.formLayout.insertRow(7, QLabel('Icon'),
                                      self.iconSelector)
 
-        regexp1 = QRegExp(r"[A-Za-z0-9\/_-]+")  # noqa
+        regexp1 = QRegExp(r"[A-Za-z0-9/\-]+")  # noqa
         self.ui.newCategory.setValidator(QRegExpValidator(regexp1))
         self.ui.newCategory.setMaxLength(64)
 
@@ -533,12 +533,13 @@ class AddAtomFeedDialog(QInputDialog):
 
 
 class AddMultihashPyramidDialog(QDialog):
-    def __init__(self, marks, parent=None):
+    def __init__(self, marks, pyramidType, parent=None):
         super().__init__(parent)
 
         self.app = QApplication.instance()
 
         self.marks = marks
+        self.pyramidType = pyramidType
         self.iconCid = None
         self.customCategory = None
 
@@ -669,6 +670,7 @@ class AddMultihashPyramidDialog(QDialog):
                     pyramidName, category, self.iconCid,
                     ipnskey=ipnsKey['Id'],
                     lifetime=ipnsLifetime,
+                    type=self.pyramidType,
                     description=description)
                 logUser.info('Multihash pyramid {pyr}: created'.format(
                     pyr=pyramidName))

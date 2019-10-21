@@ -1,12 +1,14 @@
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtGui import QTextCursor
+from PyQt5.QtCore import Qt
 
-from galacteek.ipfs import cidhelpers
+from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.pubsub.messages import ChatRoomMessage
 from galacteek.ipfs.pubsub import TOPIC_CHAT
 from galacteek import ensure
 
+from .helpers import questionBox
 from .widgets import GalacteekTab
 
 from . import ui_chatroom
@@ -23,11 +25,23 @@ class ChatRoomWidget(GalacteekTab):
         self.ui.setupUi(self.chatWidget)
         self.ui.chatLog.setOpenExternalLinks(False)
         self.ui.chatLog.setOpenLinks(False)
+        self.ui.chatLog.anchorClicked.connect(self.onAnchorClicked)
 
         self.app.ipfsCtx.pubsub.chatRoomMessageReceived.connect(
             self.onChatMessageReceived)
         self.ui.sendButton.clicked.connect(self.onSendMessage)
         self.ui.message.returnPressed.connect(self.onSendMessage)
+        self.ui.message.setFocusPolicy(Qt.StrongFocus)
+        self.ui.chatLog.setFocusPolicy(Qt.NoFocus)
+
+    def focusMessage(self):
+        self.ui.message.setFocus(Qt.OtherFocusReason)
+
+    def onAnchorClicked(self, url):
+        path = IPFSPath(url.toString(), autoCidConv=True)
+        if path.valid:
+            if questionBox('Open link', 'Open <b>{}</b> ?'.format(str(path))):
+                ensure(self.app.resourceOpener.open(path, openingFrom='chat'))
 
     def onChatMessageReceived(self, message):
         self.ui.chatLog.moveCursor(QTextCursor.End, QTextCursor.MoveAnchor)
@@ -45,10 +59,13 @@ class ChatRoomWidget(GalacteekTab):
         formatted += '</p>'
 
         if len(message.links) > 0:
-            for link in message.links:
+            for obj in message.links:
+                path = IPFSPath(obj, autoCidConv=True)
+                if not path.valid:
+                    continue
                 formatted += '<p>Link '
-                formatted += '<a href="dweb:{link}">{link}<a>'.format(
-                    link=link)
+                formatted += '<a href="{objhref}">{name}<a>'.format(
+                    objhref=path.ipfsUrl, name=path.objPath)
                 formatted += '</p>'
 
         self.ui.chatLog.insertHtml(formatted)
@@ -71,7 +88,7 @@ class ChatRoomWidget(GalacteekTab):
         links = []
         words = msgText.split()
         for word in words:
-            path = cidhelpers.IPFSPath(word)
+            path = IPFSPath(word, autoCidConv=True)
             if path.valid:
                 links.append(str(path))
 

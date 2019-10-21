@@ -238,11 +238,30 @@ class TextEditorTab(GalacteekTab):
         self.vLayout.addWidget(self.editor)
 
     def onDocChange(self, doc):
-        self.setTabName(doc.filename, widget=self)
+        self.changeTabName(doc.filename)
+
+    def changeTabName(self, name):
+        if name is None:
+            self.setTabName(iUnknown(), widget=self)
+
+        elif len(name) > 16:
+            cutoff = int(max(
+                4 * (len(name) / 5),
+                len(name) / 2
+            ))
+
+            self.setTabName(
+                '... {0}'.format(name[cutoff:]),
+                widget=self
+            )
+        else:
+            self.setTabName(name, widget=self)
+
+        self.setToolTip(name)
 
     def onDocnameChanged(self, doc, name):
         if doc is self.editor.currentDocument:
-            self.setTabName(name, widget=self)
+            self.changeTabName(doc.filename)
 
     def onClose(self):
         if self.editor.checkChanges() is True:
@@ -761,7 +780,12 @@ class TextEditorWidget(QWidget):
 
         encoding, textData = self.decode(data)
 
-        doc = self.newDocument(name=ipfsPath.basename, text=textData,
+        if ipfsPath.isRoot:
+            basename = None
+        else:
+            basename = ipfsPath.basename
+
+        doc = self.newDocument(name=basename, text=textData,
                                encoding=encoding)
         self.currentDocument = doc
 

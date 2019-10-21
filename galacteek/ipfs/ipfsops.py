@@ -215,7 +215,6 @@ class IPFSOperator(object):
             await self.client.files.rm(path, recursive=recursive)
         except aioipfs.APIError as err:
             self.debug(err.message)
-            return None
 
     async def filesMkdir(self, path, parents=True, cidversion=1):
         try:
@@ -347,10 +346,10 @@ class IPFSOperator(object):
         try:
             peers = await self.client.swarm.peers()
         except aioipfs.APIError:
-            return None
-
-        if isDict(peers) and 'Peers' in peers:
-            return peers['Peers']
+            self.debug('Cannot fetch list of peers')
+        else:
+            if isDict(peers) and 'Peers' in peers:
+                return peers['Peers']
 
     async def nodeId(self):
         info = await self.client.core.id()
@@ -534,7 +533,7 @@ class IPFSOperator(object):
         Update a pin
         """
 
-        self.debug('pinUpdate: prev {0} new {1}'.format(old, new))
+        self.debug('pinUpdate: previous: {0}, new: {1}'.format(old, new))
         try:
             result = await self.client.pin.update(old, new, unpin=unpin)
         except aioipfs.APIError as e:
@@ -652,8 +651,6 @@ class IPFSOperator(object):
                         break
                     await self.sleep()
                     readTotal += len(buff)
-                    logUser.info('{n} (enc): read {count} bytes'.format(
-                        n=basename, count=readTotal))
                     whole.write(buff)
         except:
             self.debug('Error occured while encrypting {path}'.format(

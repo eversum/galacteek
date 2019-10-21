@@ -186,7 +186,7 @@ class ImageView(QScrollArea):
         self.app = QApplication.instance()
         self.image = QImage()
 
-        self.clip = None
+        self.clip = QMovie(self)
         self.clipFirstPixmap = None
         self.clipCurrentPixmap = None
 
@@ -256,10 +256,9 @@ class ImageView(QScrollArea):
         self.zoomOut()
 
     def resizePixmap(self):
-        if self.clip:
-            if self.clipFirstPixmap:
-                self.labelImage.resize(
-                    self.scaleFactor * self.clipFirstPixmap.size())
+        if self.labelImage.movie() and self.clipFirstPixmap:
+            self.labelImage.resize(
+                self.scaleFactor * self.clipFirstPixmap.size())
             return
 
         pixmap = self.labelImage.pixmap()
@@ -293,19 +292,21 @@ class ImageView(QScrollArea):
 
             stat = StatInfo(statInfo)
 
-            if str(mimeType) == 'image/gif':
+            if mimeType.isAnimation:
                 fp = self.app.tempDir.filePath(stat.cid)
-
                 tmpFile = QFile(fp)
-                if tmpFile.open(QFile.WriteOnly):
-                    tmpFile.write(imgData)
 
-                    self.clip = QMovie(fp)
-                    self.labelImage.setMovie(self.clip)
-                    self.clip.frameChanged.connect(self.onMovieFrameChanged)
-                    self.clip.error.connect(self.onMovieError)
-                    self.clip.start()
-                    self.labelImage.adjustSize()
+                if not tmpFile.exists() and tmpFile.open(QFile.ReadWrite):
+                    tmpFile.write(imgData)
+                    tmpFile.close()
+
+                self.clip.stop()
+                self.clip.setFileName(fp)
+                self.labelImage.setMovie(self.clip)
+                self.clip.frameChanged.connect(self.onMovieFrameChanged)
+                self.clip.error.connect(self.onMovieError)
+                self.clip.start()
+                self.labelImage.adjustSize()
             else:
                 img = QImage()
                 img.loadFromData(imgData)
@@ -331,12 +332,10 @@ class ImageView(QScrollArea):
             messageBox(iImageCannotLoad(imgPath))
 
     def onMovieFrameChanged(self, num):
-        if self.clip:
-            self.clipCurrentPixmap = self.clip.currentPixmap()
+        self.clipCurrentPixmap = self.clip.currentPixmap()
 
-            if self.clipFirstPixmap is None:
-                self.clipFirstPixmap = self.clipCurrentPixmap
+        if self.clipFirstPixmap is None:
+            self.clipFirstPixmap = self.clipCurrentPixmap
 
     def onMovieError(self, err):
-        if self.clip:
-            messageBox(self.clip.lastErrorString())
+        messageBox(self.clip.lastErrorString())

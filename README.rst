@@ -1,5 +1,5 @@
 
-.. image:: https://gitlab.com/galacteek/galacteek/raw/master/share/icons/galacteek.png
+.. image:: https://gitlab.com/galacteek/galacteek/raw/master/share/icons/galacteek-incandescent.png
     :align: center
     :width: 128
     :height: 128
@@ -244,6 +244,9 @@ License
 =======
 
 **galacteek** is offered under the GNU GPL3 license
+
+The logos and animations are licensed under the Creative
+Commons CC-BY-SA license.
 
 Some elements from the ipfs-css_ repository (CSS files and fonts) are included.
 

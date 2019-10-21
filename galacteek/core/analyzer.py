@@ -7,6 +7,7 @@ from galacteek import log
 
 from galacteek.ipfs import ipfsOp
 
+from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.mimetype import MIMEType
 from galacteek.ipfs.mimetype import detectMimeType
 
@@ -19,10 +20,17 @@ class ResourceAnalyzer(QObject):
         self.app = QApplication.instance()
 
     @ipfsOp
-    async def __call__(self, ipfsop, ipfsPath):
+    async def __call__(self, ipfsop, pathRef):
         """
         :param IPFSPath ipfsPath
         """
+
+        if isinstance(pathRef, IPFSPath):
+            ipfsPath = pathRef
+        elif isinstance(pathRef, str):
+            ipfsPath = IPFSPath(pathRef, autoCidConv=True)
+        else:
+            raise ValueError('Invalid input value')
 
         path = ipfsPath.objPath
         mHashMeta = await self.app.multihashDb.get(path)

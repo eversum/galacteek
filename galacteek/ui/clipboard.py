@@ -823,7 +823,7 @@ class ClipboardItemButton(PopupToolButton):
         Open the IPLD explorer application for the current clipboard item
         """
         if self.item:
-            mark = self.app.marksLocal.searchByMetadata({
+            mark = self.app.marksLocal.searchSingleByMetadata({
                 'title': 'IPLD explorer'})
             if mark:
                 link = os.path.join(
@@ -835,7 +835,7 @@ class ClipboardItemButton(PopupToolButton):
         Open markup.rocks for the current clipboard item
         """
         if self.item:
-            mark = self.app.marksLocal.searchByMetadata({
+            mark = self.app.marksLocal.searchSingleByMetadata({
                 'title': 'markup.rocks'})
             if mark:
                 link = os.path.join(

@@ -51,6 +51,7 @@ from galacteek.core.schemes import isSchemeRegistered
 from galacteek.core.schemes import SCHEME_ENS
 from galacteek.core.schemes import SCHEME_IPFS
 from galacteek.core.schemes import SCHEME_IPNS
+from galacteek.core.schemes import SCHEME_DWEB
 from galacteek.core.schemes import SCHEME_Z
 from galacteek.core.schemes import DAGProxySchemeHandler
 from galacteek.core.schemes import MultiDAGProxySchemeHandler
@@ -841,12 +842,11 @@ class URLInputWidget(QLineEdit):
     async def historyLookup(self):
         if self.urlInput:
             markMatches = []
-            result = list(self.app.marksLocal.searchAllByMetadata({
+
+            async for mark in self.app.marksLocal.searchAllByMetadata({
                 'title': self.urlInput,
                 'description': self.urlInput
-            }))
-
-            for mark in result:
+            }):
                 try:
                     markMatches.append({
                         'title': mark.markData['metadata']['title'],
@@ -897,6 +897,9 @@ class CurrentObjectController(PopupToolButton):
         self.dagViewAction = QAction(getIcon('ipld.png'),
                                      iDagView(), self,
                                      triggered=self.onDAGView)
+        self.parentDagViewAction = QAction(getIcon('ipld.png'),
+                                           iParentDagView(), self,
+                                           triggered=self.onParentDAGView)
         self.qaLinkAction = QAction(getIconIpfsWhite(),
                                     iLinkToQaToolbar(), self,
                                     triggered=self.onQaLink)
@@ -918,6 +921,8 @@ class CurrentObjectController(PopupToolButton):
         self.menu.addSeparator()
         self.menu.addAction(self.dagViewAction)
         self.menu.addSeparator()
+        self.menu.addAction(self.parentDagViewAction)
+        self.menu.addSeparator()
         self.menu.addAction(self.hashmarkRootCidAction)
         self.menu.addSeparator()
         self.menu.addAction(self.hashmarkObjectAction)
@@ -930,6 +935,9 @@ class CurrentObjectController(PopupToolButton):
 
     def onDAGView(self):
         self.dagViewRequested.emit(self.currentPath)
+
+    def onParentDAGView(self):
+        self.dagViewRequested.emit(self.currentPath.parent())
 
     def onCopyPathToCb(self):
         if self.currentPath:
@@ -963,6 +971,9 @@ class CurrentObjectController(PopupToolButton):
     @ipfsOp
     async def displayObjectInfos(self, ipfsop, ipfsPath):
         self.currentPath = ipfsPath
+
+        self.parentDagViewAction.setEnabled(
+            self.currentPath.subPath is not None)
 
         objCid = None
         cidRepr = ipfsPath.rootCidRepr
@@ -1738,9 +1749,10 @@ class BrowserTab(GalacteekTab):
             self.browseIpnsKey(text)
 
     def onFollowIpns(self):
-        if self.currentIpfsObject:
+        if self.currentIpfsObject and self.currentIpfsObject.isIpns:
+            root = self.currentIpfsObject.root().objPath
             runDialog(AddFeedDialog, self.app.marksLocal,
-                      self.currentIpfsObject.objPath,
+                      root,
                       title=iFollowIpnsDialog())
 
     def onLoadHome(self):
@@ -1778,7 +1790,7 @@ class BrowserTab(GalacteekTab):
         sHandler = self.webEngineView.webProfile.urlSchemeHandler(
             url.scheme().encode())
 
-        if url.scheme() in [SCHEME_IPFS, SCHEME_IPNS]:
+        if url.scheme() in [SCHEME_IPFS, SCHEME_IPNS, SCHEME_DWEB]:
             # ipfs:// or ipns://
             self.urlZone.setStyleSheet('''
                 QLineEdit {
@@ -1794,11 +1806,15 @@ class BrowserTab(GalacteekTab):
             self.ui.pinToolButton.setEnabled(True)
 
             self.followIpnsAction.setEnabled(
-                self.currentIpfsObject.isIpnsRoot)
+                self.currentIpfsObject.isIpns)
             self.curObjectCtrl.show()
-        elif url.authority() == self.gatewayAuthority:
+        elif url.authority() == self.gatewayAuthority and 0:
+            # Old code (when the dweb scheme handler was still
+            # going through the go-ipfs http gw)
+            #
             # dweb:/ with IPFS gateway's authority
             # Content loaded from IPFS gateway, this is IPFS content
+
             urlString = url.toDisplayString(
                 QUrl.RemoveAuthority | QUrl.RemoveScheme)
 
@@ -1896,7 +1912,7 @@ class BrowserTab(GalacteekTab):
         else:
             self.ui.pBarBrowser.setStyleSheet(
                 '''QProgressBar::chunk#pBarBrowser {
-                    background-color: #7f8491;
+                    background-color: #4b9fa2;
                 }''')
 
     def browseFsPath(self, path):

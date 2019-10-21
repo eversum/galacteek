@@ -26,7 +26,6 @@ from galacteek.ipfs.mimetype import detectMimeTypeFromBuffer
 from galacteek.ipfs.mimetype import mimeTypeDagUnknown
 
 from galacteek.ipfs.cidhelpers import IPFSPath
-from galacteek.ipfs.cidhelpers import shortPathRepr
 
 from .dag import DAGViewer
 from .textedit import TextEditorTab
@@ -95,7 +94,7 @@ class IPFSResourceOpener(QObject):
                                            None,
                                            qname='default'))
 
-        rscShortName = shortPathRepr(rscPath)
+        rscShortName = ipfsPath.shortRepr()
 
         if ipfsPath.isIpfs:
             # Try to reuse metadata from the multihash store
@@ -119,6 +118,15 @@ class IPFSResourceOpener(QObject):
             return
 
         if mimeType == mimeTypeDagUnknown:
+            indexPath = ipfsPath.child('index.html')
+            stat = await ipfsop.objStat(indexPath.objPath, timeout=8)
+
+            if stat:
+                # Browse the index
+                return self.app.mainWindow.addBrowserTab().browseFsPath(
+                    indexPath)
+
+            # Otherwise view the DAG
             view = DAGViewer(rscPath, self.app.mainWindow)
             self.app.mainWindow.registerTab(
                 view, iDagViewer(),
@@ -183,7 +191,7 @@ class IPFSResourceOpener(QObject):
                 current=True
             )
 
-        if mimeType.isImage:
+        if mimeType.isImage or mimeType.isAnimation:
             tab = ImageViewerTab(self.app.mainWindow)
             ensure(tab.view.showImage(rscPath))
             self.objectOpened.emit(ipfsPath)
@@ -307,8 +315,10 @@ class IPFSResourceOpener(QObject):
             # Bummer
             return
 
-        args = progArgs.replace('%f', filePath)
-        log.debug('Executing: {}'.format(args))
+        filePathEsc = filePath.replace('"', r'\"')
+        args = progArgs.replace('%f', filePathEsc)
+
+        log.debug('Object opener: executing: {}'.format(args))
 
         try:
             proc = await asyncio.create_subprocess_shell(
@@ -326,6 +336,6 @@ class IPFSResourceOpener(QObject):
     async def openWithSystemDefault(self, ipfsop, rscPath):
         # Use xdg-open or open depending on the platform
         if self.app.system == 'Linux':
-            await self.openWithExternal(rscPath, "xdg-open '%f'")
+            await self.openWithExternal(rscPath, 'xdg-open "%f"')
         elif self.app.system == 'Darwin':
-            await self.openWithExternal(rscPath, "open '%f'")
+            await self.openWithExternal(rscPath, 'open "%f"')

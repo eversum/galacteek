@@ -121,7 +121,7 @@ class QuickAccessToolBar(QToolBar, URLDragAndDropProcessor):
                 ipfsPath, str(err)))
 
     def registerFromMarkMeta(self, metadata):
-        mark = self.app.marksLocal.searchByMetadata(metadata)
+        mark = self.app.marksLocal.searchSingleByMetadata(metadata)
         if not mark:
             return
 

@@ -49,6 +49,10 @@
         width: 16;
       }
 
+      .hashmarklink:hover {
+        background-color: #4b9fa2;
+      }
+
       .catbutton {
         font: 12pt "Montserrat";
         icon: url("qrc:///share/icons/stroke-cube.png");
@@ -181,12 +185,12 @@
     <div id="feeds">
   {% set feeds = marks.getFeeds() %}
   {% for feedPath, feedData in feeds %}
-      <div class="category" id="{{ feedData.name }}">
-        <button class="catbutton" onclick="hideShow('{{ feedData.name }}');">
+      <div class="category" id="feed_{{ feedData.name }}">
+        <button class="catbutton" onclick="hideShow('feed_{{ feedData.name }}');">
           <img style="padding-right: 5px;" width="16" src="qrc:///share/icons/stroke-cube.png" />{{ feedData.name }}
         </button>
 
-        <div class="marks" id="{{ feedData.name }}_marks">
+        <div class="marks" id="feed_{{ feedData.name }}_marks">
     {% for path, mark in marks.getFeedMarks(feedPath).items() %}
         <p style="text-align: left"><img width="16" src="qrc:///share/icons/ipfs-logo-128-black.png" />
           <a class="hashmarklink" href="#" onclick="event.preventDefault(); window.galacteek.openResource('{{ path }}');">

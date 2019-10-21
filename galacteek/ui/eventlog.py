@@ -39,6 +39,7 @@ class EventLogWidget(GalacteekTab):
 
         self.checkCore = QCheckBox('Core events')
         self.checkCore.setCheckState(Qt.Checked)
+        self.checkPubsub = QCheckBox('Pubsub events')
         self.checkDht = QCheckBox('DHT events')
         self.checkBitswap = QCheckBox('Bitswap events')
         self.checkAll = QCheckBox('All events')
@@ -46,6 +47,7 @@ class EventLogWidget(GalacteekTab):
 
         hLayout.addWidget(self.checkCore)
         hLayout.addWidget(self.checkDht)
+        hLayout.addWidget(self.checkPubsub)
         hLayout.addWidget(self.checkBitswap)
         hLayout.addWidget(self.checkAll)
         hLayout.addWidget(self.clearButton)
@@ -61,6 +63,7 @@ class EventLogWidget(GalacteekTab):
         self.checkCore.setEnabled(not state)
         self.checkDht.setEnabled(not state)
         self.checkBitswap.setEnabled(not state)
+        self.checkPubsub.setEnabled(not state)
 
     def onSave(self):
         fPath = saveFileSelect()
@@ -94,6 +97,8 @@ class EventLogWidget(GalacteekTab):
                 elif 'dht' in systems and self.checkDht.isChecked():
                     display = True
                 elif 'bitswap' in systems and self.checkBitswap.isChecked():
+                    display = True
+                elif 'pubsub' in systems and self.checkPubsub.isChecked():
                     display = True
 
                 if self.checkAll.isChecked():

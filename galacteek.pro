@@ -3,6 +3,7 @@ SOURCES = galacteek/application.py \
 	galacteek/ui/browser.py \
 	galacteek/ui/chat.py \
 	galacteek/ui/clipboard.py \
+	galacteek/ui/colors.py \
 	galacteek/ui/dag.py \
 	galacteek/ui/dialogs.py \
 	galacteek/ui/downloads.py \
@@ -10,6 +11,7 @@ SOURCES = galacteek/application.py \
 	galacteek/ui/files.py \
 	galacteek/ui/hashmarks.py \
 	galacteek/ui/helpers.py \
+	galacteek/ui/history.py \
 	galacteek/ui/i18n.py \
 	galacteek/ui/imgview.py \
 	galacteek/ui/ipfssearch.py \

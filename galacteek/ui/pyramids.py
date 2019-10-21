@@ -15,7 +15,7 @@ from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QSize
-
+from PyQt5.QtCore import QBuffer
 from PyQt5.QtCore import QPoint
 
 from galacteek import ensure
@@ -24,8 +24,14 @@ from galacteek import logUser
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.cidhelpers import joinIpns
 from galacteek.ipfs import ipfsOp
-from galacteek.core.ipfsmarks import IPFSHashMark
+from galacteek.ipfs.stat import StatInfo
+from galacteek.ipfs.dag import EvolvingDAG
+from galacteek.ipfs.dag import DAGRewindException
+from galacteek.dweb.render import ipfsRender
+from galacteek.core import utcDatetimeIso
+from galacteek.core.ipfsmarks import MultihashPyramid
 from galacteek.core.profile import UserProfile
+from galacteek.core.objects import SingleASig
 from galacteek.crypto.qrcode import IPFSQrEncoder
 
 from .widgets import PopupToolButton
@@ -35,9 +41,24 @@ from .helpers import getIcon
 from .helpers import getIconFromIpfs
 from .helpers import runDialog
 from .helpers import questionBox
+from .helpers import getImageFromIpfs
+from .helpers import inputTextLong
 from .dialogs import AddMultihashPyramidDialog
 
 from .i18n import iRemove
+from .i18n import iHelp
+
+
+def iCreateRawPyramid():
+    return QCoreApplication.translate(
+        'pyramidMaster',
+        'Create pyramid (basic)')
+
+
+def iCreateGallery():
+    return QCoreApplication.translate(
+        'pyramidMaster',
+        'Create image gallery')
 
 
 def iOpenLatestInPyramid():
@@ -58,6 +79,19 @@ def iPopItemFromPyramid():
         'Pop item off the pyramid')
 
 
+def iRewindDAG():
+    return QCoreApplication.translate(
+        'pyramidMaster',
+        'Rewind DAG')
+
+
+def iRewindDAGToolTip():
+    return QCoreApplication.translate(
+        'pyramidMaster',
+        "Rewinding the DAG cancels the latest "
+        "operation/transformation in the DAG's history")
+
+
 def iCopyIpnsAddress():
     return QCoreApplication.translate(
         'pyramidMaster',
@@ -75,6 +109,34 @@ def iPyramidGenerateQr():
     return QCoreApplication.translate(
         'pyramidMaster',
         "Generate pyramid's QR code"
+    )
+
+
+def iPyramidGenerateIndexQr():
+    return QCoreApplication.translate(
+        'pyramidMaster',
+        "Generate index's QR code"
+    )
+
+
+def iGalleryBrowse():
+    return QCoreApplication.translate(
+        'pyramidMaster',
+        "Browse image gallery"
+    )
+
+
+def iGalleryBrowseIpns():
+    return QCoreApplication.translate(
+        'pyramidMaster',
+        "Browse image gallery (IPNS)"
+    )
+
+
+def iGalleryChangeTitle():
+    return QCoreApplication.translate(
+        'pyramidMaster',
+        "Change image gallery's title"
     )
 
 
@@ -108,12 +170,16 @@ class MultihashPyramidsToolBar(QToolBar):
         self.pyramidsControlButton.setObjectName('pyramidsController')
         self.pyramidsControlButton.menu.addAction(
             getIcon('pyramid-aqua.png'),
-            'Add multihash pyramid', self.onAddPyramid)
+            iCreateRawPyramid(), self.onAddPyramidRaw)
+        self.pyramidsControlButton.menu.addSeparator()
+        self.pyramidsControlButton.menu.addAction(
+            getMimeIcon('image/x-generic'),
+            iCreateGallery(), self.onAddGallery)
 
         self.pyramidsControlButton.menu.addSeparator()
 
         self.pyramidsControlButton.menu.addAction(
-            pyrIcon, 'Help', self.pyramidHelpMessage)
+            pyrIcon, iHelp(), self.pyramidHelpMessage)
         self.addWidget(self.pyramidsControlButton)
         self.addSeparator()
 
@@ -128,7 +194,7 @@ class MultihashPyramidsToolBar(QToolBar):
         newSize = QSize(current.width() * 2, current.height() * 2)
         self.setIconSize(newSize)
 
-    def removePyramid(self, pyramidButton, action):
+    def removePyramidAsk(self, pyramidButton, action):
         reply = questionBox(
             iRemove(),
             'Remove pyramid <b>{pyr}</b> and its IPNS key ?'.format(
@@ -136,18 +202,23 @@ class MultihashPyramidsToolBar(QToolBar):
             )
         )
         if reply is True:
-            try:
-                self.app.marksLocal.pyramidDrop(pyramidButton.pyramid.path)
-                self.removeAction(action)
-                ensure(self.removeIpnsKey(pyramidButton.pyramid.ipnsKey))
-                pyramidButton.stop()
+            ensure(self.removePyramid(pyramidButton, action))
 
-                if pyramidButton.pyramid.path in self.pyramids:
-                    del self.pyramids[pyramidButton.pyramid.path]
+    async def removePyramid(self, pyramidButton, action):
+        try:
+            self.app.marksLocal.pyramidDrop(pyramidButton.pyramid.path)
+            self.removeAction(action)
 
-                del pyramidButton
-            except:
-                log.debug('Pyramid remove failed')
+            await self.removeIpnsKey(pyramidButton.pyramid.ipnsKey)
+            await pyramidButton.stop()
+            await pyramidButton.cleanup()
+
+            if pyramidButton.pyramid.path in self.pyramids:
+                del self.pyramids[pyramidButton.pyramid.path]
+
+            del pyramidButton
+        except:
+            log.debug('Pyramid remove failed')
 
     def pyramidHelpMessage(self):
         self.app.manuals.browseManualPage(
@@ -171,10 +242,18 @@ class MultihashPyramidsToolBar(QToolBar):
         if pyramid is None:
             return
 
-        button = MultihashPyramidToolButton(pyramid, parent=self)
+        if pyramid.type == MultihashPyramid.TYPE_STANDARD:
+            button = MultihashPyramidToolButton(pyramid, parent=self)
+
+        elif pyramid.type == MultihashPyramid.TYPE_GALLERY:
+            button = GalleryPyramidController(pyramid, parent=self)
+        else:
+            # TODO
+            return
+
         action = self.addWidget(button)
         button.deleteRequest.connect(functools.partial(
-            self.removePyramid, button, action))
+            self.removePyramidAsk, button, action))
 
         if pyramid.icon:
             ensure(self.fetchIcon(button, pyramid.icon))
@@ -186,7 +265,7 @@ class MultihashPyramidsToolBar(QToolBar):
     def publishNeeded(self, pyramidPath, mark):
         if pyramidPath in self.pyramids:
             pyramidMaster = self.pyramids[pyramidPath]
-            pyramidMaster.needsPublish.emit(mark, True)
+            ensure(pyramidMaster.needsPublish.send(mark, True))
 
     @ipfsOp
     async def fetchIcon(self, ipfsop, button, iconPath):
@@ -211,9 +290,16 @@ class MultihashPyramidsToolBar(QToolBar):
                 log.info('Removing IPNS key: {}'.format(key))
                 await ipfsop.keysRemove(key['Name'])
 
-    def onAddPyramid(self):
+    def onAddPyramidRaw(self):
         runDialog(AddMultihashPyramidDialog, self.app.marksLocal,
+                  MultihashPyramid.TYPE_STANDARD,
                   title='New multihash pyramid',
+                  parent=self)
+
+    def onAddGallery(self):
+        runDialog(AddMultihashPyramidDialog, self.app.marksLocal,
+                  MultihashPyramid.TYPE_GALLERY,
+                  title='New image gallery',
                   parent=self)
 
 
@@ -221,7 +307,6 @@ class MultihashPyramidToolButton(PopupToolButton):
     deleteRequest = pyqtSignal()
     changed = pyqtSignal()
     emptyNow = pyqtSignal()
-    needsPublish = pyqtSignal(IPFSHashMark, bool)
 
     def __init__(self, pyramid, icon=None, parent=None):
         super(MultihashPyramidToolButton, self).__init__(
@@ -249,7 +334,9 @@ class MultihashPyramidToolButton(PopupToolButton):
 
         self.changed.connect(self.onPyrChange)
         self.emptyNow.connect(self.onPyrEmpty)
-        self.needsPublish.connect(self.pyramidNeedsPublish)
+
+        self.needsPublish = SingleASig(self.pyramidNeedsPublish, self)
+
         self.ipfsObjectDropped.connect(self.onObjectDropped)
         self.clicked.connect(self.onOpenLatest)
         self.updateToolTip()
@@ -268,32 +355,29 @@ class MultihashPyramidToolButton(PopupToolButton):
         )
         self.publishCurrentClipAction.setEnabled(False)
 
-        self.menu.addAction(self.openLatestAction)
-        self.menu.addSeparator()
-
-        self.menu.addAction(self.publishCurrentClipAction)
-        self.menu.addSeparator()
-
         self.popItemAction = QAction(getIcon('pyramid-stack.png'),
                                      iPopItemFromPyramid(),
                                      self,
                                      triggered=self.onPopItem)
         self.popItemAction.setEnabled(False)
-        self.menu.addAction(self.popItemAction)
-        self.menu.addAction(getIcon('clipboard.png'),
-                            iCopyIpnsAddress(),
-                            self.onCopyIpns)
-        self.menu.addAction(getIcon('ipfs-qrcode.png'),
-                            iPyramidGenerateQr(),
-                            self.onGenerateQrCode)
-        self.menu.addSeparator()
-        self.menu.addAction(
-            getIcon('cancel.png'),
-            iRemove(), lambda: self.deleteRequest.emit()
-        )
 
+        self.copyIpnsAction = QAction(getIcon('clipboard.png'),
+                                      iCopyIpnsAddress(),
+                                      self,
+                                      triggered=self.onCopyIpns)
+        self.generateQrAction = QAction(getIcon('ipfs-qrcode.png'),
+                                        iPyramidGenerateQr(),
+                                        self,
+                                        triggered=self.onGenerateQrCode)
+        self.deleteAction = QAction(getIcon('cancel.png'),
+                                    iRemove(),
+                                    self,
+                                    triggered=self.onDeletePyramid)
+
+        self.createExtraActions()
+        self.buildMenu()
         self.resetStyleSheet()
-        self.initialize()
+        ensure(self.initialize())
         self.watcherTask = self.app.task(self.publishWatcherTask)
 
     @property
@@ -345,28 +429,45 @@ class MultihashPyramidToolButton(PopupToolButton):
         return self._pyrToolTip
 
     def debug(self, msg):
-        log.debug('{pyramid}: {msg}'.format(
+        logUser.debug('{pyramid}: {msg}'.format(
             pyramid=self.pyramid.path,
             msg=msg
         ))
 
     def info(self, msg):
-        log.info('{pyramid}: {msg}'.format(
+        logUser.info('{pyramid}: {msg}'.format(
             pyramid=self.pyramid.path,
             msg=msg
         ))
 
-    def stop(self):
+    async def cleanup(self):
+        pass
+
+    async def stop(self):
         if self.watcherTask:
             try:
                 self.watcherTask.cancel()
             except BaseException:
                 self.debug('Could not cancel watcher task')
 
-    def initialize(self):
+    async def initialize(self):
         mark = self.app.marksLocal.pyramidGetLatestHashmark(self.pyramid.path)
         if mark:
             self.pyramidion = mark
+
+    def createExtraActions(self):
+        pass
+
+    def buildMenu(self):
+        self.menu.addAction(self.openLatestAction)
+        self.menu.addSeparator()
+        self.menu.addAction(self.publishCurrentClipAction)
+        self.menu.addSeparator()
+        self.menu.addAction(self.popItemAction)
+        self.menu.addAction(self.copyIpnsAction)
+        self.menu.addAction(self.generateQrAction)
+        self.menu.addSeparator()
+        self.menu.addAction(self.deleteAction)
 
     def dragEnterEvent(self, event):
         URLDragAndDropProcessor.dragEnterEvent(self, event)
@@ -431,6 +532,9 @@ class MultihashPyramidToolButton(PopupToolButton):
         )
         self.setToolTip(self.pyrToolTip)
 
+    def onDeletePyramid(self):
+        self.deleteRequest.emit()
+
     def onPyrChange(self):
         self.updateToolTip()
 
@@ -440,7 +544,8 @@ class MultihashPyramidToolButton(PopupToolButton):
 
     def onGenerateQrCode(self):
         if self.ipnsKeyPath:
-            ensure(self.generateQrCode(self.ipnsKeyPath))
+            qrName = 'ipfsqr.{}.png'.format(self.pyramid.ipnsKey)
+            ensure(self.generateQrCode(qrName, self.ipnsKeyPath))
 
     def onObjectDropped(self, ipfsPath):
         self.app.marksLocal.pyramidAdd(self.pyramid.path, str(ipfsPath))
@@ -493,11 +598,12 @@ class MultihashPyramidToolButton(PopupToolButton):
         self.app.setClipboardText(joinIpns(self.pyramid.ipnsKey))
 
     @ipfsOp
-    async def generateQrCode(self, ipfsop, ipnsPath):
+    async def generateQrCode(self, ipfsop, qrName, *paths):
         encoder = IPFSQrEncoder()
-        encoder.add(str(ipnsPath))
 
-        qrName = 'ipfsqr.{}.png'.format(self.pyramid.ipnsKey)
+        for path in paths:
+            encoder.add(str(path))
+
         imgPath = self.app.tempDir.filePath(qrName)
 
         try:
@@ -580,7 +686,7 @@ class MultihashPyramidToolButton(PopupToolButton):
                     count=self._publishFailedCount))
                 return False
 
-    def pyramidNeedsPublish(self, mark, notify):
+    async def pyramidNeedsPublish(self, mark, notify):
         """
         We need to publish! Unless there's already a publish
         in progress, ensure an update right away
@@ -589,7 +695,7 @@ class MultihashPyramidToolButton(PopupToolButton):
         self.pyramidion = mark
 
         if self.publishInProgress is False:
-            ensure(self.publish(self.pyramidion, notify))
+            await self.publish(self.pyramidion, notify)
 
     async def publishWatcherTask(self):
         # Depending on the lifetime of the records we publish, decide upon
@@ -617,12 +723,312 @@ class MultihashPyramidToolButton(PopupToolButton):
                     delay = rand.randint(5, 30)
 
                     self.app.loop.call_later(
-                        delay, self.needsPublish.emit, self.pyramidion, False)
+                        delay, ensure, self.needsPublish.send(self.pyramidion,
+                                                              False))
 
                 if isinstance(self.publishedLast, datetime):
                     delta = datetime.now() - self.publishedLast
 
                     if unpublishedMax and delta.seconds > unpublishedMax:
-                        self.needsPublish.emit(self.pyramidion, True)
+                        await self.needsPublish.send(self.pyramidion, True)
 
             await asyncio.sleep(3600)
+
+
+class EDAGBuildingPyramidController(MultihashPyramidToolButton):
+    """
+    A type of pyramid that works on a EDAG, like the gallery generator
+    """
+
+    edagClass = EvolvingDAG
+
+    def onObjectDropped(self, ipfsPath):
+        pass
+
+    def buildMenu(self):
+        pass
+
+    def createExtraActions(self):
+        self.rewindDagAction = QAction(getIcon('ipld.png'),
+                                       iRewindDAG(),
+                                       self,
+                                       triggered=self.onRewindEDAG)
+        self.rewindDagAction.setToolTip(iRewindDAGToolTip())
+
+    def onRewindEDAG(self):
+        ensure(self.rewindEDAG())
+
+    async def rewindEDAG(self):
+        """
+        Rewind the EDAG one iteration.
+
+        Pop a hashmark off the pyramid, and rewind the EDAG.
+
+        TODO: improve the EDAG rewind API so that we can know
+        which object we're moving away from
+        """
+        try:
+            self.app.marksLocal.pyramidPop(self.pyramid.path)
+            await self.edag.rewind()
+        except DAGRewindException:
+            self.info('Cannot rewind DAG (no DAG history)')
+        else:
+            self.info('DAG rewind successfull')
+
+    @ipfsOp
+    async def cleanup(self, ipfsop):
+        """
+        Remove the EDAG's metadata file.
+        We should probably also unpin the latest EDAG's object
+        """
+        await super().cleanup()
+        await ipfsop.filesRm(self.edagMetaPath)
+
+    async def stop(self):
+        await super().stop()
+
+    @ipfsOp
+    async def initialize(self, ipfsop):
+        profile = ipfsop.ctx.currentProfile
+        self.edagMetaPath = profile.edagPyramidMetadataPath(self.pyramid.uuid)
+        await self.initDag()
+
+    @ipfsOp
+    async def initDag(self, ipfsop):
+        self.info('Loading EDAG from MFS metadata: {}'.format(
+            self.edagMetaPath))
+
+        self.edag = self.edagClass(self.edagMetaPath)
+        ensure(self.edag.load())
+        await self.edag.loaded
+
+        await self.initDagExtra(self.edag)
+
+        self.edag.dagCidChanged.connect(self.onPyramidDagCidChanged)
+
+        mark = self.app.marksLocal.pyramidGetLatestHashmark(self.pyramid.path)
+        if mark:
+            self.pyramidion = mark
+
+    @ipfsOp
+    async def initDagExtra(self, ipfsop, edag):
+        pass
+
+    def onPyramidDagCidChanged(self, cidStr):
+        self.info("Pyramid's DAG moving to CID: {}".format(cidStr))
+
+        path = IPFSPath(cidStr)
+
+        if path.valid:
+            self.app.marksLocal.pyramidAdd(self.pyramid.path, str(path))
+
+
+class GalleryDAG(EvolvingDAG):
+    def updateDagSchema(self, root):
+        changed = False
+        if 'images' not in root:
+            root['images'] = []
+            changed = True
+
+        if 'metadata' not in root:
+            root['metadata'] = {
+                'author': None,
+                'title': 'Image gallery',
+                'creationdate': utcDatetimeIso()
+            }
+            changed = True
+
+        return changed
+
+
+class GalleryPyramidController(EDAGBuildingPyramidController):
+    edagClass = GalleryDAG
+
+    @property
+    def indexPath(self):
+        return IPFSPath(self.pyramid.latest, autoCidConv=True).child(
+            'index.html')
+
+    @property
+    def indexIpnsPath(self):
+        return self.ipnsKeyPath.child('index.html')
+
+    def onObjectDropped(self, ipfsPath):
+        ensure(self.analyzeImageObject(ipfsPath))
+
+    def createExtraActions(self):
+        super().createExtraActions()
+        self.browseIpnsAction = QAction(getIcon('pyramid-aqua.png'),
+                                        iGalleryBrowseIpns(),
+                                        self,
+                                        triggered=self.onBrowseGalleryIpns)
+        self.browseDirectAction = QAction(getIcon('pyramid-aqua.png'),
+                                          iGalleryBrowse(),
+                                          self,
+                                          triggered=self.onBrowseGallery)
+        self.generateIndexQrAction = QAction(
+            getIcon('ipfs-qrcode.png'),
+            iPyramidGenerateIndexQr(),
+            self,
+            triggered=self.onGenerateIndexQrCode)
+        self.changeTitleAction = QAction(getIcon('pyramid-aqua.png'),
+                                         iGalleryChangeTitle(),
+                                         self,
+                                         triggered=self.onChangeTitle)
+
+    def buildMenu(self):
+        self.menu.addAction(self.browseIpnsAction)
+        self.menu.addAction(self.browseDirectAction)
+        self.menu.addSeparator()
+        self.menu.addAction(self.copyIpnsAction)
+        self.menu.addSeparator()
+        self.menu.addAction(self.changeTitleAction)
+        self.menu.addSeparator()
+        self.menu.addAction(self.generateIndexQrAction)
+        self.menu.addAction(self.generateQrAction)
+        self.menu.addSeparator()
+        self.menu.addAction(self.rewindDagAction)
+        self.menu.addSeparator()
+        self.menu.addAction(self.deleteAction)
+        self.menu.addSeparator()
+        self.menu.addAction(
+            getIcon('pyramid-blue.png'), iHelp(), self.galleryHelpMessage)
+        self.menu.setEnabled(False)
+        self.menu.setToolTipsVisible(True)
+
+    def onChangeTitle(self):
+        curTitle = self.edag.root['metadata']['title']
+
+        title = inputTextLong(
+            label='Gallery title',
+            text=curTitle
+        )
+
+        if title and title != curTitle:
+            ensure(self.changeGalleryTitle(title))
+
+    @ipfsOp
+    async def changeGalleryTitle(self, ipfsop, title):
+        async with self.edag as edag:
+            edag.root['metadata']['title'] = title
+
+    def onGenerateIndexQrCode(self):
+        qrName = 'ipfsqr.pyrindex.{}.png'.format(self.pyramid.name)
+        ensure(self.generateQrCode(qrName, self.indexIpnsPath))
+
+    def onBrowseGalleryIpns(self):
+        objPath = self.ipnsKeyPath.child('index.html')
+        ensure(self.app.resourceOpener.open(objPath))
+
+    def onBrowseGallery(self):
+        if self.pyramid.latest:
+            objPath = IPFSPath(self.pyramid.latest, autoCidConv=True).child(
+                'index.html')
+            ensure(self.app.resourceOpener.open(objPath))
+
+    @ipfsOp
+    async def initDagExtra(self, ipfsop, edag):
+        if 'index.html' not in edag.root:
+            entry = await ipfsRender(self.app.jinjaEnv,
+                                     'imggallery/gallery.html')
+            edag.root['index.html'] = self.edag.mkLink(entry)
+            edag.changed.emit()
+
+        self.menu.setEnabled(True)
+
+    @ipfsOp
+    async def analyzeImageObject(self, ipfsop, ipfsPath):
+        mimeType, stat = await self.app.rscAnalyzer(ipfsPath)
+
+        if not mimeType or not mimeType.isImage:
+            self.app.messageDisplayRequest.emit(
+                'This object is not an image', 'Wrong object type')
+            return
+
+        statInfo = StatInfo(stat)
+        image = await getImageFromIpfs(ipfsPath)
+
+        if not image:
+            # TODO
+            return
+
+        await ipfsop.sleep()
+
+        imgName = ipfsPath.basename if ipfsPath.subPath else None
+        tEntry = None
+        maxSize = QSize(128, 128)
+
+        # Create a thumbnail
+        if image.size().width() > maxSize.width() or \
+                image.size().height() > maxSize.height():
+
+            thumbnail = await self.app.loop.run_in_executor(
+                self.app.executor,
+                image.scaled, maxSize, Qt.KeepAspectRatio)
+
+            buff = QBuffer(parent=self)
+            buff.open(QBuffer.ReadWrite)
+            thumbnail.save(buff, 'PNG')
+            buff.close()
+
+            await ipfsop.sleep()
+
+            data = bytes(buff.buffer())
+
+            if len(data) > 0:
+                tEntry = await ipfsop.addBytes(data)
+
+        self.edag.root['images'].append({
+            'comment': None,
+            'name': imgName,
+            'date': utcDatetimeIso(),
+            'thumbnail': self.edag.mkLink(tEntry) if tEntry else None,
+            'raw': self.edag.mkLink(statInfo.cid),
+            'imginfo': {
+                'width': image.width(),
+                'height': image.height(),
+                'depth': image.depth(),
+                'bitplanes': image.bitPlaneCount(),
+            }
+        })
+
+        entry = await ipfsRender(self.app.jinjaEnv,
+                                 'imggallery/gallery.html')
+        self.edag.root['index.html'] = self.edag.mkLink(entry)
+        self.edag.changed.emit()
+
+    def updateToolTip(self):
+        self._pyrToolTip = '''
+            <p>
+                <img width='64' height='64'
+                    src=':/share/icons/mimetypes/image-x-generic.png'/>
+            </p>
+            <p>
+                Image gallery: <b>{path}</b>
+                ({itemscount} item(s) in the stack)
+            </p>
+
+            <p><b>Drag-and-drop images here</b>
+            to add an image to the gallery</p>
+
+            <p>Description: {descr}</p>
+            <p>IPNS key: <b>{ipns}</b></p>
+
+            <p>
+                <img width='16' height='16'
+                    src=':/share/icons/pyramid-stack.png'/>
+                Latest (pyramidion): <b>{latest}</b>
+            </p>
+        '''.format(
+            path=self.pyramid.path,
+            descr=self.pyramid.description,
+            ipns=self.pyramid.ipnsKey,
+            itemscount=self.pyramid.marksCount,
+            latest=self.pyramid.latest if self.pyramid.latest else
+            iEmptyPyramid()
+        )
+        self.setToolTip(self.pyrToolTip)
+
+    def galleryHelpMessage(self):
+        self.app.manuals.browseManualPage(
+            'pyramids.html', fragment='image-gallery')

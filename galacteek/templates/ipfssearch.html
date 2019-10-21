@@ -9,12 +9,12 @@
       }
 
       label {
-          position: absolute;
-          top: 36.66667px;
-          color: rgba(255, 255, 255, 0.5);
-          font: 400 36.66667px Roboto;
-          cursor: text;
-          transition: .25s ease;
+        position: absolute;
+        top: 36.66667px;
+        color: rgba(255, 255, 255, 0.5);
+        font: 400 36.66667px Roboto;
+        cursor: text;
+        transition: .25s ease;
       }
 
       form {
@@ -22,7 +22,7 @@
       }
 
       input {
-         font: 14pt "Montserrat";
+       font: 14pt "Montserrat";
       }
 
       div#results {
@@ -30,34 +30,51 @@
         margin-right: 20px;
       }
 
-      input.standard[type=text] {
-         font: 14pt "Montserrat";
-          background-color: #C3D7DF;
-          background-image: url('qrc:///share/icons/ipfs-cube-64.png');
-          background-position: 10px 10px; 
-          background-size: 32px 32px; 
-          background-repeat: no-repeat;
-          padding-left: 40px;
-          border: 1px solid #4a9ea1;
-          border-radius: 4px;
-          width: 42%;
-          height: 50px;
-          margin: 8px 0;
-          padding-left: 50px;
-          box-sizing: border-box;
+      input.waitinput[type=text] {
+        font: 14pt "Montserrat";
+        background-color: #C3D7DF;
+        background-image: url('qrc:///share/icons/cube-orange.png');
+        background-position: 10px 10px;
+        background-size: 32px 32px;
+        background-repeat: no-repeat;
+        padding-left: 40px;
+        border: 1px solid #4a9ea1;
+        border-radius: 4px;
+        width: 42%;
+        height: 50px;
+        margin: 8px 0;
+        padding-left: 50px;
+        box-sizing: border-box;
+      }
+
+      input.searching[type=text] {
+        font: 14pt "Montserrat";
+        background-color: #C3D7DF;
+        background-image: url('qrc:///share/clips/rotating-cube.gif');
+        background-position: 10px 10px;
+        background-size: 32px 32px;
+        background-repeat: no-repeat;
+        padding-left: 40px;
+        border: 1px solid #4a9ea1;
+        border-radius: 4px;
+        width: 42%;
+        height: 50px;
+        margin: 8px 0;
+        padding-left: 50px;
+        box-sizing: border-box;
       }
 
       input[type=text]:focus {
-          background-color: lightblue;
+        background-color: lightblue;
       }
 
       input[type=button], input[type=submit], input[type=reset] {
-          background-color: #C3D7DF;
-          border: 1px solid #4a9ea1;
-          padding: 8px 8px;
-          text-decoration: none;
-          margin: 4px 2px;
-          cursor: pointer;
+        background-color: #C3D7DF;
+        border: 1px solid #4a9ea1;
+        padding: 8px 8px;
+        text-decoration: none;
+        margin: 4px 2px;
+        cursor: pointer;
       }
 
       select {
@@ -72,8 +89,8 @@
       }
 
       .container {
-          display: grid;
-          grid-template-columns: 3fr 1fr 1fr;
+        display: grid;
+        grid-template-columns: 3fr 1fr 1fr;
       }
 
       ul {
@@ -104,6 +121,18 @@
         padding: 8px;
         margin: 12px;
         border-radius: 4px;
+      }
+
+      a.hitlink:hover {
+        background-color: #4b9fa2;
+      }
+
+      a.pagecontrol:hover {
+        background-color: #4b9fa2;
+      }
+
+      a {
+        padding: 2px;
       }
 
       .unavailable {
@@ -142,8 +171,8 @@
       function renderHit(hit, div) {
         markup = `
     <p style="text-align: left">
-      <a style="margin-right: 15px" href="dweb:${hit.path}" onclick='event.preventDefault(); window.openIpfs("${hit.path}")' >${hit.title}</a>
-      <a href="#" onclick='event.preventDefault(); window.hashmark("${hit.path}")'><img src="qrc:///share/icons/star-navy.png" width="16" height="16"/></a>
+      <a class="hitlink" style="margin-right: 15px" href="${hit.url}" onclick='event.preventDefault(); window.openIpfs("${hit.path}")' >${hit.title}</a>
+      <a href="#" onclick='event.preventDefault(); window.hashmark("${hit.path}")'><img src="qrc:///share/icons/hashmarks.png" width="16" height="16"/></a>
       <a href="#" onclick='event.preventDefault(); window.ipfssearch.pinObject("${hit.path }")'><img src="qrc:///share/icons/pin.png" width="16" height="16"/></a>
       <a href="#" onclick='event.preventDefault(); window.ipfssearch.clipboardInput("${hit.path}")'><img src="qrc:///share/icons/clipboard.png" width="16" height="16"/></a>
 
@@ -223,6 +252,16 @@
         }
       }
 
+      function statusSearching() {
+          document.getElementById('searchquery').setAttribute(
+            'class', 'searching')
+      }
+
+      function statusWaiting() {
+          document.getElementById('searchquery').setAttribute(
+            'class', 'waitinput')
+      }
+
       new QWebChannel(qt.webChannelTransport, function (channel) {
         window.galacteek = channel.objects.galacteek;
         window.ipfssearch = channel.objects.ipfssearch;
@@ -241,6 +280,8 @@
           elem.setAttribute('class', 'grayout');
           renderHit(hit, elem);
           resDiv.appendChild(elem);
+
+
         });
 
         window.ipfssearch.clear.connect(function() {
@@ -248,6 +289,7 @@
           while(div.firstChild){
             div.removeChild(div.firstChild);
           }
+          document.getElementById('statusmessage').innerHTML = ""
         })
 
         window.ipfssearch.objectStatAvailable.connect(function(cid, stat, hit) {
@@ -260,11 +302,17 @@
         });
 
         window.ipfssearch.searchTimeout.connect(function(timeout) {
-          document.getElementById('loading').style.display = 'none'
+          document.getElementById('statusmessage').innerHTML = "<b>Search timeout</b>"
+          statusWaiting()
         })
 
         window.ipfssearch.searchError.connect(function() {
-          document.getElementById('loading').style.display = 'none'
+          document.getElementById('statusmessage').innerHTML = "<b>Search error</b>"
+          statusWaiting()
+        })
+
+        window.ipfssearch.searchComplete.connect(function() {
+          statusWaiting()
         })
 
         window.ipfssearch.resetForm.connect(function() {
@@ -272,8 +320,8 @@
           document.getElementById('contenttype').value = 'all'
           document.getElementById('controls').style.display = 'none'
           document.getElementById('controls_b').style.display = 'none'
-          document.getElementById('loading').style.display = 'none'
           document.getElementById('searchquery').focus()
+          document.getElementById('statusmessage').innerHTML = ""
         })
 
         window.ipfssearch.vPageStatus.connect(function(vPageCur, vPageLast) {
@@ -289,8 +337,6 @@
           pageinfo.style.display = 'block'
 
           ctrl.style.display = 'flex'
-
-          document.getElementById('loading').style.display = 'none'
 
           if (vPageCur == 1) {
             prev.style.display = 'none'
@@ -322,27 +368,28 @@
       }
 
       window.runSearch = function () {
+        window.ipfssearch.cancelSearchTasks()
+
         document.getElementById('controls').style.display = 'none'
         document.getElementById('controls_b').style.display = 'none'
         query = document.getElementById('searchquery').value
         type = document.getElementById('contenttype').value
 
-        document.getElementById('loading').style.display = 'block'
-
+        statusSearching()
         window.ipfssearch.search(query, type)
       }
 
       window.previousPage = function () {
+        statusSearching()
         document.getElementById('controls_b').style.display = 'none'
         document.getElementById('controls').style.display = 'none'
-        document.getElementById('loading').style.display = 'block'
         window.ipfssearch.previousPage()
       }
 
       window.nextPage = function () {
+        statusSearching()
         document.getElementById('controls_b').style.display = 'none'
         document.getElementById('controls').style.display = 'none'
-        document.getElementById('loading').style.display = 'block'
         window.ipfssearch.nextPage()
       }
     </script>
@@ -351,7 +398,7 @@
     <div width="100%" class="container">
       <div style="float: left; width='40%'">
         <form onsubmit="window.runSearch();">
-          <input type="text" class="standard" name="query" id="searchquery" width="300"/>
+          <input type="text" class="waitinput" name="query" id="searchquery" width="300"/>
           <select name="contenttype" id="contenttype">
             <option value="all">All</option>
             <option value="images">Images</option>
@@ -362,24 +409,30 @@
           <input type="submit" name="searchbtn" value="Search" width="300"/>
         </form>
       </div>
-      <div id="loading" class="loader" style="float: right; display: none;">
-      </div>
     </div>
 
     <br style="clear: left;"/>
 
+    <div>
+      <p id="statusmessage"/>
+    </div>
+
     <div width="100%" id="controls" style="display: none">
-      <a style="margin-right: 10px" href="#" id="pageprev" onclick="window.previousPage();">Previous page</a>
+      <a class="pagecontrol" style="margin-right: 10px" href="#"
+        id="pageprev" onclick="window.previousPage();">Previous page</a>
       <span id="pageinfo"></span>
-      <a style="margin-left: 10px" href="#" id="pagenext" onclick="window.nextPage();">Next page</a>
+      <a class="pagecontrol" style="margin-left: 10px" href="#"
+        id="pagenext" onclick="window.nextPage();">Next page</a>
     </div>
 
     <div id="results">
     </div>
 
     <div width="100%" id="controls_b" style="display: none">
-      <a style="margin-right: 10px" href="#" id="pageprev_b" onclick="window.previousPage();">Previous page</a>
-      <a style="margin-left: 10px" href="#" id="pagenext_b" onclick="window.nextPage();">Next page</a>
+      <a class="pagecontrol" style="margin-right: 10px" href="#"
+        id="pageprev_b" onclick="window.previousPage();">Previous page</a>
+      <a class="pagecontrol" style="margin-left: 10px" href="#"
+        id="pagenext_b" onclick="window.nextPage();">Next page</a>
     </div>
   </body>
 </html>

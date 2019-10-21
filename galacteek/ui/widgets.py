@@ -1,5 +1,5 @@
-import re
 import asyncio
+from datetime import datetime
 
 from PyQt5.QtWidgets import QFrame
 from PyQt5.QtWidgets import QPushButton
@@ -19,24 +19,30 @@ from PyQt5.QtWidgets import QTextEdit
 from PyQt5.QtWidgets import QHBoxLayout
 from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtWidgets import QTextBrowser
+from PyQt5.QtWidgets import QToolTip
 
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWebEngineWidgets import QWebEnginePage
 
+from PyQt5.QtCore import QRect
+from PyQt5.QtCore import QEvent
+from PyQt5.QtCore import QRegExp
 from PyQt5.QtCore import QTimer
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtCore import Qt
-from PyQt5.QtCore import QPoint
 from PyQt5.QtCore import QUrl
 from PyQt5.QtCore import QMimeData
 from PyQt5.QtCore import QSize
 from PyQt5.QtCore import QFile
 from PyQt5.QtCore import QIODevice
 from PyQt5.QtCore import QVariant
+from PyQt5.QtCore import QPoint
 
+from PyQt5.QtGui import QRegExpValidator
 from PyQt5.QtGui import QImage
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtGui import QTextCursor
+from PyQt5.QtGui import QKeySequence
 
 from pygments import highlight
 from pygments.formatters import HtmlFormatter
@@ -46,6 +52,8 @@ from galacteek.ipfs.stat import StatInfo
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek import ensure
+from galacteek.core import parseDate
+from galacteek.core.asynclib import asyncify
 from galacteek.dweb.markdown import markitdown
 
 from .helpers import getIcon
@@ -53,11 +61,13 @@ from .helpers import getIconFromIpfs
 from .helpers import disconnectSig
 from .helpers import sizeFormat
 from .helpers import messageBox
-from .i18n import iNoTitle
 from .i18n import iCancel
 from .i18n import iUnknown
-from .i18n import iHashmarksLibraryCountAvailable
 from .i18n import iLocalHashmarksCount
+from .i18n import iSearchHashmarks
+from .i18n import iSearchHashmarksAllAcross
+from .i18n import iSearchUseShiftReturn
+from .i18n import iHashmarkInfoToolTip
 
 
 class GalacteekTab(QWidget):
@@ -233,6 +243,7 @@ class LabelWithURLOpener(QLabel):
     QLabel which opens http/https URLs in a tab.
     Used by the 'About' dialog
     """
+
     def __init__(self, text, parent=None):
         super(LabelWithURLOpener, self).__init__(text, parent)
         self.app = QApplication.instance()
@@ -248,10 +259,11 @@ class LabelWithURLOpener(QLabel):
 class PopupToolButton(QToolButton, URLDragAndDropProcessor):
     def __init__(self, icon=None, parent=None, menu=None,
                  mode=QToolButton.MenuButtonPopup, acceptDrops=False,
-                 menuSizeHint=None):
+                 menuSizeHint=None, toolTipsVisible=True):
         super(PopupToolButton, self).__init__(parent)
 
         self.menu = menu if menu else QMenu(self)
+        self.menu.setToolTipsVisible(toolTipsVisible)
         self.setPopupMode(mode)
         self.setMenu(self.menu)
         self.setAcceptDrops(acceptDrops)
@@ -311,37 +323,53 @@ class HashmarkToolButton(QToolButton):
 
 
 class _HashmarksCommon:
-    def makeAction(self, path, mark):
+    def makeAction(self, path, mark, loadIcon=True):
         tLenMax = 64
-        title = mark['metadata'].get('title', iNoTitle())
-        icon = mark.get('icon', None)
-        fullTitle = title
+        title = mark['metadata'].get('title')
+        description = mark['metadata'].get('description')
+        datecreated = mark.get('datecreated')
+        icon = mark.get('icon')
 
-        if len(title) > tLenMax:
+        if title and len(title) > tLenMax:
             title = '{0} ...'.format(title[0:tLenMax])
 
+        dt = parseDate(datecreated)
+        if dt:
+            dateHuman = dt.isoformat(' ', timespec='minutes')
+        else:
+            dateHuman = iUnknown()
+
         action = QAction(title, self)
-        action.setToolTip(fullTitle)
+        action.setToolTip(
+            iHashmarkInfoToolTip(path, title, description, dateHuman))
+
         action.setData({
             'path': path,
             'mark': mark,
             'iconcid': icon
         })
 
-        if not icon:
+        if not icon or not loadIcon:
             # Default icon
             action.setIcon(getIcon('ipfs-logo-128-white-outline.png'))
+        else:
+            ensure(self.loadMarkIcon(action, icon))
 
         return action
 
     @ipfsOp
     async def loadMarkIcon(self, ipfsop, action, iconCid):
+        data = action.data()
+
+        if isinstance(data, dict) and 'iconloaded' in data:
+            return
+
         icon = await getIconFromIpfs(ipfsop, iconCid)
+
         if icon:
             await ipfsop.sleep()
 
             action.setIcon(icon)
-            data = action.data()
             data['iconloaded'] = True
             action.setData(data)
 
@@ -356,6 +384,7 @@ class HashmarkMgrButton(PopupToolButton, _HashmarksCommon):
 
         self.setObjectName('hashmarksMgrButton')
         self.menu.setObjectName('hashmarksMgrMenu')
+        self.menu.setToolTipsVisible(True)
         self.hCount = 0
         self.marks = marks
         self.cMenus = {}
@@ -409,6 +438,7 @@ class HashmarkMgrButton(PopupToolButton, _HashmarksCommon):
 
             if category not in self.cMenus:
                 self.cMenus[category] = QMenu(category)
+                self.cMenus[category].setToolTipsVisible(True)
                 self.cMenus[category].triggered.connect(self.linkActivated)
                 self.cMenus[category].setObjectName('hashmarksMgrMenu')
                 self.menu.addMenu(self.cMenus[category])
@@ -447,104 +477,183 @@ class HashmarkMgrButton(PopupToolButton, _HashmarksCommon):
             )
 
 
-class HashmarksLibraryButton(PopupToolButton, _HashmarksCommon):
+class HashmarksSearchWidgetAction(QWidgetAction):
+    pass
+
+
+class HashmarksSearchLine(QLineEdit):
+    """
+    The hashmarks search line edit.
+
+    Run the search when Shift + Return is pressed.
+    """
+    searchRequest = pyqtSignal(str)
+    returnNoModifier = pyqtSignal()
+
+    def mouseDoubleClickEvent(self, event):
+        event.ignore()
+
+    def keyPressEvent(self, event):
+        if event.type() == QEvent.KeyPress:
+            modifiers = event.modifiers()
+            key = event.key()
+
+            if modifiers & Qt.ShiftModifier:
+                if key == Qt.Key_Return:
+                    searchText = self.text().strip()
+                    if searchText:
+                        self.searchRequest.emit(searchText)
+
+                    return
+            else:
+                if event.key() == Qt.Key_Return:
+                    self.returnNoModifier.emit()
+                    return
+
+        return super().keyPressEvent(event)
+
+
+class HashmarksSearcher(PopupToolButton, _HashmarksCommon):
     hashmarkClicked = pyqtSignal(str, str)
 
-    def __init__(self, iconFile='hashmarks-library.png',
-                 maxItemsPerCategory=128, parent=None):
-        super(HashmarksLibraryButton, self).__init__(
-            parent=parent, mode=QToolButton.InstantPopup)
+    def __init__(self, iconFile='hashmarks-library.png', parent=None,
+                 mode=QToolButton.InstantPopup):
+        super(HashmarksSearcher, self).__init__(parent=parent, mode=mode)
 
-        self.cMenus = {}
-        self.hCount = 0
-        self.maxItemsPerCategory = maxItemsPerCategory
+        self.app = QApplication.instance()
+
+        self._catalog = {}
+        self._sMenus = []
+        self.setObjectName('hashmarksSearcher')
+
         self.setIcon(getIcon(iconFile))
-        self.setObjectName('hashmarksLibraryButton')
-        self.menu.setObjectName('hashmarksLibraryMenu')
-        self.searchMenu = None
-        self.addSearchMenu()
+        self.setShortcut(QKeySequence('Ctrl+Alt+h'))
 
-    def addSearchMenu(self):
-        if self.searchMenu is not None:
-            return
+        self.menu.setTitle(iSearchHashmarks())
+        self.menu.setIcon(getIcon(iconFile))
+        self.menu.setObjectName('hashmarksSearchMenu')
+        self.menu.setToolTipsVisible(True)
+        self.menu.aboutToShow.connect(self.aboutToShowMenu)
+        self.configureMenu()
 
-        self.searchMenu = QMenu('Search', self)
-        self.menu.addMenu(self.searchMenu)
+    @property
+    def searchesCount(self):
+        return len(self.menu.actions()) - len(self.protectedActions)
 
-        self.searchLine = QLineEdit()
-        self.searchLine.returnPressed.connect(self.onSearch)
-        self.searchWAction = QWidgetAction(self)
+    @property
+    def protectedActions(self):
+        return [self.searchWAction, self.clearAction]
+
+    def isProtectedAction(self, action):
+        for pAction in self.protectedActions:
+            if action is pAction:
+                return True
+        return False
+
+    def aboutToShowMenu(self):
+        self.searchLine.setFocus(Qt.OtherFocusReason)
+
+    def configureMenu(self):
+        self.clearAction = QAction(
+            getIcon('clear-all.png'),
+            'Clear searches',
+            self.menu,
+            triggered=self.onClearSearches
+        )
+        self.clearAction.setEnabled(False)
+        self.searchLine = HashmarksSearchLine(self.menu)
+        self.searchLine.setObjectName('hLibrarySearch')
+
+        mediumSize = self.fontMetrics().size(0, '*' * (40))
+        self.searchLine.setMinimumSize(QSize(mediumSize.width(), 32))
+        self.searchLine.setFocusPolicy(Qt.StrongFocus)
+
+        self.searchLine.returnNoModifier.connect(self.onReturnNoShift)
+        self.searchLine.searchRequest.connect(self.onSearch)
+        self.searchLine.setToolTip(iSearchHashmarksAllAcross())
+
+        self.searchLine.setValidator(
+            QRegExpValidator(QRegExp(r"[\w\s@\+\-_./?'\"!#]+")))
+        self.searchLine.setMaxLength(96)
+        self.searchLine.setClearButtonEnabled(True)
+
+        self.searchWAction = HashmarksSearchWidgetAction(self.menu)
         self.searchWAction.setDefaultWidget(self.searchLine)
-        self.searchMenu.addAction(self.searchWAction)
-        self.searchMenu.setEnabled(False)
+        self.menu.addAction(self.searchWAction)
+        self.menu.setDefaultAction(self.searchWAction)
+        self.menu.addAction(self.clearAction)
 
-    def onSearch(self):
-        pos = self.searchLine.mapToGlobal(QPoint(0, 0))
-        text = self.searchLine.text()
+    def onReturnNoShift(self):
+        QToolTip.showText(self.searchLine.mapToGlobal(
+            QPoint(30, self.searchLine.height())),
+            iSearchUseShiftReturn(),
+            self.searchLine, QRect(0, 0, 0, 0), 1800)
 
-        resultsMenu = QMenu(self)
+    def onSearch(self, text):
+        for action in self.menu.actions():
+            if self.isProtectedAction(action):
+                continue
+            if action.text() == text:
+                self.menu.removeAction(action)
+
+        ensure(self.searchInCatalog(text))
+
+    @asyncify
+    async def searchInCatalog(self, text):
+        resultsMenu = QMenu(text, self.menu)
+        resultsMenu.setToolTipsVisible(True)
+        resultsMenu.setObjectName('hashmarksSearchMenu')
         resultsMenu.triggered.connect(
             lambda action: self.linkActivated(
                 action, closeMenu=True))
-        self.searchTextInMenu(self.menu, text, resultsMenu)
-        resultsMenu.exec(pos)
+        resultsMenu.menuAction().setData({
+            'query': text,
+            'datecreated': datetime.now()
+        })
 
-    def searchTextInMenu(self, menu, text, rMenu):
-        for action in menu.actions():
-            menu = action.menu()
-            if menu:
-                self.searchTextInMenu(menu, text, rMenu)
-            else:
-                data = action.data()
-                if not isinstance(data, dict):
-                    continue
+        sources = [marks for sender, marks in self._catalog.items()]
+        sources.append(self.app.marksLocal)
+        showMax = 128
+        added = 0
 
-                path = data['path']
-                mark = data['mark']
+        for marks in sources:
+            await asyncio.sleep(0)
 
-                maTitle = re.search(text, mark['metadata']['title'],
-                                    re.IGNORECASE)
-                maDesc = re.search(text, mark['metadata']['description'],
-                                   re.IGNORECASE)
-                if maTitle or maDesc:
-                    rMenu.addAction(self.makeAction(path, mark))
+            async for hashmark in marks.searchAllByMetadata({
+                'path': text,
+                'title': text,
+                'description': text,
+                'comment': text
+            }):
 
-    def updateMenu(self, ipfsMarks):
-        categories = ipfsMarks.getCategories()
+                await asyncio.sleep(0)
+                resultsMenu.addAction(self.makeAction(
+                    hashmark.path, hashmark.markData))
 
-        for category in categories:
-            marks = ipfsMarks.getCategoryMarks(category)
-            mItems = marks.items()
+                if added > showMax:
+                    break
 
-            if len(mItems) not in range(1, self.maxItemsPerCategory):
-                continue
+                added += 1
 
-            if category not in self.cMenus:
-                self.cMenus[category] = QMenu(category, self)
-                self.cMenus[category].triggered.connect(self.linkActivated)
-                self.cMenus[category].setObjectName('hashmarksLibraryMenu')
-                self.menu.addMenu(self.cMenus[category])
+        if len(resultsMenu.actions()) > 0:
+            self.menu.addMenu(resultsMenu)
+            resultsMenu.setIcon(getIcon('search-engine.png'))
 
-            menu = self.cMenus[category]
+        self.clearAction.setEnabled(self.searchesCount > 0)
+        self.searchLine.clear()
 
-            menu.setIcon(getIcon('stroke-cube.png'))
+    def onClearSearches(self):
+        for action in self.menu.actions():
+            if not self.isProtectedAction(action):
+                self.menu.removeAction(action)
 
-            def exists(path):
-                for action in menu.actions():
-                    if action.data()['path'] == path:
-                        return action
+        self.clearAction.setEnabled(self.searchesCount > 0)
 
-            for path, mark in mItems:
-                if exists(path):
-                    continue
+    def register(self, nodeId, ipfsMarks):
+        if nodeId in self._catalog.keys():
+            del self._catalog[nodeId]
 
-                action = self.makeAction(path, mark)
-                menu.addAction(action)
-                self.hCount += 1
-
-        self.setToolTip(iHashmarksLibraryCountAvailable(self.hCount))
-        if self.hCount > 0:
-            self.searchMenu.setEnabled(True)
+        self._catalog[nodeId] = ipfsMarks
 
     def linkActivated(self, action, closeMenu=False):
         data = action.data()
@@ -559,6 +668,7 @@ class HashmarksLibraryButton(PopupToolButton, _HashmarksCommon):
                 mark['metadata']['title']
             )
 
+            self.searchLine.clear()
             if closeMenu:
                 self.menu.hide()
 
@@ -906,3 +1016,51 @@ class PageSourceWidget(QTextBrowser):
             self.document().setPlainText('Could not load source')
 
         self.moveCursor(QTextCursor.Start)
+
+
+class AnimatedButton(QPushButton):
+    """
+    Animated button.
+    """
+
+    def __init__(self, clip, ignoreFrameEvery=1, parent=None):
+        super().__init__(parent)
+
+        self.clip = clip
+        self.clip.finished.connect(self.clip.start)
+        self.clip.frameChanged.connect(self.onFrameChanged)
+        self.ignoreFrameEvery = ignoreFrameEvery
+
+    def startClip(self):
+        if not self.clip.playing():
+            self.clip.start()
+
+    def onFrameChanged(self, fNum):
+        if divmod(fNum, self.ignoreFrameEvery)[1] == 0:
+            self.setIcon(self.clip.createIcon())
+
+
+class AnimatedLabel(QLabel):
+    """
+    Animated label.
+    """
+
+    animationClicked = pyqtSignal()
+
+    def __init__(self, clip, loop=True, parent=None):
+        super().__init__(parent)
+
+        self.clip = clip
+
+        if self.clip.isValid():
+            self.setMovie(self.clip)
+
+        if loop:
+            self.clip.finished.connect(self.clip.start)
+
+    def mousePressEvent(self, event):
+        self.animationClicked.emit()
+
+    def startClip(self):
+        if not self.clip.playing():
+            self.clip.start()

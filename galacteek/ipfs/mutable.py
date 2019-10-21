@@ -137,7 +137,7 @@ class MutableIPFSJson(QObject):
 
 class CipheredIPFSJson(MutableIPFSJson):
     def __init__(self, mfsFilePath, rsaHelper, **kw):
-        super().__init__(mfsFilePath)
+        super().__init__(mfsFilePath, **kw)
         self.rsaHelper = rsaHelper
 
     def initObj(self):

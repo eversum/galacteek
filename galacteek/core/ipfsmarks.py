@@ -6,11 +6,17 @@ import copy
 import re
 import os.path
 import asyncio
+import uuid
 from datetime import datetime
+
+from jsonschema import validate
+from jsonschema.exceptions import ValidationError
 
 import aiofiles
 
 from galacteek import log
+from galacteek.core import utcDatetimeIso
+from galacteek.core import parseDate
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.cidhelpers import normpPreserve
 
@@ -27,16 +33,100 @@ class MarksEncoder(json.JSONEncoder):
 marksKey = '_marks'
 pyramidsKey = '_pyramids'
 pyramidsMarksKey = '_pyramidmarks'
+pyramidMaxHmarksDefault = 16
 
 
 def categoryValid(category):
     return re.match('^([0-9A-Za-z-_/]+)$', category) is not None
 
 
+ppRe = r"^(/(ipfs|ipns)/[\w<>\:\;\,\?\!\*\%\&\=\@\$\~/\s\.\-_\\\'\(\)\+]{1,1024}$)"  # noqa
+
+hashmarkSchema = {
+    "title": "Hashmark",
+    "description": "Hashmark object",
+    "type": "object",
+    "patternProperties": {
+        ppRe: {
+            "properties": {
+                "metadata": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "description": {"type": "string"}
+                    },
+                    "required": ["title", "description"]
+                },
+                "datecreated": {"type": "string"},
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            },
+            "required": ["metadata", "datecreated", "tags"]
+        }
+    }
+}
+
+
+hashmarksSchema = {
+    "title": "Hashmarks",
+    "description": "Hashmarks collection",
+    "type": "object",
+    "properties": {
+        "ipfsmarks": {
+            "type": "object",
+            "properties": {
+                "categories": {
+                    "$ref": "#/definitions/category"
+                }
+            }
+        }
+    },
+    "definitions": {
+        "category": {
+            "type": "object",
+            "patternProperties": {
+                r"^_marks$": hashmarkSchema,
+                r"^_{0}[\w0-9]{1,128}": {
+                    "$ref": "#/definitions/category"
+                }
+            }
+        }
+    }
+}
+
+
 class IPFSHashMark(collections.UserDict):
     @property
     def markData(self):
         return self.data[self.path]
+
+    @property
+    def metadata(self):
+        return self.markData['metadata']
+
+    @property
+    def title(self):
+        return self.metadata['title']
+
+    @property
+    def description(self):
+        return self.metadata['description']
+
+    @property
+    def comment(self):
+        return self.metadata['comment']
+
+    @property
+    def datecreated(self):
+        return self.markData['datecreated']
+
+    @property
+    def dtCreated(self):
+        return parseDate(self.datecreated)
 
     @property
     def dtcreated(self):
@@ -52,6 +142,15 @@ class IPFSHashMark(collections.UserDict):
     def dump(self):
         print(json.dumps(self.data, indent=4))
 
+    def isValid(self):
+        try:
+            validate(self.data, hashmarkSchema)
+        except ValidationError as verr:
+            log.debug('Invalid JSON schema error: {}'.format(str(verr)))
+            return False
+        else:
+            return True
+
     @staticmethod
     def fromJson(mPath, metadata):
         if not IPFSPath(mPath).valid or not isinstance(metadata, dict):
@@ -62,17 +161,20 @@ class IPFSHashMark(collections.UserDict):
         return hmark
 
     @staticmethod
-    def make(path, title=None, datecreated=None, share=False, tags=[],
+    def make(path, title=None, datecreated=None, share=False,
              description='', comment='', datasize=None, cumulativesize=None,
+             srcplanet='Earth', tags=None,
              numlinks=None, icon=None, pinSingle=False, pinRecursive=False):
         if datecreated is None:
-            datecreated = datetime.now().isoformat()
+            datecreated = utcDatetimeIso()
 
         mData = IPFSHashMark({
             path: {
                 'metadata': {
                     'title': title,
                     'description': description,
+                    'comment': comment,
+                    'srcplanet': srcplanet,
                     'datasize': datasize,
                     'cumulativesize': cumulativesize,
                     'numlinks': numlinks,
@@ -84,10 +186,9 @@ class IPFSHashMark(collections.UserDict):
                 },
                 'datecreated': datecreated,
                 'tscreated': int(time.time()),
-                'comment': comment,
                 'icon': icon,
                 'share': share,
-                'tags': tags,
+                'tags': tags if tags else [],
             }
         })
 
@@ -98,6 +199,8 @@ class IPFSHashMark(collections.UserDict):
 class MultihashPyramid(collections.UserDict):
     # Types
     TYPE_STANDARD = 0
+
+    TYPE_GALLERY = 1
 
     # Flags
     FLAG_MODIFIABLE_BYUSER = 0x01
@@ -131,6 +234,14 @@ class MultihashPyramid(collections.UserDict):
         return self.p['icon']
 
     @property
+    def type(self):
+        return self.p['type']
+
+    @property
+    def uuid(self):
+        return self.p['uuid']
+
+    @property
     def description(self):
         return self.p['description']
 
@@ -146,11 +257,17 @@ class MultihashPyramid(collections.UserDict):
     def ipnsLifetime(self):
         return self.p['ipns']['lifetime']
 
+    @property
+    def maxHashmarks(self):
+        return self.p.get('maxhashmarks', pyramidMaxHmarksDefault)
+
     @staticmethod
     def make(name, description='Pyramid', icon=None, ipnskey=None,
              internal=False, publishdelay=0, comment=None, flags=0,
-             allowoffline=True, lifetime='48h'):
-        datecreated = datetime.now().isoformat()
+             allowoffline=True, lifetime='48h',
+             maxhashmarks=pyramidMaxHmarksDefault,
+             type=None):
+        datecreated = utcDatetimeIso()
         pyramid = MultihashPyramid({
             name: {
                 'ipns': {
@@ -160,13 +277,15 @@ class MultihashPyramid(collections.UserDict):
                     'ttl': None,
                     'lifetime': lifetime
                 },
+                'uuid': str(uuid.uuid4()),
                 'datecreated': datecreated,
                 'icon': icon,
                 'latest': None,
                 'description': description,
                 'comment': comment,
-                'type': MultihashPyramid.TYPE_STANDARD,
+                'type': type if type else MultihashPyramid.TYPE_STANDARD,
                 'internal': internal,
+                'maxhashmarks': maxhashmarks,
                 'flags': flags,
                 pyramidsMarksKey: []  # list of hashmarks in the pyramid
             }
@@ -200,7 +319,7 @@ class QuickAccessMapping(collections.UserDict):
     @staticmethod
     def make(name, ipfsMPath, title=None,
              ipnsResolveFrequency=3600):
-        datecreated = datetime.now().isoformat()
+        datecreated = utcDatetimeIso()
         mapping = QuickAccessMapping({
             'name': name,
             'mappedto': str(ipfsMPath),
@@ -225,14 +344,16 @@ class IPFSMarks(QObject):
     pyramidChanged = pyqtSignal(str)
     pyramidEmpty = pyqtSignal(str)
 
-    def __init__(self, path, parent=None, data=None, autosave=True):
+    def __init__(self, path, parent=None, data=None, autosave=True,
+                 backup=False):
         super().__init__(parent)
 
         self._path = path
         self._autosave = autosave
+        self._backup = backup
         self._marks = data if data else self.load()
         self.changed.connect(self.onChanged)
-        self.lastsaved = time.time()
+        self.lastsaved = None
         self.changed.emit()
 
         self.pyramidCapstoned.connect(self.onPyramidCapstone)
@@ -246,16 +367,16 @@ class IPFSMarks(QObject):
         return self._autosave
 
     @property
+    def backup(self):
+        return self._backup
+
+    @property
     def root(self):
         return self._marks
 
     @property
-    def _root(self):
-        return self._marks
-
-    @property
     def _rootMarks(self):
-        return self._root['ipfsmarks']
+        return self.root['ipfsmarks']
 
     @property
     def _rootCategories(self):
@@ -263,14 +384,15 @@ class IPFSMarks(QObject):
 
     @property
     def _rootFeeds(self):
-        return self._root['feeds']
+        return self.root['feeds']
 
     @property
     def _rootQMappings(self):
-        return self._root['qamappings']
+        return self.root['qamappings']
 
     def skeleton(self):
         return {
+            'uuid': str(uuid.uuid4()),
             'ipfsmarks': {
                 'categories': {}
             },
@@ -287,6 +409,10 @@ class IPFSMarks(QObject):
 
             if 'qamappings' not in marks:
                 marks['qamappings'] = []
+
+            if 'uuid' not in marks:
+                marks['uuid'] = str(uuid.uuid4())
+
             return marks
         except Exception:
             marks = collections.OrderedDict()
@@ -307,14 +433,30 @@ class IPFSMarks(QObject):
         try:
             with open(self.path, 'w+t') as fd:
                 self.serialize(fd)
-                self.lastsaved = time.time()
         except BaseException:
             log.debug('Could not save hashmarks ({0}'.format(
                 self.path))
+        else:
+            if not self.backup:
+                return
+
+            now = time.time()
+            if not self.lastsaved or (now - self.lastsaved) > (60 * 5):
+                bkpPath = '{0}.bkp'.format(self.path)
+
+                try:
+                    with open(bkpPath, 'w+t') as fd:
+                        self.serialize(fd)
+                except:
+                    log.debug('Could not save backup file {0}'.format(bkpPath))
+                else:
+                    log.debug('Hashmarks backup saved: {}'.format(bkpPath))
+
+            self.lastsaved = now
 
     async def saveAsync(self):
         async with aiofiles.open(self.path, 'w+t') as fd:
-            await fd.write(json.dumps(self._root, indent=4, cls=MarksEncoder))
+            await fd.write(json.dumps(self.root, indent=4, cls=MarksEncoder))
             self.lastsaved = time.time()
 
     def hasCategory(self, category, parent=None):
@@ -405,48 +547,97 @@ class IPFSMarks(QObject):
                     _all[mpath] = mark
         return _all
 
-    def searchAllByMetadata(self, metadata):
-        # todo: deprecate searchByMetadata
+    def isValid(self):
+        try:
+            validate(self.root, hashmarksSchema)
+        except ValidationError as verr:
+            log.debug(
+                'Hashmarks collection: invalid JSON schema error: {}'.format(
+                    str(verr)))
+            return False
+        else:
+            log.debug('Hashmarks collection: valid JSON schema !')
+            return True
+
+    async def isValidAsync(self):
+        # Run JSON schema validation in an executor
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.isValid)
+
+    async def searchAllByMetadata(self, metadata):
+        # todo: deprecate searchSingleByMetadata
         if not isinstance(metadata, dict):
             raise ValueError('Metadata needs to be a dictionary')
 
         categories = self.getCategories()
 
-        title = metadata.get('title', None)
-        descr = metadata.get('description', None)
-        path = metadata.get('path', None)
+        title = metadata.get('title')
+        descr = metadata.get('description')
+        path = metadata.get('path')
+        comment = metadata.get('comment')
 
-        def metaMatch(mark, field, regexp):
-            try:
-                if mark['metadata'][field] and re.search(
-                        regexp, mark['metadata'][field],
-                        re.IGNORECASE):
+        def metaMatch(mark, field, searchQuery):
+            if field not in mark['metadata'] or not isinstance(
+                    mark['metadata'][field], str):
+                return
+
+            comps = searchQuery.split()
+            if len(comps) == 1:
+                if re.search(searchQuery, mark['metadata'][field],
+                             re.IGNORECASE):
                     return True
-            except:
-                return False
+                else:
+                    return False
+            else:
+                lowered = mark['metadata'][field].lower()
+                for comp in comps:
+                    try:
+                        lowered.index(comp)
+                    except:
+                        return False
+
+                return True
 
         for cat in categories:
+            await asyncio.sleep(0)
+
             marks = self.getCategoryMarks(cat)
             if not marks:
                 continue
 
             for mPath, mark in marks.items():
+                if not isinstance(mPath, str):
+                    continue
+
                 if 'metadata' not in mark:
                     continue
 
-                if path and path == mPath:
+                # Remove root prefix or you'd end up with a
+                # lot of stuff when searching for 'ipfs' or 'ipns'
+                mPathClear = mPath.replace(
+                    '/ipfs/', '').replace('/ipns/', '')
+
+                if path and re.search(path, mPathClear):
                     yield IPFSHashMark.fromJson(mPath, mark)
+                    await asyncio.sleep(0)
                     continue
 
                 if title and metaMatch(mark, 'title', title):
                     yield IPFSHashMark.fromJson(mPath, mark)
+                    await asyncio.sleep(0)
                     continue
 
                 if descr and metaMatch(mark, 'description', descr):
                     yield IPFSHashMark.fromJson(mPath, mark)
+                    await asyncio.sleep(0)
                     continue
 
-    def searchByMetadata(self, metadata):
+                if comment and metaMatch(mark, 'comment', comment):
+                    yield IPFSHashMark.fromJson(mPath, mark)
+                    await asyncio.sleep(0)
+                    continue
+
+    def searchSingleByMetadata(self, metadata):
         if not isinstance(metadata, dict):
             raise ValueError('Metadata needs to be a dictionary')
 
@@ -517,6 +708,9 @@ class IPFSMarks(QObject):
 
         # Handle IPFSHashMark or tuple
         if isinstance(mark, IPFSHashMark):
+            if not mark.isValid():
+                return False
+
             if mark.path in sec[marksKey]:
                 eMark = sec[marksKey][mark.path]
 
@@ -654,7 +848,7 @@ class IPFSMarks(QObject):
                 return fData[marksKey]
 
     def serialize(self, fd):
-        return json.dump(self._root, fd, indent=4, cls=MarksEncoder)
+        return json.dump(self.root, fd, indent=4, cls=MarksEncoder)
 
     def dump(self):
         print(self.serialize(sys.stdout))
@@ -685,7 +879,7 @@ class IPFSMarks(QObject):
                 self.pyramidNeedsPublish.emit(pyramidPath, mark)
 
     def pyramidNew(self, name, category, icon, description=None, ipnskey=None,
-                   lifetime='48h'):
+                   lifetime='48h', type=MultihashPyramid.TYPE_STANDARD):
         sec = self.enterCategory(category, create=True)
 
         if not sec:
@@ -700,7 +894,8 @@ class IPFSMarks(QObject):
                 name, description=description,
                 ipnskey=ipnskey, icon=icon,
                 lifetime=lifetime,
-                flags=MultihashPyramid.FLAG_MODIFIABLE_BYUSER
+                flags=MultihashPyramid.FLAG_MODIFIABLE_BYUSER,
+                type=type
             )
             sec[pyramidsKey].update(pyramid)
             self.pyramidConfigured.emit(self.pyramidPathFormat(category, name))
@@ -749,12 +944,16 @@ class IPFSMarks(QObject):
         if name in sec[pyramidsKey]:
             pyramid = sec[pyramidsKey][name]
             count = len(pyramid[pyramidsMarksKey])
+
+            if count >= pyramid.get('maxhashmarks', pyramidMaxHmarksDefault):
+                pyramid[pyramidsMarksKey].pop(0)
+
             exmark = self.find(path)
 
             if exmark:
                 mark = copy.copy(exmark)
             else:
-                datenowiso = datetime.now().isoformat()
+                datenowiso = utcDatetimeIso()
                 mark = IPFSHashMark.make(path,
                                          title='{0}: #{1}'.format(
                                              name, count + 1),

@@ -21,6 +21,10 @@ class DAGObj:
         self.data = data
 
 
+class DAGRewindException(Exception):
+    pass
+
+
 class DAGEditor(object):
     def __init__(self, dag):
         self.dag = dag
@@ -249,7 +253,7 @@ class EvolvingDAG(QObject, DAGOperations):
     keyCidLatest = 'cidlatest'
 
     def __init__(self, dagMetaMfsPath, dagMetaHistoryMax=12, offline=False,
-                 loop=None):
+                 unpinOnUpdate=True, loop=None):
         super().__init__()
 
         self.lock = asyncio.Lock()
@@ -263,6 +267,7 @@ class EvolvingDAG(QObject, DAGOperations):
         self._offline = offline
         self._dagMetaMaxHistoryItems = dagMetaHistoryMax
         self._dagMetaMfsPath = dagMetaMfsPath
+        self._unpinOnUpdate = unpinOnUpdate
         self.changed.connect(lambda: ensure(self.ipfsSave()))
 
     @property
@@ -317,8 +322,7 @@ class EvolvingDAG(QObject, DAGOperations):
     def mkLink(self, cid):
         if isinstance(cid, str):
             return {"/": cid}
-        elif isinstance(cid, dict):
-            # assume it's a dict which has a 'Hash' key
+        elif isinstance(cid, dict) and 'Hash' in cid:
             return {"/": cid['Hash']}
 
     async def load(self):
@@ -384,21 +388,69 @@ class EvolvingDAG(QObject, DAGOperations):
                             0, len(history) - maxItems)]
 
                     history.insert(0, prevCid)
-                    await op.pinUpdate(prevCid, cid)
+                    await op.pinUpdate(prevCid, cid, unpin=self._unpinOnUpdate)
 
                 # Save the new CID and update the metadata
-                self.dagCid = cid
-                await op.filesWriteJsonObject(self.dagMetaMfsPath,
-                                              self.dagMeta)
-                entry = await op.filesStat(self.dagMetaMfsPath)
-                if entry:
-                    self.curMetaEntry = entry
+                await self.saveNewCid(cid)
             else:
                 # Bummer
                 self.debug('DAG could not be built')
                 return False
 
         return True
+
+    @ipfsOp
+    async def saveNewCid(self, ipfsop, cid):
+        # Save the new CID and update the metadata
+        self.dagCid = cid
+        await ipfsop.filesWriteJsonObject(self.dagMetaMfsPath,
+                                          self.dagMeta)
+        entry = await ipfsop.filesStat(self.dagMetaMfsPath)
+        if entry:
+            self.curMetaEntry = entry
+
+    @ipfsOp
+    async def rewind(self, ipfsop):
+        """
+        Using the history, rewind the EDAG in time
+        (the first CID in the history becomes the new CID)
+
+        Since we're using pinUpdate() when upgrading
+        the DAG, we check that the object corresponding
+        to the "previous" CID in the history is still available
+        (didn't get collected) before rewriting the history.
+        """
+
+        history = self.dagMeta['history']
+        prevCid = self.dagMeta[self.keyCidLatest]
+
+        with await self.lock:
+            if len(history) >= 2:
+                newCid = history[0]
+
+                # Load the DAG corresponding to the previous CID
+                # Timeout is lower than the default, we can't hold
+                # the lock for too long
+                pDag = await ipfsop.dagGet(newCid, timeout=5)
+
+                if not pDag:
+                    # We don't have it :\
+                    raise DAGRewindException(
+                        'Previous object unavailable')
+
+                # Pop it now and set the latest CID
+                history.pop(0)
+                self.dagMeta[self.keyCidLatest] = newCid
+
+                # Save metadata, and save this DAG, replacing dagRoot
+                # Do the pin update
+                self._dagRoot = pDag
+                await self.saveNewCid(newCid)
+
+                await ipfsop.pinUpdate(prevCid, newCid,
+                                       unpin=self._unpinOnUpdate)
+            else:
+                raise DAGRewindException('No DAG history')
 
     async def __aenter__(self):
         """

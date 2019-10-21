@@ -107,6 +107,16 @@
         :term:`galacteek` uses full IPFS paths wherever possible to
         reference objects.
 
+    IPNS
+
+        InterPlanetary Name System:
+
+            IPNS is a PKI namespace, where names are the hashes of
+            public keys, and the private key enables publishing new
+            (signed) values. In both publish and resolve, the default
+            name used is the node's own PeerID, which is the hash of
+            its public key.
+
     js-ipfs
 
         IPFS implementation in Javascript

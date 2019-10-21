@@ -21,6 +21,7 @@ QToolTip {
     border-radius: 4px;
     padding: 2px;
     background-color: #C3D7DF;
+    min-width: 120px;
 }
 
 QWidget#centralWidget {
@@ -36,17 +37,18 @@ QToolBar#toolbarMain {
 QTabBar::tab {
     color: black;
     text-align: center;
-    min-width: 170px;
+    min-width: 140px;
     background-color: #7f8491;
-    padding-left: 4px;
-    padding-right: 4px;
+    padding-left: 2px;
+    padding-right: 2px;
     padding-top: 2px;
-    font: 11pt "Inter UI";
+    font: 11pt "Montserrat";
 }
 
 QTabBar::tab:selected {
     margin-top: 1px;
-    background-color: #C3D7DF;
+    background-color: #60cccf;
+    border: 1px solid #4b9fa2;
 }
 
 QTabBar::tab:!selected {
@@ -54,7 +56,8 @@ QTabBar::tab:!selected {
 }
 
 QTabBar::tab:hover:!selected {
-    background-color: #4a9ea1;
+    background-color: #4b9fa2;
+    border: 1px solid grey;
 }
 
 QTreeView {
@@ -93,9 +96,6 @@ QTextBrowser {
     background-color: #f6fafb;
 }
 
-QToolButton#buttonBrowseIpfs::hover {
-    background-color: #4a9ea1;
-}
 
 QToolButton#pyramidsController::pressed {
     background-color: #eec146;
@@ -121,11 +121,11 @@ QToolButton#hashmarksMgrButton::pressed {
     background-color: #eec146;
 }
 
-QToolButton#hashmarksLibraryButton::hover {
+QToolButton#hashmarksSearcher::hover {
     background-color: #4a9ea1;
 }
 
-QToolButton#hashmarksLibraryButton::pressed {
+QToolButton#hashmarksSearcher::pressed {
     background-color: #eec146;
 }
 
@@ -141,19 +141,6 @@ QLabel#linkInfos {
     color: black;
     font: 12pt "Inter UI";
 }
-
-QMenu::item:selected#hashmarksMgrMenu {
-    background-color: #4a9ea1;
-}
-
-QMenu::item:selected#hashmarksLibraryMenu {
-    background-color: #4a9ea1;
-}
-
-QMenu::item:selected {
-    background-color: #4a9ea1;
-}
-
 QProgressBar#pBarBrowser {
     text-align: center;
     color: black;
@@ -188,8 +175,9 @@ QLabel#ipfsStatusLabel {
 
 
 QLabel#lastLogLabel {
-    font: 10pt "Inter UI";
+    font: 10pt "Montserrat";
     color: black;
+    padding-right: 100px;
 }
 
 QLineEdit#urlZone {
@@ -207,9 +195,53 @@ QTreeWidgetdagTree {
     font: 12pt "Inter UI";
 }
 
+QWidget#logsTextWindow {
+    background-color: #4a9ea1;
+}
+
 QTextBrowser#logsTextWidget {
-    background-color: lightgrey;
+    background-color: #7f8491;
     font: 12pt "Inter UI";
     margin: 5px;
     padding: 0px;
+}
+
+/*
+ * Hashmarks search
+ */
+
+QLineEdit#hLibrarySearch {
+    font: 11pt "Montserrat";
+}
+
+QMenu::item#hashmarksSearchMenu {
+    padding-left: 25px;
+    padding-right: 25px;
+}
+
+/* Hashmarks manager menu */
+
+QMenu::item:selected#hashmarksMgrMenu {
+    background-color: #4a9ea1;
+}
+
+
+/* Menus */
+
+QMenu::item:selected {
+    background-color: #4a9ea1;
+}
+
+QMenu {
+    font: 11pt "Inter UI";
+}
+
+/* Main browse button */
+
+QToolButton#buttonBrowseIpfs::hover {
+    background-color: #4a9ea1;
+}
+
+QToolButton#buttonBrowseIpfs::pressed {
+    background-color: #eec146;
 }

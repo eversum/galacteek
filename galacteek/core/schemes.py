@@ -36,9 +36,6 @@ from galacteek.dweb.enswhois import ensContentHash
 from galacteek.ipdapps import dappsRegisterSchemes
 
 
-from yarl import URL
-
-
 # Core schemes
 SCHEME_DWEB = 'dweb'
 SCHEME_FS = 'fs'
@@ -480,14 +477,26 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
         indexPath = ipfsPath.child('index.html')
 
         try:
-            data = await client.cat(str(indexPath))
-            if not data:
+            stat = None
+            try:
+                with async_timeout.timeout(8):
+                    stat = await client.object.stat(str(indexPath))
+            except asyncio.TimeoutError:
+                return self.urlInvalid(request)
+            except Exception:
+                return self.reqFailed(request)
+
+            if not stat:
                 return await self.renderDagListing(request, client, ipfsPath,
                                                    **kw)
+            else:
+                # The index is present, redirect
+                urlR = QUrl(indexPath.ipfsUrl)
+
+                if urlR.isValid():
+                    request.redirect(urlR)
         except aioipfs.APIError:
             return await self.renderDagListing(request, client, ipfsPath, **kw)
-        else:
-            return data
 
     async def renderData(self, request, ipfsPath, data, uid):
         cType = await detectMimeTypeFromBuffer(data[0:512])
@@ -546,7 +555,7 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
 
     async def fetchFromPath(self, ipfsop, request, ipfsPath, uid, **kw):
         try:
-            data = await ipfsop.client.cat(str(ipfsPath))
+            data = await ipfsop.client.cat(ipfsPath.objPath)
         except aioipfs.APIError as exc:
             await asyncio.sleep(0)
 
@@ -818,7 +827,7 @@ class DAGWatchSchemeHandler(DAGProxySchemeHandler):
         return self.proxied
 
 
-class DWebSchemeHandler(BaseURLSchemeHandler):
+class DWebSchemeHandler(NativeIPFSSchemeHandler):
     """
     IPFS dweb scheme handler, supporting URLs such as:
 
@@ -829,60 +838,22 @@ class DWebSchemeHandler(BaseURLSchemeHandler):
         etc..
     """
 
-    def __init__(self, app, parent=None):
-        QWebEngineUrlSchemeHandler.__init__(self, parent)
-        self.app = app
+    @ipfsOp
+    async def handleRequest(self, ipfsop, request, uid):
+        rUrl = request.requestUrl()
+        ipfsPath = IPFSPath(rUrl.toString())
 
-    def redirectIpfs(self, request, path, url):
-        yUrl = URL(url.toString())
-        if len(yUrl.parts) < 3:
-            return None
+        if not ipfsPath.valid:
+            return self.urlInvalid(request)
 
-        newUrl = self.app.subUrl(path)
-
-        if url.hasFragment():
-            newUrl.setFragment(url.fragment())
-        if url.hasQuery():
-            newUrl.setQuery(url.query())
-
-        return request.redirect(newUrl)
-
-    def requestStarted(self, request):
-        url = request.requestUrl()
-
-        if url is None:
-            return
-
-        scheme = url.scheme()
-
-        if scheme in [SCHEME_FS, SCHEME_DWEB]:
-            # Take leading slashes out of the way
-            urlStr = url.toString()
-            urlStr = re.sub(
-                r'^{scheme}:(\/)+'.format(scheme=scheme),
-                '{scheme}:/'.format(scheme=scheme),
-                urlStr
-            )
-            url = QUrl(urlStr)
-        else:
-            log.debug('Unsupported scheme')
-            return
-
-        path = url.path()
-        if not isinstance(path, str):
-            self.urlInvalid(request)
-            return
-
-        log.debug(
-            'IPFS scheme handler req: {url} {scheme} {path} {method}'.format(
-                url=url.toString(), scheme=scheme, path=path,
-                method=request.requestMethod()))
-
-        if path.startswith('/ipfs/') or path.startswith('/ipns/'):
-            try:
-                return self.redirectIpfs(request, path, url)
-            except Exception as err:
-                log.debug('Exception handling request: {}'.format(str(err)))
+        try:
+            with async_timeout.timeout(self.requestTimeout):
+                return await self.fetchFromPath(ipfsop, request, ipfsPath, uid)
+        except asyncio.TimeoutError:
+            return self.reqFailed(request)
+        except Exception:
+            # Any other error
+            return self.reqFailed(request)
 
 
 class MultiDAGProxySchemeHandler(NativeIPFSSchemeHandler):
@@ -952,7 +923,7 @@ class MultiDAGProxySchemeHandler(NativeIPFSSchemeHandler):
 
         log.debug('Multi DAG proxy : Fetch-from-path {}'.format(ipfsPath))
         try:
-            data = await ipfsop.client.cat(str(ipfsPath))
+            data = await ipfsop.client.cat(ipfsPath.objPath)
         except aioipfs.APIError as exc:
             await asyncio.sleep(0)
 

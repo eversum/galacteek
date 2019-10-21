@@ -124,6 +124,10 @@ class MIMEType(object):
         return self.category == 'image'
 
     @property
+    def isAnimation(self):
+        return self.type in ['image/gif', 'image/webp', 'video/x-mng']
+
+    @property
     def isChemical(self):
         return self.category == 'chemical'
 

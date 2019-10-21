@@ -84,7 +84,8 @@ async def search(query, pageStart=0, preloadPages=0,
     if preloadPages > 0:
         pageLast = preloadPages + pageStart if \
             pageCount >= preloadPages else pageCount
-        for page in range(page1Results.page + 1, pageLast + 1):
+
+        for page in range(page1Results.page + 1, pageLast):
             results = await getPageResults(query, page, filters=filters,
                                            sslverify=sslverify)
             if results:

@@ -70,6 +70,14 @@ def iItemsInPinningQueue(itemsCount):
         'Items queued for pinning: {}'.format(itemsCount))
 
 
+def iBrowse():
+    return QCoreApplication.translate('GalacteekWindow', 'Browse')
+
+
+def iBrowseAutoPin():
+    return QCoreApplication.translate('GalacteekWindow', 'Browse (auto-pin)')
+
+
 def iHelp():
     return QCoreApplication.translate('GalacteekWindow', 'Help')
 
@@ -163,11 +171,61 @@ def iSharedHashmarks():
     return QCoreApplication.translate('GalacteekWindow', 'Shared hashmarks')
 
 
+def iSearchHashmarks():
+    return QCoreApplication.translate('GalacteekWindow', 'Search hashmarks')
+
+
+def iSearchUseShiftReturn():
+    return QCoreApplication.translate(
+        'GalacteekWindow',
+        '<p>Press <b>Shift + Return</b> to run a search</p>')
+
+
+def iSearchHashmarksAllAcross():
+    return QCoreApplication.translate(
+        'GalacteekWindow',
+        '''
+        <div>
+            <p>Search the hashmarks database</p>
+
+            <p>Press <b>Shift + Return</b> to validate your search</p>
+        </div>
+        ''')
+
+
+def iHashmarkInfoToolTip(path, title, description, dateCreated):
+    return QCoreApplication.translate(
+        'GalacteekWindow',
+        '''
+            <img src=':/share/icons/hashmarks.png' width='16' height='16' />
+            <p style='font: Courier 12pt'>{0}</p>
+
+            <p>Title: <b>{1}</b></p>
+            <p>Description: <b>{2}</b></p>
+
+            <p>Creation date: <b>{3}</b></p>
+        ''').format(path,
+                    title if title else iNoTitle(),
+                    description if description else iNoDescription(),
+                    dateCreated
+                    )
+
+
 def iHashmarksLibraryCountAvailable(count):
     return QCoreApplication.translate(
         'GalacteekWindow',
         'Hashmarks library: {0} hashmarks available'
     ).format(count)
+
+
+def iHashmarksLibrary():
+    return QCoreApplication.translate('GalacteekWindow',
+                                      '''
+            <img src=':/share/icons/hashmarks-library.png'
+                width='32' height='32' />
+
+            <p>Hashmarks library</p>
+        ''')
 
 
 def iFileManager():
@@ -227,6 +285,11 @@ def iDagViewer():
 
 def iDagView():
     return QCoreApplication.translate('GalacteekWindow', 'DAG view')
+
+
+def iParentDagView():
+    return QCoreApplication.translate(
+        'GalacteekWindow', 'DAG view (parent node)')
 
 
 def iLocalHashmarksCount(count):
@@ -324,6 +387,10 @@ def iTitle():
 
 def iNoTitle():
     return QCoreApplication.translate('GalacteekWindow', 'No title')
+
+
+def iNoDescription():
+    return QCoreApplication.translate('GalacteekWindow', 'No description')
 
 
 def iNoTitleProvided():

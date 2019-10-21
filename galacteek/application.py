@@ -78,6 +78,7 @@ from galacteek.ui import downloads
 from galacteek.ui import peers
 from galacteek.ui import history
 from galacteek.ui.resource import IPFSResourceOpener
+from galacteek.ui.style import GalacteekStyle
 
 from galacteek.ui.helpers import *
 from galacteek.ui.i18n import *
@@ -160,6 +161,7 @@ class GalacteekApplication(QApplication):
     """
 
     manualAvailable = pyqtSignal(str, dict)
+    messageDisplayRequest = pyqtSignal(str, str)
 
     def __init__(self, debug=False, profile='main', sslverify=True,
                  enableOrbital=False, progName=None, cmdArgs={}):
@@ -219,7 +221,7 @@ class GalacteekApplication(QApplication):
         self.initDapps()
         self.createMainWindow()
 
-        self.setStyle()
+        self.applyStyle()
         self.clipboardInit()
 
     @property
@@ -327,7 +329,7 @@ class GalacteekApplication(QApplication):
     def orbitDataLocation(self):
         return self._orbitDataLocation
 
-    def setStyle(self, theme='default'):
+    def applyStyle(self, theme='default'):
         qssPath = ":/share/static/qss/{theme}/galacteek.qss".format(
             theme=theme)
         qssFile = QFile(qssPath)
@@ -342,21 +344,23 @@ class GalacteekApplication(QApplication):
             # in the resources file..  set some default stylesheet here?
             pass
 
+        self.gStyle = GalacteekStyle()
+        self.setStyle(self.gStyle)
+
     def debug(self, msg):
         if self.debugEnabled:
             log.debug(msg)
 
     def initSystemTray(self):
         self.systemTray = QSystemTrayIcon(self)
-        self.systemTray.setIcon(getIcon('galacteek.png'))
+        self.systemTray.setIcon(getIcon('galacteek-incandescent.png'))
         self.systemTray.show()
         self.systemTray.activated.connect(self.onSystemTrayIconClicked)
-        self.systemTray.setToolTip(GALACTEEK_NAME)
 
         systemTrayMenu = QMenu(self.mainWindow)
 
         actionShow = systemTrayMenu.addAction('Show')
-        actionShow.setIcon(getIcon('galacteek.png'))
+        actionShow.setIcon(getIcon('galacteek-incandescent.png'))
         actionShow.triggered.connect(self.onShowWindow)
 
         systemTrayMenu.addSeparator()
@@ -379,7 +383,7 @@ class GalacteekApplication(QApplication):
         self.resourceOpener = IPFSResourceOpener(parent=self)
 
         self.downloadsManager = downloads.DownloadsManager(self)
-        self.marksLocal = IPFSMarks(self.localMarksFileLocation)
+        self.marksLocal = IPFSMarks(self.localMarksFileLocation, backup=True)
         self.importDefaultHashmarks(self.marksLocal)
 
         self.marksLocal.addCategory('general')
@@ -409,7 +413,7 @@ class GalacteekApplication(QApplication):
             for fn in listing:
                 if fn.endswith('.json'):
                     path = pkg_resources.resource_filename(pkg, fn)
-                    marks = IPFSMarks(path)
+                    marks = IPFSMarks(path, autosave=False)
                     marksLocal.merge(marks)
 
             # Follow ipfs.io
@@ -595,6 +599,9 @@ class GalacteekApplication(QApplication):
         }
 
         self.rscAnalyzer = ResourceAnalyzer(parent=self)
+
+        self.messageDisplayRequest.connect(
+            lambda msg, title: messageBox(msg, title=title))
 
     def setupAsyncLoop(self):
         """

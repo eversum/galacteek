@@ -34,6 +34,11 @@ def iAlreadyHashmarked():
                                       'Already Hashmarked')
 
 
+def iInvalidHashmarkPath():
+    return QCoreApplication.translate('HashmarksViewForm',
+                                      'Invalid hashmark path')
+
+
 def iImportHashmark():
     return QCoreApplication.translate('HashmarksViewForm',
                                       'Import hashmark to')
@@ -53,6 +58,12 @@ def addHashmark(hashmarks, path, title, description='', stats={},
         messageBox(iAlreadyHashmarked())
         return False
 
-    runDialog(AddHashmarkDialog, hashmarks, path, title, description, stats,
+    ipfsPath = IPFSPath(path, autoCidConv=True)
+    if not ipfsPath.valid:
+        messageBox(iInvalidHashmarkPath())
+        return False
+
+    runDialog(AddHashmarkDialog, hashmarks,
+              str(ipfsPath), title, description, stats,
               pin=pin, pinRecursive=pinRecursive)
     return True

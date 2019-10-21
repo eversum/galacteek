@@ -25,9 +25,9 @@ from PyQt5.QtGui import QSyntaxHighlighter
 from PyQt5.QtGui import QTextCharFormat
 from PyQt5.QtGui import QFont
 
-from galacteek.ipfs.cidhelpers import cidValid
 from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import stripIpfs
+from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs import ipfssearch
@@ -254,9 +254,12 @@ class IPFSSearchHandler(QObject):
     resetForm = pyqtSignal()
     vPageChanged = pyqtSignal(int)
     vPageStatus = pyqtSignal(int, int)
+
     searchTimeout = pyqtSignal(int)
     searchError = pyqtSignal()
+    searchCancelled = pyqtSignal()
     searchStarted = pyqtSignal(str)
+    searchComplete = pyqtSignal()
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -299,16 +302,29 @@ class IPFSSearchHandler(QObject):
 
     def cleanup(self):
         self._cancelTasks()
-        if self._taskSearch:
-            self._taskSearch.cancel()
+
+        self.vPageCurrent = 0
         self.clear.emit()
         self._cResults = []
 
     def _cancelTasks(self):
-        for task in self._tasks:
-            task.cancel()
+        try:
+            if self._taskSearch:
+                self._taskSearch.cancel()
+
+            for task in self._tasks:
+                task.cancel()
+        except Exception:
+            log.debug('Failed to cancel search tasks')
 
         self._tasks = []
+
+    def spawnSearchTask(self):
+        self._taskSearch = ensure(self.runSearch(self.searchQuery))
+
+    @pyqtSlot()
+    def cancelSearchTasks(self):
+        self._cancelTasks()
 
     @pyqtSlot(str)
     def fetchObject(self, path):
@@ -329,14 +345,14 @@ class IPFSSearchHandler(QObject):
             self._cancelTasks()
             self.clear.emit()
             self.vPageCurrent -= 1
-            ensure(self.runSearch(self.searchQuery))
+            self.spawnSearchTask()
 
     @pyqtSlot()
     def nextPage(self):
         self._cancelTasks()
         self.clear.emit()
         self.vPageCurrent += 1
-        ensure(self.runSearch(self.searchQuery))
+        self.spawnSearchTask()
 
     @ipfsOp
     async def fetch(self, op, path):
@@ -396,7 +412,8 @@ class IPFSSearchHandler(QObject):
         self.searchQuery = searchQuery
         self.searchStarted.emit(self.searchQuery)
         self.filters = self.getFilters(cType)
-        self._taskSearch = ensure(self.runSearch(searchQuery))
+
+        self.spawnSearchTask()
 
     def getFilters(self, cTypeS):
         filters = {}
@@ -418,15 +435,16 @@ class IPFSSearchHandler(QObject):
         hitHash = hit.get('hash', None)
         mimeType = hit.get('mimetype', None)
 
-        if hitHash is None or not cidValid(hitHash):
+        ipfsPath = IPFSPath(hitHash, autoCidConv=True)
+        if not ipfsPath.valid:
             return
 
-        path = joinIpfs(hitHash)
         sizeFormatted = sizeFormat(hit.get('size', 0))
 
         pHit = {
             'hash': hitHash,
-            'path': path,
+            'path': str(ipfsPath),
+            'url': ipfsPath.ipfsUrl,
             'mimetype': mimeType if mimeType else '',
             'title': hit.get('title', iUnknown()),
             'size': hit.get('size', iUnknown()),
@@ -447,7 +465,7 @@ class IPFSSearchHandler(QObject):
             self.objectStatAvailable.emit(cid, stat, hit)
 
     @ipfsOp
-    async def runSearch(self, ipfsop, searchQuery, timeout=20):
+    async def runSearch(self, ipfsop, searchQuery, timeout=60):
         pageStart = self.vPageCurrent * self.pagesPerVpage
         pageCount = 0
         gotResults = False
@@ -488,13 +506,19 @@ class IPFSSearchHandler(QObject):
                             ensure(self.fetchObjectStat(ipfsop, hit)))
         except asyncio.TimeoutError:
             self.searchTimeout.emit(timeout)
+            return
         except asyncio.CancelledError:
-            self.searchTimeout.emit(timeout)
-        except Exception:
-            pass
+            self.searchCancelled.emit()
+            return
+        except Exception as e:
+            log.debug(
+                'IPFSSearch: unknown exception while searching: {}'.format(
+                    str(e)))
 
         if not gotResults:
             self.searchError.emit()
+        else:
+            self.searchComplete.emit()
 
 
 class IPFSSearchView(QWidget):

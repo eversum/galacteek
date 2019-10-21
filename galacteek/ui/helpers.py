@@ -2,35 +2,42 @@ import os
 import functools
 import binascii
 import multihash
+import multibase
 
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtGui import QImage
 from PyQt5.QtGui import QIcon
-from PyQt5.QtGui import QMovie
 
 from PyQt5.QtCore import QStandardPaths
 from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QSize
 from PyQt5.QtCore import QEvent
 from PyQt5.QtCore import QObject
 from PyQt5.QtCore import QDir
 from PyQt5.QtCore import pyqtSignal
 
+from PyQt5.QtWidgets import QStyle
 from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QFileDialog
 from PyQt5.QtWidgets import QInputDialog
 from PyQt5.QtWidgets import QMenu
 from PyQt5.QtWidgets import QLabel
+from PyQt5.QtWidgets import QLineEdit
 from PyQt5.QtWidgets import QDialog
 from PyQt5.QtWidgets import QVBoxLayout
-from PyQt5.QtWidgets import QDialogButtonBox
 
 from galacteek import ensure
 from galacteek.ipfs.mimetype import mimeTypeDagUnknown
 from galacteek.ipfs.mimetype import mimeTypeDagPb
 from galacteek.ipfs.cidhelpers import getCID
+from galacteek.ipfs.stat import StatInfo
+from galacteek.ipfs import ipfsOpFn
+from galacteek.ipfs import kilobytes
+
 
 from .i18n import iIpfsQrCodes
+from .i18n import iUnknown
 
 
 def getIcon(iconName):
@@ -68,7 +75,8 @@ def preloadMimeIcons():
     return icons
 
 
-async def getIconFromIpfs(ipfsop, ipfsPath, scaleWidth=None, timeout=10):
+async def getIconFromIpfs(ipfsop, ipfsPath, scaleWidth=None,
+                          sizeMax=kilobytes(256), timeout=10):
     """
     We cache the icons that we got out of the IPFS repo by their path
     Max icons cached is set by 'ipfsIconsCacheMax' in the app object
@@ -87,6 +95,17 @@ async def getIconFromIpfs(ipfsop, ipfsPath, scaleWidth=None, timeout=10):
             del iconsCache[out]
 
     try:
+        mimeType, stat = await app.rscAnalyzer(ipfsPath)
+        if not mimeType or not stat:
+            return None
+
+        statInfo = StatInfo(stat)
+
+        if not statInfo.valid or statInfo.dataLargerThan(sizeMax):
+            return None
+        elif not mimeType.isImage:
+            return None
+
         imgData = await ipfsop.waitFor(
             ipfsop.client.cat(ipfsPath), timeout
         )
@@ -128,6 +147,23 @@ def getIconFromImageData(imgData, scaleWidth=None):
             img = img.scaledToWidth(scaleWidth)
 
         return QIcon(QPixmap.fromImage(img))
+    except BaseException:
+        return None
+
+
+@ipfsOpFn
+async def getImageFromIpfs(ipfsop, ipfsPath, timeout=10):
+    try:
+        imgData = await ipfsop.waitFor(
+            ipfsop.client.cat(str(ipfsPath)), timeout
+        )
+
+        if not imgData:
+            return None
+
+        image = QImage()
+        image.loadFromData(imgData)
+        return image
     except BaseException:
         return None
 
@@ -183,22 +219,34 @@ def getHomePath():
 
 
 def messageBox(message, title=None):
+    from .clips import RotatingCubeClipSimple
+    from .widgets import AnimatedButton
+
+    app = QApplication.instance()
     msgBox = QDialog()
 
-    buttonBox = QDialogButtonBox(
-        QDialogButtonBox.Ok,
-        msgBox
-    )
-    buttonBox.accepted.connect(functools.partial(msgBox.done, 1))
+    largeSize = app.style().pixelMetric(QStyle.PM_LargeIconSize)
 
+    button = AnimatedButton(
+        RotatingCubeClipSimple(), ignoreFrameEvery=2, parent=msgBox)
+    button.clicked.connect(functools.partial(msgBox.done, 1))
+    button.setIconSize(QSize(largeSize, largeSize))
+    button.clip.setSpeed(100)
+    button.setText('OK')
+    button.startClip()
+
+    label = QLabel(message)
+    label.setAlignment(Qt.AlignCenter)
     layout = QVBoxLayout()
-    layout.addWidget(QLabel(message))
-    layout.addWidget(buttonBox)
+    layout.addWidget(label)
+    layout.addWidget(button)
     msgBox.setLayout(layout)
+    msgBox.setMinimumSize(
+        app.desktopGeometry.width() / 3,
+        128
+    )
 
-    if title:
-        msgBox.setWindowTitle(title)
-
+    msgBox.setWindowTitle(title if title else 'galacteek: Message')
     msgBox.show()
     return msgBox.exec_()
 
@@ -259,6 +307,14 @@ def runDialog(cls, *args, **kw):
 
 def inputText(title='', label='', parent=None):
     text, ok = QInputDialog.getText(parent, title, label)
+    if ok:
+        return text
+
+
+def inputTextLong(title='', label='', text='', parent=None):
+    text, ok = QInputDialog.getText(
+        parent, title, label, QLineEdit.Normal,
+        text, Qt.Dialog, Qt.ImhNone)
     if ok:
         return text
 
@@ -353,12 +409,14 @@ def cidInfosMarkup(cidString):
     try:
         cid = getCID(cidString)
         mhash = multihash.decode(cid.multihash)
+        baseEncoding = multibase.multibase.get_codec(cidString)
     except:
         return '<p>Invalid CID</p>'
 
     return '''
     <p>CID: <b>{cids}</b></p>
     <p>CID version {cidv}</p>
+    <p>Multibase encoding: <b>{mbase}</b></p>
 
     <p>Codec: <b>{codec}</b></p>
     <p>Multihash function: <b>{mhashfunc}</b></p>
@@ -368,32 +426,10 @@ def cidInfosMarkup(cidString):
     <p>Multihash: <b>{mhashascii}</b></p>
     '''.format(cids=cidString,
                cidv=cid.version,
+               mbase=baseEncoding.encoding if baseEncoding else iUnknown(),
                codec=cid.codec,
                mhashfunc=mhash.func.name,
                mhashfuncvalue=mhash.func.value,
                mhashfuncvaluehex=hex(mhash.func.value),
                mhashdigest=binascii.b2a_hex(mhash.digest).decode('ascii'),
                mhashascii=binascii.b2a_hex(cid.multihash).decode('ascii'))
-
-
-class RotatingCubeClip(QMovie):
-    def __init__(self, filename='rotating-cube.gif', speed=100):
-        super(RotatingCubeClip, self).__init__(
-            ':/share/clips/{}'.format(filename))
-        self.setSpeed(speed)
-
-    def createIcon(self):
-        return QIcon(self.currentPixmap())
-
-    def playing(self):
-        return self.state() == QMovie.Running
-
-
-class RotatingCubeClipSimple(RotatingCubeClip):
-    def __init__(self, **kw):
-        super().__init__(filename='rotating-cube.gif', **kw)
-
-
-class RotatingCubeClipFunky(RotatingCubeClip):
-    def __init__(self, **kw):
-        super().__init__(filename='funky-cube-1.gif', **kw)

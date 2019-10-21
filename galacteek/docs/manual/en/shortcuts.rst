@@ -8,10 +8,14 @@ Main window keyboard shortcuts
 ------------------------------
 
 - **Mod + t**: Open a new browser tab
-- **Mod + s**: Search with ipfs-search
+- **Mod + Alt + t**: Open a new browser tab with automatic pinning enabled
+- **Mod + Alt + s**: Search with ipfs-search
+- **Mod + Alt + h**: Search hashmarks
 - **Mod + w**: Close current tab
 - **Mod + m**: Open the hashmarks manager
 - **Mod + u**: Show pinning status
+- **Mod + Shift + r**: Restart
+- **Mod + q**: Quit
 
 Browser keyboard shortcuts
 --------------------------

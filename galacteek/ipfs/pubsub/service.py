@@ -249,11 +249,11 @@ class PSHashmarksExchanger(JSONPubsubService):
             runPeriodic=True,
             filterSelfMessages=True,
             maxMessageSize=131072,
-            minMsgTsDiff=8 * 12)
+            minMsgTsDiff=60 * 2)
         self.marksLocal = marksLocal
         self.marksNetwork = marksNetwork
         self.marksLocal.markAdded.connect(self.onMarkAdded)
-        self._sendEvery = 60 * 12
+        self._sendEvery = 60 * 8
         self._lastBroadcast = 0
 
     @property
@@ -262,19 +262,18 @@ class PSHashmarksExchanger(JSONPubsubService):
 
     @asyncify
     async def onMarkAdded(self, path, mark):
-        now = int(time.time())
-        if mark['share'] is True and \
-                (now - self._lastBroadcast) > self._sendEvery / 3:
+        if mark['share'] is True:
             await self.broadcastSharedMarks()
 
     async def broadcastSharedMarks(self):
         try:
-            sharedMarks = IPFSMarks(None)
+            sharedMarks = IPFSMarks(None, autosave=False)
             count = sharedMarks.merge(self.marksLocal, share=True, reset=True)
 
             if count > 0:
+                self.debug('Sending shared hashmarks')
                 msg = MarksBroadcastMessage.make(self.ipfsCtx.node.id,
-                                                 sharedMarks._root)
+                                                 sharedMarks.root)
                 await self.send(str(msg))
                 self._lastBroadcast = int(time.time())
         except BaseException:
@@ -308,13 +307,24 @@ class PSHashmarksExchanger(JSONPubsubService):
         if not marksJson:
             return
 
+        marksCollection = IPFSMarks(None, data=marksJson, autosave=False)
+
+        # JSON schema validation
+        if not await marksCollection.isValidAsync():
+            self.debug('Received invalid hashmarks from {sender}'.format(
+                sender=sender))
+            return
+        else:
+            self.debug('Hashmarks broadcast from {sender} is valid'.format(
+                sender=sender))
+
         try:
             if self.curProfile:
-                await self.curProfile.storeHashmarks(sender, marksJson)
+                await self.curProfile.storeHashmarks(sender, marksCollection)
         except Exception:
             self.debug('Could not store data in hashmarks library')
         else:
-            self.debug('Stored hashmarks from: {0}'.format(sender))
+            self.info('Stored hashmarks from peer: {0}'.format(sender))
 
 
 class PSMainService(JSONPubsubService):

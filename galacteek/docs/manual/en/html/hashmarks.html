@@ -62,31 +62,41 @@ clipboard item of your choice and clicking on the <em>Hashmark</em> action.</p>
 will be stored within IPFS). Flagging a hashmark as <em>shared</em> means
 that it will be shared on the network with other peers (off by default).
 Received hashmarks are RSA-encrypted in your IPFS repository with
-your profile’s RSA key.</p>
+your profile’s RSA key, and searchable from the hashmarks library.</p>
 <div class="section" id="local-hashmarks-menu">
 <h2>Local Hashmarks menu<a class="headerlink" href="#local-hashmarks-menu" title="Permalink to this headline">¶</a></h2>
 <a class="reference internal image-reference" href="_images/hashmarks.png"><img alt="_images/hashmarks.png" src="_images/hashmarks.png" style="width: 64px; height: 64px;" /></a>
 <p>From the toolbar, clicking on the hashmarks icon opens a menu
 giving access to all your local hashmarks, by category.</p>
 <p>Clicking an item will trigger the opening of the corresponding
-resource, depending on its type (the file type of the resource
+object, depending on its type (the file type of the object
 is automatically detected and cached by the application). There
 are built-in viewers/renderers for things like text files,
 images, multimedia files etc.. For files that cannot be
 rendered by the application (for example PDF files), the system’s
 default application will be used to open the file.</p>
 </div>
-<div class="section" id="shared-hashmarks-menu">
-<h2>Shared Hashmarks menu<a class="headerlink" href="#shared-hashmarks-menu" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="searching">
+<h2>Searching<a class="headerlink" href="#searching" title="Permalink to this headline">¶</a></h2>
 <a class="reference internal image-reference" href="_images/hashmarks-library.png"><img alt="_images/hashmarks-library.png" src="_images/hashmarks-library.png" style="width: 64px; height: 64px;" /></a>
-<p>This menu shows the hashmarks that have been received on the
-network from other peers.</p>
+<p>The hashmarks library button gives you the ability to search
+for content in the global hashmarks database (local hashmarks
+and hashmarks sent from other peers). To quickly access
+the hashmarks search you can press <strong>Mod+Control+h</strong>
+(<strong>Alt+Control+h</strong> on Linux or <strong>Command+Control+h</strong>
+on MacOS), or just click on the hashmarks library button
+in the toolbar.</p>
+<p>Your search query will be applied to the title, description,
+comment or object path (so you can search for CIDs) of hashmarks.
+The search is case-insensitive.</p>
+<p>After typing a search query, run the search by pressing
+<strong>Shift + Return</strong>.</p>
 </div>
 </div>
 <div class="section" id="following-ipns-keys">
 <h1>Following IPNS keys<a class="headerlink" href="#following-ipns-keys" title="Permalink to this headline">¶</a></h1>
 <p>There is basic support for following IPNS names/keys. When browsing
-a root IPNS URL (e.g <strong>/ipns/awesome.ipfs.io</strong>), open the IPFS CID
+an IPNS path (e.g <strong>/ipns/awesome.ipfs.io</strong>), open the IPFS
 menu on the left, and click on <strong>Follow IPNS resource</strong>).</p>
 <p>The IPNS name or key will be periodically resolved (the resolve frequency
 is configurable). The resolved entries are added as hashmarks inside
@@ -100,7 +110,7 @@ the IPNS feed and can be browsed from the hashmarks manager.</p>
       <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
         <div class="sphinxsidebarwrapper">
             <p class="logo"><a href="index.html">
-              <img class="logo" src="_static/galacteek.png" alt="Logo"/>
+              <img class="logo" src="_static/galacteek-incandescent.png" alt="Logo"/>
             </a></p>
   <h4>Previous topic</h4>
   <p class="topless"><a href="shortcuts.html"

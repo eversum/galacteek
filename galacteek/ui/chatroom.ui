@@ -17,7 +17,11 @@
    <item>
     <layout class="QVBoxLayout" name="verticalLayout">
      <item>
-      <widget class="QTextBrowser" name="chatLog"/>
+      <widget class="QTextBrowser" name="chatLog">
+       <property name="focusPolicy">
+        <enum>Qt::NoFocus</enum>
+       </property>
+      </widget>
      </item>
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout">
@@ -29,10 +33,23 @@
         </widget>
        </item>
        <item>
-        <widget class="QLineEdit" name="message"/>
+        <widget class="QLineEdit" name="message">
+         <property name="maxLength">
+          <number>512</number>
+         </property>
+         <property name="placeholderText">
+          <string/>
+         </property>
+         <property name="clearButtonEnabled">
+          <bool>true</bool>
+         </property>
+        </widget>
        </item>
        <item>
         <widget class="QPushButton" name="sendButton">
+         <property name="focusPolicy">
+          <enum>Qt::NoFocus</enum>
+         </property>
          <property name="text">
           <string>Send</string>
          </property>

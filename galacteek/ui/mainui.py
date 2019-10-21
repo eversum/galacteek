@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import QPushButton
 from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtWidgets import QTextBrowser
+from PyQt5.QtWidgets import QToolTip
 
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import Qt
@@ -24,6 +25,7 @@ from PyQt5.QtCore import QTimer
 from PyQt5.QtCore import QDateTime
 from PyQt5.QtCore import QSize
 from PyQt5.QtCore import QPoint
+from PyQt5.QtCore import QRect
 
 from PyQt5.Qt import QSizePolicy
 
@@ -44,7 +46,6 @@ from galacteek.ipfs.wrappers import *
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.cidhelpers import joinIpns
-from galacteek.ipfs.cidhelpers import shortPathRepr
 
 from galacteek.core.orbitdb import GalacteekOrbitConnector
 from galacteek.dweb.page import HashmarksPage, DWebView, WebTab
@@ -66,6 +67,8 @@ from . import eventlog
 from . import pin
 from . import chat
 
+from .clips import RotatingCubeClipSimple
+from .clips import RotatingCubeRedFlash140d
 from .eth import EthereumStatusButton
 from .feeds import AtomFeedsViewTab
 from .feeds import AtomFeedsView
@@ -75,8 +78,9 @@ from .quickaccess import QuickAccessToolBar
 from .helpers import *
 from .widgets import PopupToolButton
 from .widgets import HashmarkMgrButton
-from .widgets import HashmarksLibraryButton
+from .widgets import HashmarksSearcher
 from .widgets import AtomFeedsToolbarButton
+from .widgets import AnimatedLabel
 from .dialogs import *
 from ..appsettings import *
 from .i18n import *
@@ -95,8 +99,7 @@ def iAbout():
     from galacteek import __version__
     return QCoreApplication.translate('GalacteekWindow', '''
         <p align='center'>
-        <img src=':/share/icons/galacteek.png'
-            width='256' height='256'/>
+        <img src=':/share/icons/galacteek-incandescent.png' />
         </p>
 
         <p>
@@ -132,6 +135,11 @@ class MainWindowLogHandler(Handler, StringFormatterHandlerMixin):
     Should be moved to a separate module
     """
 
+    modulesColorTable = {
+        'galacteek.ui.resource': '#7f8491',
+        'galacteek.core.profile': 'blue'
+    }
+
     def __init__(self, logsBrowser, application_name=None, address=None,
                  facility='user', level=0, format_string=None,
                  filter=None, bubble=True, window=None):
@@ -142,12 +150,15 @@ class MainWindowLogHandler(Handler, StringFormatterHandlerMixin):
         self.logsBrowser = logsBrowser
 
     def emit(self, record):
-        formatted = self.format(record)
+        fRecord = self.format(record)
 
         if record.level_name == 'INFO':
-            self.window.statusMessage(formatted)
+            color = self.modulesColorTable.get(record.module, 'black')
+            self.window.statusMessage(
+                "<p style='color: {color}'>{msg}</p>\n".format(
+                    color=color, msg=fRecord))
 
-        self.logsBrowser.append(formatted)
+        self.logsBrowser.append(fRecord)
 
         if not self.logsBrowser.isVisible():
             self.logsBrowser.moveCursor(QTextCursor.End)
@@ -323,15 +334,16 @@ class CentralWidget(QWidget):
         self.setLayout(self.wLayout)
 
 
-class BrowseButton(QToolButton):
+class BrowseButton(PopupToolButton):
     """
     Browse button. When the button is hovered we play the
     rotating cube clip.
     """
 
     def __init__(self, parent):
-        super().__init__(parent)
+        super().__init__(parent=parent, mode=QToolButton.InstantPopup)
 
+        self.animatedActions = []
         self.rotatingCubeClip = RotatingCubeClipSimple()
         self.rotatingCubeClip.finished.connect(
             functools.partial(self.rotatingCubeClip.start))
@@ -345,14 +357,14 @@ class BrowseButton(QToolButton):
         menu.aboutToHide.connect(self.normalIcon)
 
     def onCubeClipFrame(self, no):
-        menu = self.menu()
         icon = self.rotatingCubeClip.createIcon()
 
         self.setIcon(icon)
 
-        if menu and menu.isVisible():
-            for action in self.menu().actions():
-                action.setIcon(icon)
+        if self.menu and self.menu.isVisible():
+            for action in self.menu.actions():
+                if action in self.animatedActions:
+                    action.setIcon(icon)
 
     def rotateCube(self):
         if not self.rotatingCubeClip.playing():
@@ -367,7 +379,7 @@ class BrowseButton(QToolButton):
         super(BrowseButton, self).enterEvent(event)
 
     def leaveEvent(self, event):
-        if not self.menu().isVisible():
+        if not self.menu.isVisible() and self.isEnabled():
             self.normalIcon()
 
         super(BrowseButton, self).leaveEvent(event)
@@ -393,6 +405,7 @@ class MainWindow(QMainWindow):
 
         # User logs widget
         self.logsPopupWindow = UserLogsWindow()
+        self.logsPopupWindow.setObjectName('logsTextWindow')
         self.logsPopupWindow.setWindowTitle('{}: logs'.format(GALACTEEK_NAME))
         self.logsPopupWindow.hide()
 
@@ -422,16 +435,6 @@ class MainWindow(QMainWindow):
         self.tabnChat = iChat()
         self.tabnFeeds = iAtomFeeds()
 
-        self.quitButton = PopupToolButton(
-            parent=self, mode=QToolButton.InstantPopup)
-        self.quitButton.setObjectName('quitToolButton')
-        self.quitButton.setIcon(getIcon('quit.png'))
-        self.quitButton.menu.addAction(iRestart(), self.app.restart)
-        self.quitButton.menu.addSeparator()
-        self.quitButton.menu.addAction(getIcon('quit.png'), iQuit(), self.quit,
-                                       QKeySequence('Ctrl+q'))
-        self.quitButton.setToolTip('Quit')
-
         self.menuManual = QMenu(iManual(), self)
 
         # Global pin-all button
@@ -456,24 +459,75 @@ class MainWindow(QMainWindow):
         self.qaToolbar = QuickAccessToolBar(self)
         self.qaToolbar.setOrientation(self.toolbarMain.orientation())
 
-        # Browse button
+        # Main actions and browse button setup
+        self.quitAction = QAction(getIcon('quit.png'),
+                                  iQuit(),
+                                  shortcut=QKeySequence('Ctrl+q'),
+                                  triggered=self.quit)
+        self.quitAction.setShortcutVisibleInContextMenu(True)
+
+        self.restartAction = QAction(getIcon('quit.png'),
+                                     iRestart(),
+                                     shortcut=QKeySequence('Alt+Shift+r'),
+                                     triggered=self.app.restart)
+
+        self.mPlayerOpenAction = QAction(getIcon('multimedia.png'),
+                                         iMediaPlayer(),
+                                         triggered=self.onOpenMediaPlayer)
+
+        self.editorOpenAction = QAction(getIcon('text-editor.png'),
+                                        iTextEditor(),
+                                        triggered=self.addEditorTab)
+
+        self.hashmarksManagerAction = QAction(getIcon('hashmarks.png'),
+                                              iHashmarksManager(),
+                                              shortcut=QKeySequence('Ctrl+m'),
+                                              triggered=self.addHashmarksTab)
+
+        self.editorOpenAction = QAction(getIcon('text-editor.png'),
+                                        iTextEditor(),
+                                        triggered=self.addEditorTab)
+
+        self.browseAction = QAction(
+            getIconIpfsIce(),
+            iBrowse(),
+            shortcut=QKeySequence('Ctrl+t'),
+            triggered=self.onOpenBrowserTabClicked)
+        self.browseAction.setShortcutVisibleInContextMenu(True)
+        self.browseAutopinAction = QAction(
+            getIconIpfsIce(),
+            iBrowseAutoPin(),
+            shortcut=QKeySequence('Ctrl+Alt+t'),
+            triggered=functools.partial(self.onOpenBrowserTabClicked,
+                                        pinBrowsed=True))
+        self.browseAutopinAction.setShortcutVisibleInContextMenu(True)
+
+        self.chatAction = QAction(
+            getIcon('chat.png'),
+            'Chat',
+            triggered=self.onOpenChatWidget)
 
         self.browseButton = BrowseButton(self)
-        self.browseButton.setPopupMode(QToolButton.MenuButtonPopup)
+        self.browseButton.setPopupMode(QToolButton.InstantPopup)
         self.browseButton.setObjectName('buttonBrowseIpfs')
-        self.browseButton.clicked.connect(self.onOpenBrowserTabClicked)
+        self.browseButton.normalIcon()
 
+        self.browseButton.menu.addAction(self.browseAction)
+        self.browseButton.menu.addAction(self.browseAutopinAction)
+        self.browseButton.menu.addSeparator()
+        self.browseButton.menu.addAction(self.editorOpenAction)
+        self.browseButton.menu.addSeparator()
+        self.browseButton.menu.addAction(self.chatAction)
+        self.browseButton.menu.addSeparator()
+        self.browseButton.menu.addAction(self.mPlayerOpenAction)
+        self.browseButton.menu.addSeparator()
+        self.browseButton.menu.addAction(self.quitAction)
+
+        self.browseButton.animatedActions = [
+            self.browseAction,
+            self.browseAutopinAction
+        ]
         self.browseButton.rotateCube()
-
-        menu = QMenu(self)
-        menu.addAction(getIconIpfsIce(), 'Browse',
-                       self.onOpenBrowserTabClicked)
-        menu.addAction(getIconIpfsIce(), 'Browse (auto-pin)',
-                       functools.partial(self.onOpenBrowserTabClicked,
-                                         pinBrowsed=True)
-                       )
-        self.browseButton.setMenu(menu)
-        self.browseButton.setIcon(getIconIpfs64())
 
         # File manager button
         self.fileManagerButton = QToolButton(self)
@@ -523,18 +577,19 @@ class MainWindow(QMainWindow):
         self.profileEditButton.setEnabled(False)
 
         # Hashmarks mgr button
-        self.hashmarkMgrButton = HashmarkMgrButton(
-            marks=self.app.marksLocal)
-        self.hashmarkMgrButton.setShortcut(QKeySequence('Ctrl+m'))
-        self.hashmarkMgrButton.menu.addAction(getIcon('hashmarks.png'),
-                                              iHashmarksManager(),
-                                              self.addHashmarksTab)
-        self.hashmarkMgrButton.menu.addSeparator()
-        self.hashmarkMgrButton.updateMenu()
 
         # Shared hashmarks mgr button
-        self.sharedHashmarkMgrButton = HashmarksLibraryButton()
-        self.sharedHashmarkMgrButton.setToolTip(iSharedHashmarks())
+        self.hashmarksSearcher = HashmarksSearcher(parent=self)
+        self.hashmarksSearcher.setToolTip(iHashmarksLibrary())
+
+        self.hashmarkMgrButton = HashmarkMgrButton(
+            marks=self.app.marksLocal)
+        self.hashmarkMgrButton.menu.addAction(self.hashmarksManagerAction)
+        self.hashmarkMgrButton.menu.addSeparator()
+        self.hashmarkMgrButton.menu.addMenu(self.hashmarksSearcher.menu)
+
+        self.hashmarkMgrButton.menu.addSeparator()
+        self.hashmarkMgrButton.updateMenu()
 
         # Peers button
         self.peersButton = QToolButton(self)
@@ -570,6 +625,7 @@ class MainWindow(QMainWindow):
 
         self.settingsToolButton.setMenu(menu)
 
+        # Help button
         self.helpToolButton = QToolButton(self)
         self.helpToolButton.setObjectName('helpToolButton')
         self.helpToolButton.setIcon(getIcon('information.png'))
@@ -581,21 +637,26 @@ class MainWindow(QMainWindow):
         menu.addAction('About', self.onAboutGalacteek)
         self.helpToolButton.setMenu(menu)
 
+        # Quit button
+        self.quitButton = PopupToolButton(
+            parent=self, mode=QToolButton.InstantPopup)
+        self.quitButton.setObjectName('quitToolButton')
+        self.quitButton.setIcon(self.quitAction.icon())
+        self.quitButton.menu.addAction(self.restartAction)
+        self.quitButton.menu.addSeparator()
+        self.quitButton.menu.addAction(self.quitAction)
+        self.quitButton.setToolTip(iQuit())
+
         self.ipfsSearchPageFactory = ipfssearch.SearchResultsPageFactory(self)
 
         self.ipfsSearchButton = ipfssearch.IPFSSearchButton(self)
-        self.ipfsSearchButton.setShortcut(QKeySequence('Ctrl+s'))
+        self.ipfsSearchButton.setShortcut(QKeySequence('Ctrl+Alt+s'))
         self.ipfsSearchButton.setIcon(self.ipfsSearchButton.iconNormal)
         self.ipfsSearchButton.clicked.connect(self.addIpfsSearchView)
 
-        self.mPlayerButton = QToolButton(self)
-        self.mPlayerButton.setIcon(getIcon('multimedia.png'))
-        self.mPlayerButton.setToolTip(iMediaPlayer())
-        self.mPlayerButton.clicked.connect(self.onOpenMediaPlayer)
-
         self.toolbarMain.addWidget(self.browseButton)
         self.toolbarMain.addWidget(self.hashmarkMgrButton)
-        self.toolbarMain.addWidget(self.sharedHashmarkMgrButton)
+        self.toolbarMain.addWidget(self.hashmarksSearcher)
         self.toolbarMain.addWidget(self.atomButton)
 
         self.toolbarMain.addSeparator()
@@ -603,10 +664,9 @@ class MainWindow(QMainWindow):
         self.toolbarMain.addWidget(self.textEditorButton)
 
         self.hashmarkMgrButton.hashmarkClicked.connect(self.onHashmarkClicked)
-        self.sharedHashmarkMgrButton.hashmarkClicked.connect(
+        self.hashmarksSearcher.hashmarkClicked.connect(
             self.onHashmarkClicked)
 
-        self.toolbarMain.addWidget(self.mPlayerButton)
         self.toolbarMain.addSeparator()
 
         self.toolbarMain.addWidget(self.toolbarTools)
@@ -656,28 +716,27 @@ class MainWindow(QMainWindow):
 
         # Chat room
         self.chatRoomWidget = chat.ChatRoomWidget(self)
-        self.chatRoomButton = QToolButton(self)
-        self.chatRoomButton.setIcon(getIcon('chat.png'))
-        self.chatRoomButton.clicked.connect(self.onOpenChatWidget)
-        self.toolbarTools.addWidget(self.chatRoomButton)
 
         self.webProfile = QtWebEngineWidgets.QWebEngineProfile.defaultProfile()
 
         # Status bar setup
-        self.pinningStatusButton = QPushButton()
+        self.pinningStatusButton = QPushButton(self)
+        self.pinningStatusButton.setShortcut(
+            QKeySequence('Ctrl+u'))
         self.pinningStatusButton.setToolTip(iNoStatus())
         self.pinningStatusButton.setIcon(getIcon('pin-black.png'))
         self.pinningStatusButton.clicked.connect(
             self.showPinningStatusWidget)
-        self.pubsubStatusButton = QPushButton()
+        self.pubsubStatusButton = QPushButton(self)
         self.pubsubStatusButton.setIcon(getIcon('network-offline.png'))
-        self.ipfsInfosButton = QPushButton()
-        self.ipfsInfosButton.setIcon(getIcon('ipfs-repo.png'))
-        self.ipfsInfosButton.setToolTip(iIpfsInfos())
-        self.ipfsInfosButton.clicked.connect(self.onIpfsInfos)
 
-        self.ipfsStatusLabel = QLabel()
-        self.ipfsStatusLabel.setObjectName('ipfsStatusLabel')
+        self.ipfsStatusCube = AnimatedLabel(
+            RotatingCubeRedFlash140d(speed=10),
+            parent=self
+        )
+        self.ipfsStatusCube.clip.setScaledSize(QSize(24, 24))
+        self.ipfsStatusCube.animationClicked.connect(self.onIpfsInfos)
+        self.ipfsStatusCube.startClip()
 
         self.ethereumStatusBtn = EthereumStatusButton(parent=self)
 
@@ -695,12 +754,12 @@ class MainWindow(QMainWindow):
         self.lastLogLabel.setObjectName('lastLogLabel')
         self.statusbar.insertWidget(0, self.lastLogLabel, 1)
 
-        self.statusbar.addPermanentWidget(self.ipfsStatusLabel)
-        self.statusbar.addPermanentWidget(self.userLogsButton)
-        self.statusbar.addPermanentWidget(self.ipfsInfosButton)
+        self.statusbar.addPermanentWidget(self.ipfsStatusCube)
+
         self.statusbar.addPermanentWidget(self.ethereumStatusBtn)
         self.statusbar.addPermanentWidget(self.pinningStatusButton)
         self.statusbar.addPermanentWidget(self.pubsubStatusButton)
+        self.statusbar.addPermanentWidget(self.userLogsButton)
 
         # Connection status timer
         self.timerStatus = QTimer(self)
@@ -830,9 +889,9 @@ class MainWindow(QMainWindow):
         if not profile.initialized:
             return
 
-        def hashmarksLoaded(hmarks):
+        def hashmarksLoaded(nodeId, hmarks):
             try:
-                self.sharedHashmarkMgrButton.updateMenu(hmarks)
+                self.hashmarksSearcher.register(nodeId, hmarks)
             except Exception as err:
                 log.debug(str(err))
 
@@ -845,6 +904,14 @@ class MainWindow(QMainWindow):
         if profile.userWebsite:
             profile.userWebsite.websiteUpdated.connect(
                 self.onProfileWebsiteUpdated
+            )
+
+        if not profile.userInfo.usernameSet:
+            QToolTip.showText(
+                self.profileEditButton.mapToGlobal(
+                    QPoint(0, 16)),
+                "Your profile's username is not set!",
+                self.profileEditButton, QRect(0, 0, 0, 0), 1800
             )
 
         profile.userInfo.changed.connect(
@@ -997,13 +1064,11 @@ class MainWindow(QMainWindow):
                 self.clipboardManager,
                 self.browseButton,
                 self.fileManagerButton,
-                self.chatRoomButton,
                 self.peersButton,
                 self.textEditorButton,
-                self.mPlayerButton,
                 self.atomButton,
                 self.hashmarkMgrButton,
-                self.sharedHashmarkMgrButton,
+                self.hashmarksSearcher,
                 self.profileEditButton]:
             btn.setEnabled(flag)
 
@@ -1058,13 +1123,17 @@ class MainWindow(QMainWindow):
     def onAboutGalacteek(self):
         runDialog(AboutDialog, iAbout())
 
+    def setConnectionInfoMessage(self, msg):
+        self.app.systemTray.setToolTip('{app}: {msg}'.format(
+            app=GALACTEEK_NAME, msg=msg))
+        self.ipfsStatusCube.setToolTip(msg)
+
     @ipfsOp
     async def displayConnectionInfo(self, ipfsop):
         try:
             info = await ipfsop.client.core.id()
         except BaseException:
-            self.ipfsStatusLabel.setText(iErrNoCx())
-            self.ipfsInfosButton.setToolTip(iErrNoCx())
+            self.setConnectionInfoMessage(iErrNoCx())
             return
 
         nodeId = info.get('ID', iUnknown())
@@ -1073,14 +1142,19 @@ class MainWindow(QMainWindow):
         # Get IPFS peers list
         peers = await ipfsop.peersList()
         if not peers:
-            msg = iCxButNoPeers(nodeId, nodeAgent)
-            self.ipfsStatusLabel.setText(msg)
-            self.ipfsInfosButton.setToolTip(msg)
+            self.setConnectionInfoMessage(iCxButNoPeers(nodeId, nodeAgent))
+            self.ipfsStatusCube.clip.setSpeed(0)
             return
 
-        message = iConnectStatus(nodeId, nodeAgent, len(peers))
-        self.ipfsStatusLabel.setText(message)
-        self.ipfsInfosButton.setToolTip(message)
+        peersCount = len(peers)
+
+        # TODO: compute something more precise, probably based on the
+        # swarm's high/low config
+        connQuality = int((peersCount * 100) / 1000)
+
+        self.setConnectionInfoMessage(
+            iConnectStatus(nodeId, nodeAgent, peersCount))
+        self.ipfsStatusCube.clip.setSpeed(5 + min(connQuality, 80))
 
     def onMainTimerStatus(self):
         ensure(self.displayConnectionInfo())
@@ -1089,18 +1163,9 @@ class MainWindow(QMainWindow):
         modifiers = event.modifiers()
 
         if modifiers & Qt.ControlModifier:
-            if event.key() == Qt.Key_T:
-                self.addBrowserTab()
-            if event.key() == Qt.Key_U:
-                self.showPinningStatusWidget()
             if event.key() == Qt.Key_W:
                 idx = self.tabWidget.currentIndex()
                 self.onTabCloseRequest(idx)
-            if event.key() == Qt.Key_Q:
-                self.quit()
-            if modifiers & Qt.ShiftModifier:
-                if event.key() == Qt.Key_R:
-                    self.app.restart()
 
         super(MainWindow, self).keyPressEvent(event)
 
@@ -1117,7 +1182,9 @@ class MainWindow(QMainWindow):
         if not cid:
             return messageBox(iCannotResolve(str(ipfsPath)))
 
-        tabName = shortPathRepr(cid)
+        path = IPFSPath(cid, autoCidConv=True)
+        tabName = path.shortRepr()
+
         tooltip = 'CID explorer: {0}'.format(cid)
         view = ipfsview.IPFSHashExplorerStack(self, cid)
         self.registerTab(view, tabName, current=True,
@@ -1163,6 +1230,7 @@ class MainWindow(QMainWindow):
 
         if isinstance(path, IPFSPath) and path.valid:
             tab.editor.display(path)
+            tab.setToolTip(str(path))
 
         self.registerTab(tab, iTextEditor(),
                          icon=getIcon('text-editor.png'), current=True)
@@ -1283,9 +1351,12 @@ class MainWindow(QMainWindow):
                          icon=getIcon('hashmarks.png'), current=True)
 
     def onOpenChatWidget(self):
-        ft = self.findTabWithName(self.tabnChat)
-        if ft:
+        tab = self.findTabWithName(self.tabnChat)
+        if tab:
+            tab.focusMessage()
             return self.tabWidget.setCurrentWidget(ft)
+
+        self.chatRoomWidget.focusMessage()
 
         self.registerTab(self.chatRoomWidget, self.tabnChat,
                          icon=getIcon('chat.png'), current=True)

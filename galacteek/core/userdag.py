@@ -169,7 +169,7 @@ class UserWebsite(QObject):
                     'title': title,
                     'uuid': uid,
                     'postname': postName,  # name of the post's DAG node
-                    'tags': ['test', 'cool'],
+                    'tags': [],
                     'category': 'test',
                     'author': author if author else username,
                     'date_published': isoformat(now),
@@ -364,6 +364,9 @@ class UserWebsite(QObject):
                 'usersite/home.html',
                 posts=blogPosts
             )
+
+            dag.root['about.html'] = await self.renderLink(
+                'usersite/about.html')
 
             # Finally, generate the Atom feed and put it in the graph
             try:

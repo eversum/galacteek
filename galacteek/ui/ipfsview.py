@@ -745,7 +745,12 @@ class IPFSHashExplorerWidget(QWidget):
                 if cid in self.model.entryCache:
                     continue
 
-                nItemName = IPFSNameItem(entry, entry['Name'], None)
+                if len(entry['Name']) > 32:
+                    entryName = entry['Name'][0:32]
+                else:
+                    entryName = entry['Name']
+
+                nItemName = IPFSNameItem(entry, entryName, None)
 
                 if self.mimeDetectionMethod == 'db':
                     nItemName.mimeFromDb(self.app.mimeDb)
@@ -760,7 +765,7 @@ class IPFSHashExplorerWidget(QWidget):
                 nItemMime = IPFSItem(nItemName.mimeType or iUnknown())
                 nItemHash = IPFSItem(cid)
                 nItemHash.setToolTip(cidInfosMarkup(cid))
-                nItemName.setToolTip(cid)
+                nItemName.setToolTip(entry['Name'])
 
                 if nItemName.isDir():
                     nItemName.setIcon(self.iconFolder)

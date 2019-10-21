@@ -273,6 +273,7 @@ setup(
             'templates/usersite/assets/*',
             'templates/usersite/assets/css/*',
             'templates/usersite/macros/*',
+            'templates/imggallery/*.html',
             'hashmarks/default/*.json'
         ]
     },
