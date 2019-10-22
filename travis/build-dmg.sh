@@ -92,7 +92,8 @@ popd
 popd
 
 # generate .dmg
-brew install create-dmg
+HOMEBREW_NO_AUTO_UPDATE=1 brew install create-dmg
+
 create-dmg --hdiutil-verbose --volname "galacteek-${VERSION}" \
     --volicon "${OLD_CWD}"/share/icons/galacteek.icns \
     --hide-extension galacteek.app Galacteek-$VERSION.dmg "$BUILD_DIR"/
