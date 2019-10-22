@@ -21,6 +21,13 @@ WP_NAME_IPFS = 'ipfs'
 WP_NAME_WEB3 = 'web3'
 
 
+webProfilesPrio = {
+    WP_NAME_MINIMAL: 0,
+    WP_NAME_IPFS: 1,
+    WP_NAME_WEB3: 2
+}
+
+
 class IPFSRequestInterceptor(QWebEngineUrlRequestInterceptor):
     def interceptRequest(self, info):
         url = info.requestUrl()

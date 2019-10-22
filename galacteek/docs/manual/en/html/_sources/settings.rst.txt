@@ -73,5 +73,10 @@ Default web profile
 
 With this setting you can select which web profile you want enabled
 by default when you open a browser tab. This setting is set by
-default to *minimal*. If you want the IPFS Javascript API always
-enabled you should select *ipfs* here.
+default to *ipfs*. If you want the IPFS Javascript API always
+enabled you should select *ipfs* here, or *web3* if you want both
+the IPFS and Ethereum API enabled.
+
+When the browser needs the JS API to render a page it will
+automatically use at least the *ipfs* profile (if *minimal* is the
+default).

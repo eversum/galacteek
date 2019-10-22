@@ -60,6 +60,7 @@ from galacteek.core.schemes import IPFSObjectProxyScheme
 from galacteek.core.webprofiles import WP_NAME_IPFS
 from galacteek.core.webprofiles import WP_NAME_MINIMAL
 from galacteek.core.webprofiles import WP_NAME_WEB3
+from galacteek.core.webprofiles import webProfilesPrio
 
 from galacteek.dweb.webscripts import scriptFromString
 from galacteek.dweb.page import BaseHandler
@@ -1028,7 +1029,7 @@ class BrowserTab(GalacteekTab):
     # signals
     ipfsObjectVisited = pyqtSignal(IPFSPath)
 
-    def __init__(self, gWindow, pinBrowsed=False):
+    def __init__(self, gWindow, minProfile=None, pinBrowsed=False):
         super(BrowserTab, self).__init__(gWindow)
 
         self.browserWidget = QWidget(self)
@@ -1072,6 +1073,16 @@ class BrowserTab(GalacteekTab):
         initialProfileName = self.app.settingsMgr.defaultWebProfile
         if initialProfileName not in self.app.availableWebProfilesNames():
             initialProfileName = WP_NAME_MINIMAL
+
+        # Use a 'minimum' web profile if requested
+        if isinstance(minProfile, str):
+            minProfilePrio = webProfilesPrio.get(minProfile, 0)
+            initProfilePrio = webProfilesPrio.get(initialProfileName, 0)
+
+            if minProfilePrio > initProfilePrio:
+                log.debug('Using requested minimum web profile: {p}'.format(
+                    p=minProfile))
+                initialProfileName = minProfile
 
         webProfile = self.getWebProfileByName(initialProfileName)
 
@@ -1162,7 +1173,7 @@ class BrowserTab(GalacteekTab):
 
         self.jsConsoleAction = QAction(getIcon('terminal.png'),
                                        iJsConsole(), self,
-                                       shortcut=QKeySequence('Ctrl+x'))
+                                       shortcut=QKeySequence('Ctrl+j'))
         self.jsConsoleAction.setCheckable(True)
         self.jsConsoleAction.toggled.connect(self.onJsConsoleToggle)
 

@@ -21,7 +21,6 @@ QToolTip {
     border-radius: 4px;
     padding: 2px;
     background-color: #C3D7DF;
-    min-width: 120px;
 }
 
 QWidget#centralWidget {
@@ -38,6 +37,7 @@ QTabBar::tab {
     color: black;
     text-align: center;
     min-width: 140px;
+    max-width: 220px;
     background-color: #7f8491;
     padding-left: 2px;
     padding-right: 2px;
@@ -244,4 +244,10 @@ QToolButton#buttonBrowseIpfs::hover {
 
 QToolButton#buttonBrowseIpfs::pressed {
     background-color: #eec146;
+}
+
+/* Quick Access tool buttons */
+
+QToolButton#qaToolButton::hover {
+    background-color: #C3D7DF;
 }

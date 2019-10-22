@@ -576,7 +576,8 @@ class MultihashPyramidToolButton(PopupToolButton):
 
         objPath = IPFSPath(self.pyramid.latest, autoCidConv=True)
         if objPath.valid:
-            ensure(self.app.resourceOpener.open(objPath))
+            ensure(self.app.resourceOpener.open(
+                objPath, minWebProfile='ipfs'))
 
     def onClipboardItemChange(self, clipItem):
         self.clipboardItem = clipItem
@@ -918,13 +919,15 @@ class GalleryPyramidController(EDAGBuildingPyramidController):
 
     def onBrowseGalleryIpns(self):
         objPath = self.ipnsKeyPath.child('index.html')
-        ensure(self.app.resourceOpener.open(objPath))
+        ensure(self.app.resourceOpener.open(
+            objPath, minWebProfile='ipfs'))
 
     def onBrowseGallery(self):
         if self.pyramid.latest:
             objPath = IPFSPath(self.pyramid.latest, autoCidConv=True).child(
                 'index.html')
-            ensure(self.app.resourceOpener.open(objPath))
+            ensure(self.app.resourceOpener.open(
+                objPath, minWebProfile='ipfs'))
 
     @ipfsOp
     async def initDagExtra(self, ipfsop, edag):

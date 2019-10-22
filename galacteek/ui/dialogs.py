@@ -602,7 +602,7 @@ class AddMultihashPyramidDialog(QDialog):
         ipnsLTimeLayout.addWidget(self.lifetimeCombo)
 
         pickIconLayout = QHBoxLayout()
-        pickIconLayout.addWidget(QLabel('Choose icon'))
+        pickIconLayout.addWidget(QLabel('Choose an icon'))
         pickIconLayout.addWidget(self.iconSelector)
 
         mainLayout = QGridLayout()

@@ -63,6 +63,7 @@ class IPFSResourceOpener(QObject):
     async def open(self, ipfsop, pathRef,
                    mimeType=None,
                    openingFrom=None,
+                   minWebProfile='ipfs',
                    tryDecrypt=False,
                    fromEncrypted=False,
                    burnAfterReading=False):
@@ -71,6 +72,9 @@ class IPFSResourceOpener(QObject):
         to its MIME type
 
         :param pathRef: IPFS object's path (can be str or IPFSPath)
+        :param openingFrom str: UI component making the open request
+        :param minWebProfile str: Minimum Web profile to use
+        :param tryDecrypt bool: Try to decrypt the object or not
         :param MIMEType mimeType: MIME type
         """
 
@@ -123,8 +127,8 @@ class IPFSResourceOpener(QObject):
 
             if stat:
                 # Browse the index
-                return self.app.mainWindow.addBrowserTab().browseFsPath(
-                    indexPath)
+                return self.app.mainWindow.addBrowserTab(
+                    minProfile=minWebProfile).browseFsPath(indexPath)
 
             # Otherwise view the DAG
             view = DAGViewer(rscPath, self.app.mainWindow)
@@ -225,7 +229,8 @@ class IPFSResourceOpener(QObject):
 
         if mimeType.isDir or ipfsPath.isIpns or mimeType.isHtml:
             self.objectOpened.emit(ipfsPath)
-            return self.app.mainWindow.addBrowserTab().browseFsPath(ipfsPath)
+            return self.app.mainWindow.addBrowserTab(
+                minProfile=minWebProfile).browseFsPath(ipfsPath)
 
         if openingFrom in ['filemanager', 'qa']:
             self.needUserConfirm.emit(ipfsPath, mimeType, True)

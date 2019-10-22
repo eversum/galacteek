@@ -1282,9 +1282,11 @@ class MainWindow(QMainWindow):
         runDialog(DonateDialog, bcAddress)
 
     def addBrowserTab(self, label='No page loaded', pinBrowsed=False,
-                      current=True):
+                      minProfile=None, current=True):
         icon = getIconIpfsIce()
-        tab = browser.BrowserTab(self, pinBrowsed=pinBrowsed)
+        tab = browser.BrowserTab(self,
+                                 minProfile=minProfile,
+                                 pinBrowsed=pinBrowsed)
         self.registerTab(tab, label, icon=icon, current=current)
 
         if self.app.settingsMgr.isTrue(CFG_SECTION_BROWSER, CFG_KEY_GOTOHOME):

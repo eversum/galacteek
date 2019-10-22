@@ -280,6 +280,7 @@ class IPFSObjectToolButton(QToolButton):
 
     def __init__(self, ipfsPath, icon=None, parent=None):
         super(IPFSObjectToolButton, self).__init__(parent=parent)
+        self.setObjectName('qaToolButton')
         if icon:
             self.setIcon(icon)
 
@@ -302,6 +303,7 @@ class HashmarkToolButton(QToolButton):
 
     def __init__(self, mark, icon=None, parent=None):
         super(HashmarkToolButton, self).__init__(parent=parent)
+        self.setObjectName('qaToolButton')
         if icon:
             self.setIcon(icon)
 
