@@ -8,6 +8,7 @@ PYTHONEX=python3
 
 mkdir -p $HOME/bin
 
+# Fetch and untar go-ipfs
 if [ "$TRAVIS_OS_NAME" = "linux" ]; then
 	PYTHONEX=python3.6
 	wget https://dist.ipfs.io/go-ipfs/v0.4.22/go-ipfs_v0.4.22_linux-amd64.tar.gz

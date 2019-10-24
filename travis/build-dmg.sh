@@ -72,10 +72,19 @@ cat > galacteek.app/Contents/MacOS/galacteek <<\EAT
 #!/usr/bin/env bash
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export PATH=$PATH:$DIR/../Resources/bin
-$DIR/../Resources/bin/python $DIR/../Resources/bin/galacteek --no-ssl-verify
+$DIR/../Resources/bin/python $DIR/../Resources/bin/galacteek --from-dmg --no-ssl-verify
+EAT
+
+# create entry script for galacteek (debug)
+cat > galacteek.app/Contents/MacOS/galacteek-debug <<\EAT
+#!/usr/bin/env bash
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+export PATH=$PATH:$DIR/../Resources/bin
+$DIR/../Resources/bin/python $DIR/../Resources/bin/galacteek --from-dmg --no-ssl-verify -d
 EAT
 
 chmod a+x galacteek.app/Contents/MacOS/galacteek
+chmod a+x galacteek.app/Contents/MacOS/galacteek-debug
 
 # bloat deletion sequence
 pushd galacteek.app/Contents/Resources
@@ -91,9 +100,10 @@ rm -rf share/{info,man}
 popd
 popd
 
-# generate .dmg
-HOMEBREW_NO_AUTO_UPDATE=1 brew install create-dmg
+# Get the create-dmg repo
+git clone https://github.com/andreyvit/create-dmg $HOME/create-dmg
 
-create-dmg --hdiutil-verbose --volname "galacteek-${VERSION}" \
+# generate .dmg
+$HOME/create-dmg/create-dmg --hdiutil-verbose --volname "galacteek-${VERSION}" \
     --volicon "${OLD_CWD}"/share/icons/galacteek.icns \
     --hide-extension galacteek.app Galacteek-$VERSION.dmg "$BUILD_DIR"/
