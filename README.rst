@@ -1,8 +1,8 @@
 
 .. image:: https://gitlab.com/galacteek/galacteek/raw/master/share/icons/galacteek-incandescent-128.png
     :align: center
-    :width: 128
-    :height: 128
+    :width: 64
+    :height: 64
 
 :info: A multi-platform browser for the distributed web
 
