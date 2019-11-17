@@ -6,8 +6,8 @@
 
 :info: A multi-platform browser for the distributed web
 
-.. image:: https://travis-ci.org/eversum/galacteek.svg?branch=master
-    :target: https://travis-ci.org/eversum/galacteek
+.. image:: https://travis-ci.org/pinnaculum/galacteek.svg?branch=master
+    :target: https://travis-ci.org/pinnaculum/galacteek
 
 **galacteek** is an experimental multi-platform Qt5-based browser/toolbox
 for the IPFS_ peer-to-peer network.
@@ -89,7 +89,7 @@ AppImage
 
 For Linux users (arch: *x86_64*), you can get an AppImage_
 from the releases_ page. The script used to build the image can be found
-`here <https://github.com/eversum/galacteek/blob/master/AppImage/galacteek-appimage-build>`_
+`here <https://github.com/pinnaculum/galacteek/blob/master/AppImage/galacteek-appimage-build>`_
 
 DMG (MacOS)
 -----------
@@ -269,12 +269,12 @@ from the ipfs-logo_ project's repository is included, unchanged.
 .. _ipfs-logo: https://github.com/ipfs/logo
 .. _ipfs-search: https://ipfs-search.com
 .. _ipfs-css: https://github.com/ipfs-shipyard/ipfs-css
-.. _releases: https://github.com/eversum/galacteek/releases
+.. _releases: https://github.com/pinnaculum/galacteek/releases
 .. _srip: https://www.flaticon.com/authors/srip
 .. _pyzbar: https://github.com/NaturalHistoryMuseum/pyzbar/
 .. _qreader: https://github.com/ewino/qreader/
-.. _shortcuts: http://htmlpreview.github.io/?https://raw.githubusercontent.com/eversum/galacteek/master/galacteek/docs/manual/en/html/shortcuts.html
-.. _releases: https://github.com/eversum/galacteek/releases
+.. _shortcuts: http://htmlpreview.github.io/?https://raw.githubusercontent.com/pinnaculum/galacteek/master/galacteek/docs/manual/en/html/shortcuts.html
+.. _releases: https://github.com/pinnaculum/galacteek/releases
 .. _ENS: https://ens.domains/
 .. _in-web-browsers: https://github.com/ipfs/in-web-browsers
 .. _AppImage: https://appimage.org/
