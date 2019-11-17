@@ -1,8 +1,8 @@
 
 .. image:: https://gitlab.com/galacteek/galacteek/raw/master/share/icons/galacteek-incandescent.png
     :align: center
-    :width: 128
-    :height: 128
+    :width: 64
+    :height: 64
 
 :info: A multi-platform browser for the distributed web
 
@@ -133,6 +133,7 @@ The scheme handler for these schemes supports the following
 URL formats::
 
     ipfs://{cidv1base32}/path/to/resource
+    ipfs://{fqdn-with-dnslink}/path/to/resource
     ipns://{fqdn-with-dnslink}/path/to/resource
 
 This scheme handler makes the requests asynchronously on the daemon
