@@ -32,6 +32,10 @@ If you use Linux or MacOS you can download a prebuilt image
 (an AppImage for Linux or a .dmg image for osx) from the releases_
 page.
 
+The main images are built from the *master* branch. Latest
+(development) images are built from the *pimp-my-dweb* branch.
+They contain new features like DID (IPID) support.
+
 If you want to use QR codes on MacOS, don't forget to install
 zbar by running **brew install zbar** in a terminal.
 
