@@ -40,8 +40,8 @@ class ipfsClassW:
             return None
         except asyncio.CancelledError:
             log.debug('IPFSOp cancelled: {name}'.format(name=self.name))
-        except RuntimeError:
-            pass
+        except RuntimeError as e:
+            log.debug('IPFSOp runtime err: {}'.format(str(e)))
         else:
             return resp
 

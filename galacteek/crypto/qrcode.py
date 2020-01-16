@@ -1,6 +1,10 @@
 import asyncio
 import io
 import functools
+import tempfile
+
+from ctypes import cdll
+from ctypes.util import find_library
 
 import qrcode
 from PIL.Image import new as NewImage
@@ -8,13 +12,36 @@ from PIL import Image
 
 from galacteek import log
 from galacteek.ipfs.cidhelpers import IPFSPath
+from galacteek.ipfs import ipfsOp
+from galacteek.did import didRe
+
+
+def zbar_load():
+    # Like zbar.zbar_library.load() but uses 'libzbar.so.0'
+    # if find_library() returns nothing, so that we can use
+    # the libzbar from the AppImage
+
+    path = find_library('zbar')
+    if not path:
+        path = 'libzbar.so.0'
+
+    log.debug('Loading zbar library from: {}'.format(path))
+
+    try:
+        libzbar = cdll.LoadLibrary(path)
+    except Exception:
+        log.debug('Could not load zbar lib from: {}'.format(path))
+        return None, []
+    else:
+        log.debug('Loaded zbar lib from: {}'.format(path))
+        return libzbar, []
 
 
 try:
-    from pyzbar.pyzbar import decode as zbar_decode
     from pyzbar import zbar_library
-    zbar_library.load()
-except ImportError:
+    zbar_library.load = zbar_load
+    from pyzbar.pyzbar import decode as zbar_decode
+except Exception:
     haveZbar = False
 else:
     haveZbar = True
@@ -78,7 +105,11 @@ class ZbarIPFSQrDecoder(ImageReader):
 
                 path = IPFSPath(decoded, autoCidConv=True)
                 if path.valid and path not in urls:
+                    log.debug('Decoded IPFS QR: {}'.format(path))
                     urls.append(path)
+                elif didRe.match(decoded):
+                    log.debug('Decoded DID QR: {}'.format(decoded))
+                    urls.append(decoded)
 
             if len(urls) > 0:  # don't return empty list
                 return urls
@@ -100,8 +131,6 @@ class QReaderIPFSQrDecoder(ImageReader):
         :param bytes data: Raw image data or Pillow image
         :rtype: list
         """
-        # if not isinstance(data, bytes):
-        #    raise Exception('Need bytes')
 
         if isinstance(data, bytes):
             image = self._getImage(data)
@@ -143,8 +172,8 @@ class IPFSQrEncoder:
     def codes(self):
         return self._codes
 
-    def add(self, url):
-        if len(self._codes) < self._maxCodes:
+    def add(self, url: str):
+        if url and len(self._codes) < self._maxCodes:
             self._codes.append(url)
 
     def _newImage(self, width, height, mode='P', fill=255, color='#000000'):
@@ -172,6 +201,23 @@ class IPFSQrEncoder:
 
         qrImage = qr.make_image(fill_color=fillColor, back_color=backColor)
         return qrImage.get_image()
+
+    @ipfsOp
+    async def encodeAndStore(self, ipfsop, loop=None, executor=None,
+                             filename=None, format='raw', **kw):
+        try:
+            img = await self.encodeAll(loop=loop, executor=executor, **kw)
+            if not img:
+                raise Exception('Could not encode QR')
+
+            if format == 'raw':
+                return await ipfsop.addBytes(img.tobytes())
+            elif format == 'png':
+                tfile = tempfile.NamedTemporaryFile(suffix='.png')
+                img.save(tfile.name)
+                return await ipfsop.addPath(tfile.name)
+        except Exception as e:
+            log.debug('Error encoding/storing QR code: {}'.format(str(e)))
 
     async def encodeAll(self, loop=None, executor=None, method='append',
                         version=12):

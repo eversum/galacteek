@@ -6,12 +6,10 @@ from datetime import timezone
 
 from feedgen.feed import FeedGenerator
 
-from PyQt5.QtCore import QObject
-from PyQt5.QtCore import pyqtSignal
-
 from galacteek import log
 from galacteek import logUser
 from galacteek import ensure
+from galacteek import AsyncSignal
 from galacteek.ipfs import ipfsOp
 from galacteek.ipfs.stat import StatInfo
 from galacteek.ipfs.cidhelpers import IPFSPath
@@ -72,18 +70,16 @@ class UserDAG(EvolvingDAG):
         return metadata['date_updated'] is None
 
 
-class UserWebsite(QObject):
+class UserWebsite:
     """
     The website associated to the user.
 
     Later on this should become more generic to create all kinds of apps
     """
 
-    websiteUpdated = pyqtSignal()
+    websiteUpdated = AsyncSignal()
 
     def __init__(self, edag, profile, ipnsKeyId, jinjaEnv, parent=None):
-        super().__init__(parent)
-
         self._profile = profile
         self._ipnsKeyId = ipnsKeyId
         self._edag = edag
@@ -152,19 +148,22 @@ class UserWebsite(QObject):
     @ipfsOp
     async def blogPost(self, ipfsop, title, msg, category=None, author=None):
         async with self.edag:
-            username = self.profile.userInfo.username
+            sHandle = self.profile.userInfo.spaceHandle
+
+            username = sHandle.short
             uid = str(uuid.uuid4())
             postName = title.strip().lower().replace(' ', '-')
 
             exEntries = await self.blogEntries()
             if postName in exEntries:
-                postName += uid[0:8]
-                return False
+                raise Exception(
+                    'A blog post with this name already exists')
 
             now = datetime.now(timezone.utc)
 
             postObject = {
                 'blogpost': {
+                    'authordid': self.profile.userInfo.personDid,
                     'body': msg,
                     'title': title,
                     'uuid': uid,
@@ -199,7 +198,7 @@ class UserWebsite(QObject):
             if not isinstance(objects, list):
                 return False
 
-            username = self.profile.userInfo.username
+            username = self.profile.userInfo.iphandle
             uid = str(uuid.uuid4())
             now = datetime.now(timezone.utc)
 
@@ -253,10 +252,6 @@ class UserWebsite(QObject):
                                                      'usersite/assets')
         self.assetsEntry = await ipfsop.addPath(assetsPath, recursive=True)
 
-        if self.profile.userInfo.avatarCid:
-            self.edag.root['media']['images']['avatar'] = self.edag.mkLink(
-                self.profile.userInfo.avatarCid)
-
         if self.profile.ctx.hasRsc('ipfs-cube-64'):
             self.edag.root['media']['images']['ipfs-cube.png'] = \
                 self.edag.mkLink(self.profile.ctx.resources['ipfs-cube-64'])
@@ -270,17 +265,27 @@ class UserWebsite(QObject):
     def createFeed(self):
         # Create the feed
 
+        sHandle = self.profile.userInfo.spaceHandle
+
         feed = FeedGenerator()
         feed.id(self.siteUrl)
         feed.title("{0}'s dweb space".format(
-            self.profile.userInfo.username))
+            sHandle.short))
         feed.author({
-            'name': self.profile.userInfo.username,
-            'email': self.profile.userInfo.email
+            'name': self.profile.userInfo.iphandle
         })
         feed.link(href=self.atomFeedPath.dwebUrl, rel='self')
         feed.language('en')
         return feed
+
+    async def updateAboutPage(self):
+        async with self.profile.dagUser as dag:
+            dag.root['about.html'] = await self.renderLink(
+                'usersite/about.html')
+            dag.root['media']['images']['avatar'] = \
+                self.profile.userInfo.avatar
+
+        await self.websiteUpdated.emit()
 
     @ipfsOp
     async def update(self, op):
@@ -361,7 +366,11 @@ class UserWebsite(QObject):
             )
 
             dag.root['index.html'] = await self.renderLink(
-                'usersite/home.html',
+                'usersite/home.html'
+            )
+
+            self.dagBlog['index.html'] = await self.renderLink(
+                'usersite/blog.html',
                 posts=blogPosts
             )
 
@@ -389,7 +398,7 @@ class UserWebsite(QObject):
             metadata['date_updated'] = now.isoformat()
             dag.root[METADATA_NODEKEY] = metadata
 
-        self.websiteUpdated.emit()
+        await self.websiteUpdated.emit()
         self._updating = False
 
     def feedAddPinRequests(self, requests, feed):
@@ -403,7 +412,7 @@ class UserWebsite(QObject):
             fEntry.id(rpath.dwebUrl)
             fEntry.link(href=rpath.dwebUrl, rel='alternate')
             fEntry.published(req['date_published'])
-            fEntry.author({'name': self.profile.userInfo.username})
+            fEntry.author({'name': self.profile.userInfo.iphandle})
 
     def feedAddPosts(self, blogPosts, feed):
         for post in blogPosts:
@@ -416,7 +425,7 @@ class UserWebsite(QObject):
             fEntry.link(href=ppath.dwebUrl, rel='alternate')
             fEntry.updated(post['date_modified'])
             fEntry.published(post['date_published'])
-            fEntry.author({'name': self.profile.userInfo.username})
+            fEntry.author({'name': self.profile.userInfo.iphandle})
 
             for tag in post['tags']:
                 fEntry.category(term=tag)

@@ -2,7 +2,7 @@
 <html>
     <head>
         <title>
-            {{ profile.userInfo.username }}'s homepage
+            {{ profile.userInfo.spaceHandle.short }}'s dweb page
         </title>
         <link rel="stylesheet" type="text/css"
                    href="{{ site_ipns_url(siteIpns, 'assets/css/style.css') }}" />
@@ -17,15 +17,14 @@
             <nav>
             <ul class="banner">
                 <li>
-                    <a href="{{ site_ipns_url(siteIpns, 'index.html') }}">Home</a>
-                </li>
-                <li>
-                    <a href="{{ site_ipns_url(siteIpns, 'about.html') }}">About</a>
+                    <a href="{{ site_ipns_url(siteIpns, 'blog/index.html') }}">Blog</a>
                 </li>
                 <li>
                     <a href="{{ site_ipns_url(siteIpns, 'pinrequests.html') }}">Pin requests</a>
                 </li>
-
+                <li>
+                    <a href="{{ site_ipns_url(siteIpns, 'about.html') }}">About</a>
+                </li>
                 <li>
                     <a href="{{ site_ipns_url(siteIpns, 'dfeed.atom') }}"
                        alt="Distributed Atom Feed">

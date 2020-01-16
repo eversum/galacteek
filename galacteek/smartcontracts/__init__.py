@@ -121,3 +121,24 @@ def getContractByName(name):
         return LocalContract(name, path, mainSol, module, ctype='solidity')
     elif os.path.isfile(vyperPath):
         return LocalContract(name, path, vyperPath, module, ctype='vyper')
+
+
+def getContractDeployments(name, network='mainnet', autoload=False):
+    path = pkg_resources.resource_filename(pkg, name)
+    deplPath = os.path.join(path, 'deployments.json')
+
+    if not os.path.isfile(deplPath):
+        return []
+
+    try:
+        deployments = []
+        with open(deplPath, 'rt') as fd:
+            jsono = json.load(fd)
+
+        for entry in jsono:
+            if entry.get('network') == network:
+                if not autoload or autoload == entry.get('autoload'):
+                    deployments.append(entry)
+        return deployments
+    except Exception:
+        return []

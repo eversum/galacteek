@@ -1,6 +1,7 @@
 from urllib.parse import quote
 
 from galacteek import log
+from galacteek.ipfs.cidhelpers import cidConvertBase32
 
 import aiohttp
 
@@ -25,7 +26,10 @@ class IPFSSearchResults:
     def findByHash(self, hashV):
         for hit in self.hits:
             hitHash = hit.get('hash', None)
-            if hitHash == hashV:
+            if not hitHash:
+                continue
+
+            if cidConvertBase32(hitHash) == cidConvertBase32(hashV):
                 return hit
 
 

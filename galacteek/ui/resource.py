@@ -13,6 +13,8 @@ from galacteek import log
 from galacteek import logUser
 from galacteek import ensure
 
+from galacteek.did.ipid import IPService
+
 from galacteek.dweb.page import PDFViewerPage
 from galacteek.dweb.page import WebTab
 from galacteek.dweb.page import DWebView
@@ -20,6 +22,7 @@ from galacteek.dweb.page import DWebView
 from galacteek.ipfs import megabytes
 from galacteek.ipfs import ipfsOp
 from galacteek.ipfs.stat import StatInfo
+
 from galacteek.ipfs.mimetype import MIMEType
 from galacteek.ipfs.mimetype import detectMimeType
 from galacteek.ipfs.mimetype import detectMimeTypeFromBuffer
@@ -183,7 +186,7 @@ class IPFSResourceOpener(QObject):
                     logUser.debug(
                         '{path}: decryption impossible'.format(path=rscPath))
 
-        elif mimeType.isText:
+        if mimeType.isText:
             tab = TextEditorTab(parent=self.app.mainWindow)
             tab.editor.display(ipfsPath)
             self.objectOpened.emit(ipfsPath)
@@ -232,7 +235,7 @@ class IPFSResourceOpener(QObject):
             return self.app.mainWindow.addBrowserTab(
                 minProfile=minWebProfile).browseFsPath(ipfsPath)
 
-        if openingFrom in ['filemanager', 'qa']:
+        if openingFrom in ['filemanager', 'qa', 'didlocal']:
             self.needUserConfirm.emit(ipfsPath, mimeType, True)
         else:
             self.needUserConfirm.emit(ipfsPath, mimeType, False)
@@ -344,3 +347,39 @@ class IPFSResourceOpener(QObject):
             await self.openWithExternal(rscPath, 'xdg-open "%f"')
         elif self.app.system == 'Darwin':
             await self.openWithExternal(rscPath, 'open "%f"')
+
+    @ipfsOp
+    async def browseIpService(self, ipfsop, serviceId, serviceCtx=None):
+        """
+        Browse/open an IP service registered on an IPID
+        """
+
+        logUser.info('Accessing IP service {}'.format(serviceId))
+
+        pService = await ipfsop.ipidManager.getServiceById(serviceId)
+        if not pService:
+            return
+
+        endpoint = pService.endpoint
+
+        if pService.type == IPService.SRV_TYPE_ATOMFEED:
+            await self.app.mainWindow.atomButton.atomFeedSubscribe(
+                str(endpoint)
+            )
+
+        elif isinstance(endpoint, str):
+            path = IPFSPath(endpoint, autoCidConv=True)
+            await self.open(path)
+
+    @ipfsOp
+    async def openIpServiceObject(self, ipfsop, serviceId, objectId):
+        logUser.info('Accessing IP service object {}'.format(objectId))
+
+        pService = await ipfsop.ipidManager.getServiceById(serviceId)
+        if not pService:
+            return
+
+        obj = await pService.getObjectWithId(objectId)
+        if obj:
+            path = IPFSPath(obj['path'], autoCidConv=True)
+            await self.open(path)

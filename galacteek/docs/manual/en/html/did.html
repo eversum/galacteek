@@ -1,0 +1,178 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Decentralized Identity &#8212; galacteek  documentation</title>
+    <link rel="stylesheet" href="_static/galacteek.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/language_data.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Connection status" href="status.html" />
+    <link rel="prev" title="Using the clipboard" href="clipboard.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="status.html" title="Connection status"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="clipboard.html" title="Using the clipboard"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">galacteek  documentation</a> &#187;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="decentralized-identity">
+<span id="did"></span><h1>Decentralized Identity<a class="headerlink" href="#decentralized-identity" title="Permalink to this headline">¶</a></h1>
+<a class="reference internal image-reference" href="_images/saturn.png"><img alt="_images/saturn.png" src="_images/saturn.png" style="width: 64px; height: 64px;" /></a>
+<p>A <a class="reference internal" href="glossary.html#term-did"><span class="xref std std-term">DID</span></a> (standing for <em>Decentralized Identifier</em>) is
+<em>a new type of identifier for verifiable, decentralized digital
+identity</em>.</p>
+<p>Digital identity has always been a key aspect of Internet
+interactions. The second wave of Web technology (the now
+dying, so-called Web 2.0), brought tremendous
+innovations, but it has failed to give netizens of the world
+a true sense of control over their digital identity, leaving us in the
+current state: weak control over our digital identities,
+and no control over what we publish. The dweb, thanks to
+the power of its protocols, erases the slavery model of
+the ancient client-server paradigm.</p>
+<p>Your thoughts matter and have value, stop being a slave,
+and express yourself on the dweb freely.</p>
+<div class="section" id="enter-ipid">
+<h2>Enter IPID<a class="headerlink" href="#enter-ipid" title="Permalink to this headline">¶</a></h2>
+<p>InterPlanetary Identifiers (see <a class="reference external" href="https://github.com/jonnycrunch/ipid">IPID</a>) are a type of decentralized
+identifiers (DID) that live in the IPFS ecosystem (the DID
+document associated with an IPID identifier is stored
+as a <a class="reference internal" href="glossary.html#term-dag"><span class="xref std std-term">DAG</span></a> in your IPFS repository).</p>
+<p>The identifier of your IPID is an IPNS key, which always points
+to the latest version of the DID document DAG (your latest
+identity). This is an example of an IPID identifier:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">did</span><span class="p">:</span><span class="n">ipid</span><span class="p">:</span><span class="n">QmSK1moUFX4k6JdmjgSWxCicZ4TMQ87oq2m9frNZo6TadQ</span>
+</pre></div>
+</div>
+<p>(DIDs always follow the format <em>did:method-name:method-specific-id</em>,
+inf our case <em>method-name</em> is <em>ipid</em> and the <em>method-specific-id</em>
+is the IPNS key associated with our IPID).</p>
+<p>By using IPIDs you have immense control over your (possibly
+numerous if you have dissociative disorders) digital identities:
+your identity is backed by a strongly-crypto-based Merkle tree
+that lives and evolves <strong>on your machine</strong> (the IPFS repository).</p>
+<div class="section" id="implementation-and-goals">
+<h3>Implementation and goals<a class="headerlink" href="#implementation-and-goals" title="Permalink to this headline">¶</a></h3>
+<p><em>Note</em>: <a class="reference external" href="https://github.com/jonnycrunch/ipid">IPID</a> is still a recent, subject-to-changes DID specification</p>
+<p>In the 0.4 branch of <a class="reference internal" href="glossary.html#term-galacteek"><span class="xref std std-term">galacteek</span></a> the IPID implementation is still
+in its early stages and there will be probable changes in the IPID
+schema, until stabilization at the end of the 0.4 branch cycle
+(at version <em>0.4.42</em>).</p>
+<p>Some of the goals in the UI are:</p>
+<ul class="simple">
+<li>Connection-state independence over resolvability of the identities
+(even offline, you should be able to manage your contacts).</li>
+<li>Easy way to publish services (could be anything from a link
+to a document to a restricted chat or video service ..)</li>
+<li>“Muted” identities</li>
+</ul>
+</div>
+</div>
+<div class="section" id="ip-profile">
+<h2>IP Profile<a class="headerlink" href="#ip-profile" title="Permalink to this headline">¶</a></h2>
+<p>Your profile in <strong>galacteek</strong> can have as many decentralized
+identities attached to it as you like.</p>
+<p>Each identity is represented by an IP handle (Space handle) and a DID.</p>
+<p>Your IP handle will be tied to your peer ID if you don’t register
+it on the blockchain, otherwise it’s not peer-specific.
+Examples:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">alchemist</span><span class="nd">@Saturn</span>
+<span class="n">noname</span><span class="c1">#156@Mars/QmXcBFXy5XA5qELL8Z8GeJdeD9LWa2cWVVnkStK6Jxtvas</span>
+<span class="n">dwebartist</span><span class="nd">@Earth</span><span class="o">/</span><span class="n">QmVrLyye1bByJT3ktj9gRFvxibBVpxk7vXvcwEXF9hhdku</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="interplanetary-services">
+<h2>InterPlanetary services<a class="headerlink" href="#interplanetary-services" title="Permalink to this headline">¶</a></h2>
+<p>You can publish services (they can be simple IPFS links, or P2P
+services) on your DID.</p>
+<p>An IP service attached to an IPID has a DID URL, for example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">did</span><span class="p">:</span><span class="n">ipid</span><span class="p">:</span><span class="n">QmXcBFXy5XA5qELL8Z8GeJdeD9LWa2cWVVnkStK6Jxtvas</span><span class="o">/</span><span class="n">blog</span>
+</pre></div>
+</div>
+<p>This same IP service can be searched using the Space handle
+of the peer, for example <strong>macfly&#64;Mars&#64;…</strong> (this service
+would be represented as <strong>macfly&#64;Mars&#64;VVnkStK6Jxtvas/blog</strong>)</p>
+<p>You can search the IP services of a peer from the main menu,
+or by typing <strong>Mod + i</strong>. Typing a Space handle will autocomplete
+and show you the IP services for that peer.</p>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/galacteek-incandescent.png" alt="Logo"/>
+            </a></p>
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="clipboard.html"
+                        title="previous chapter">Using the clipboard</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="status.html"
+                        title="next chapter">Connection status</a></p>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="status.html" title="Connection status"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="clipboard.html" title="Using the clipboard"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">galacteek  documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2019, galacteek.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.8.5.
+    </div>
+  </body>
+</html>

@@ -1,4 +1,3 @@
-import re
 import aioipfs
 
 from PyQt5.QtWidgets import QApplication
@@ -28,22 +27,18 @@ from PyQt5.QtGui import QImage
 from PyQt5.QtGui import QRegExpValidator
 
 from galacteek import GALACTEEK_NAME
-from galacteek import asyncify
 from galacteek import ensure
 from galacteek import logUser
 
 from galacteek.core.ipfsmarks import *
-from galacteek.core import countries
 from galacteek.core.ipfsmarks import categoryValid
-from galacteek.core.profile import UserInfos
 from galacteek.ipfs import cidhelpers
 from galacteek.ipfs.ipfsops import *
-from galacteek.ipfs.wrappers import ipfsOp, ipfsOpFn
+from galacteek.ipfs.wrappers import ipfsOp
 
 from . import ui_addhashmarkdialog
 from . import ui_addfeeddialog
 from . import ui_ipfscidinputdialog, ui_ipfsmultiplecidinputdialog
-from . import ui_profileeditdialog
 from . import ui_donatedialog
 from . import ui_qschemecreatemapping
 
@@ -367,150 +362,8 @@ class DonateDialog(QDialog):
         self.done(1)
 
 
-def notEmpty(v):
-    return v != ''
-
-
-class ProfileEditDialog(QDialog):
-    genderMapping = {
-        'Unspecified': UserInfos.GENDER_UNSPECIFIED,
-        'Male': UserInfos.GENDER_MALE,
-        'Female': UserInfos.GENDER_FEMALE
-    }
-
-    def __init__(self, profile, parent=None):
-        super().__init__(parent)
-
-        self.profile = profile
-        self.countryList = countries.countryList
-        self.previousUsername = self.profile.userInfo.username
-
-        self.ui = ui_profileeditdialog.Ui_ProfileEditDialog()
-        self.ui.setupUi(self)
-        self.ui.tabWidget.setCurrentIndex(0)
-
-        self.loadCountryData()
-
-        self.ui.labelWarning.setStyleSheet('QLabel { font-weight: bold; }')
-        self.ui.username.setText(self.profile.userInfo.username)
-        self.ui.firstname.setText(self.profile.userInfo.firstname)
-        self.ui.lastname.setText(self.profile.userInfo.lastname)
-        self.ui.email.setText(self.profile.userInfo.email)
-        self.ui.org.setText(self.profile.userInfo.org)
-        self.ui.city.setText(self.profile.userInfo.city)
-        self.ui.bio.setText(self.profile.userInfo.bio)
-
-        for gender, gvalue in self.genderMapping.items():
-            self.ui.gender.addItem(gender)
-            if self.profile.userInfo.gender == gvalue:
-                self.ui.gender.setCurrentText(gender)
-
-        if notEmpty(self.profile.userInfo.countryName):
-            self.ui.countryBox.setCurrentText(
-                self.profile.userInfo.countryName)
-        else:
-            self.ui.countryBox.setCurrentText('Unspecified')
-
-        if notEmpty(self.profile.userInfo.avatarCid):
-            self.updateAvatarCid()
-
-        self.ui.profileCryptoId.setText('<b>{0}</b>'.format(
-            self.profile.userInfo.objHash))
-
-        self.ui.changeIconButton.clicked.connect(self.changeIcon)
-        self.ui.updateButton.clicked.connect(self.save)
-        self.ui.cancelButton.clicked.connect(self.close)
-
-        self.reloadIcon()
-
-    def updateAvatarCid(self):
-        self.ui.iconHash.setText('<a href="ipfs:{0}">{1}</a>'.format(
-            cidhelpers.joinIpfs(self.profile.userInfo.avatarCid),
-            self.profile.userInfo.avatarCid))
-
-    def reloadIcon(self):
-        ensure(self.loadIcon())
-
-    def getCountryCode(self, name):
-        for entry in self.countryList:
-            if entry['name'] == name:
-                return entry['code']
-
-    def loadCountryData(self):
-        for entry in self.countryList:
-            self.ui.countryBox.addItem(entry['name'])
-
-        self.ui.countryBox.addItem('Unspecified')
-
-    @asyncify
-    async def loadIcon(self):
-        @ipfsOpFn
-        async def load(op, cid):
-            try:
-                imgData = await op.client.cat(cid)
-                img1 = QImage()
-                img1.loadFromData(imgData)
-                img = img1.scaledToWidth(256)
-                self.ui.iconPixmap.setPixmap(QPixmap.fromImage(img))
-            except Exception:
-                messageBox('Error while loading image')
-
-        if self.profile.userInfo.avatarCid != '':
-            await load(self.profile.userInfo.avatarCid)
-
-    def changeIcon(self):
-        fps = filesSelectImages()
-        if len(fps) > 0:
-            ensure(self.setIcon(fps.pop()))
-
-    @ipfsOp
-    async def setIcon(self, op, fp):
-        entry = await op.addPath(fp, recursive=False)
-        if entry:
-            self.profile.userInfo.setAvatarCid(entry['Hash'])
-            self.reloadIcon()
-            self.updateAvatarCid()
-
-    def save(self):
-        kw = {}
-        for key in ['username', 'firstname',
-                    'lastname', 'email', 'org',
-                    'city']:
-            val = getattr(self.ui, key).text()
-            ma = re.search(r"[a-zA-Z\_\-\@\.\+\'\´0-9\s]*", val)
-            if ma:
-                kw[key] = val
-
-        try:
-            kw['bio'] = self.ui.bio.toPlainText()
-        except:
-            pass
-
-        country = self.ui.countryBox.currentText()
-        code = self.getCountryCode(country)
-
-        if country and code:
-            self.profile.userInfo.setCountryInfo(country, code)
-
-        genderSelected = self.ui.gender.currentText()
-        for gender, gvalue in self.genderMapping.items():
-            if genderSelected == gender:
-                kw['gender'] = gvalue
-
-        self.profile.userInfo.setInfos(**kw)
-
-        if self.previousUsername != self.profile.userInfo.username:
-            self.profile.userInfo.usernameChanged.emit()
-
-        self.profile.userInfo.changed.emit()
-        self.done(1)
-
-    def reject(self):
-        self.done(0)
-
-
 class ChooseProgramDialog(QInputDialog):
-    def __init__(self, parent=None):
+    def __init__(self, cmd=None, parent=None):
         super().__init__(parent)
 
         self.setWindowTitle('Choose a program')
@@ -518,6 +371,9 @@ class ChooseProgramDialog(QInputDialog):
         self.setLabelText(
             '''Command arguments (example: <b>mupdf %f</b>).
                 <b>%f</b> is replaced with the file path''')
+
+        if cmd:
+            self.setTextValue(cmd)
 
 
 class AddAtomFeedDialog(QInputDialog):
@@ -836,6 +692,51 @@ class TitleInputDialog(QDialog):
     def sizeHint(self):
         return QSize(
             self.app.desktopGeometry.width() / 2,
+            100
+        )
+
+    def accept(self):
+        self.done(1)
+
+
+class GenericTextInputDialog(QDialog):
+    def __init__(self, label, maxLength=64,
+                 inputRegExp=r"[A-Za-z0-9/\-]+",
+                 title=None, parent=None):
+        super().__init__(parent)
+
+        if title:
+            self.setWindowTitle(title)
+
+        self.app = QApplication.instance()
+        buttonBox = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel,
+            self
+        )
+        buttonBox.accepted.connect(self.accept)
+        buttonBox.rejected.connect(self.reject)
+
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel(label))
+
+        self.tEdit = QLineEdit(self)
+        self.tEdit.setMaxLength(maxLength)
+        self.tEdit.setMaxLength(maxLength)
+
+        self.tEdit.setValidator(
+            QRegExpValidator(QRegExp(inputRegExp)))
+
+        layout.addWidget(self.tEdit)
+        layout.addWidget(buttonBox)
+
+        self.setLayout(layout)
+
+    def enteredText(self):
+        return self.tEdit.text()
+
+    def sizeHint(self):
+        return QSize(
+            self.app.desktopGeometry.width() / 3,
             100
         )
 

@@ -3,8 +3,11 @@ import json
 import asyncio
 import time
 import collections
+import traceback
 
 from galacteek import log as logger
+from galacteek import AsyncSignal
+from galacteek import ensureLater
 
 from galacteek.ipfs.pubsub import TOPIC_MAIN
 from galacteek.ipfs.pubsub import TOPIC_PEERS
@@ -12,9 +15,9 @@ from galacteek.ipfs.pubsub import TOPIC_CHAT
 from galacteek.ipfs.pubsub import TOPIC_HASHMARKS
 
 from galacteek.ipfs.pubsub.messages import MarksBroadcastMessage
-from galacteek.ipfs.pubsub.messages import PeerIdentMessageV1
-from galacteek.ipfs.pubsub.messages import PeerIdentMessageV2
+from galacteek.ipfs.pubsub.messages import PeerIdentMessageV3
 from galacteek.ipfs.pubsub.messages import PeerLogoutMessage
+from galacteek.ipfs.pubsub.messages import PeerIpHandleChosen
 from galacteek.ipfs.pubsub.messages import ChatRoomMessage
 
 from galacteek.ipfs.wrappers import ipfsOp
@@ -49,6 +52,10 @@ class PubsubService(object):
         self._minMsgTsDiff = minMsgTsDiff
         self._maxMessageSize = maxMessageSize
 
+        # Async sigs
+        self.rawMessageReceived = AsyncSignal(str, str, bytes)
+        self.rawMessageSent = AsyncSignal(str, str, str)
+
         self.tskServe = None
         self.tskProcess = None
         self.tskPeriodic = None
@@ -73,6 +80,9 @@ class PubsubService(object):
 
     def debug(self, msg):
         logger.debug('PS[{0}]: {1}'.format(self.topic, msg))
+
+    def info(self, msg):
+        logger.info('PS[{0}]: {1}'.format(self.topic, msg))
 
     def logStatus(self):
         self.debug('** Messages received: {0}, errors: {1}'.format(
@@ -112,7 +122,8 @@ class PubsubService(object):
         return False
 
     async def filterPeerActivity(self, msg):
-        senderNodeId = msg['from'].decode()
+        senderNodeId = msg['from'] if isinstance(msg['from'], str) else \
+            msg['from'].decode()
         if senderNodeId not in self._peerActivity:
             self._peerActivity[senderNodeId] = collections.deque([], 10)
 
@@ -130,7 +141,10 @@ class PubsubService(object):
         return False
 
     async def filterSelf(self, msg):
-        if msg['from'].decode() == self.ipfsCtx.node.id:
+        sender = msg['from'] if isinstance(msg['from'], str) else \
+            msg['from'].decode()
+
+        if sender == self.ipfsCtx.node.id:
             return True
 
         return False
@@ -160,6 +174,12 @@ class PubsubService(object):
 
         try:
             async for message in self.client.pubsub.sub(self.topic):
+                sender = message['from'] if isinstance(
+                    message['from'], str) else message['from'].decode()
+
+                await self.rawMessageReceived.emit(
+                    self.topic, sender, message['data'])
+
                 if await self.filtered(message):
                     continue
 
@@ -173,8 +193,10 @@ class PubsubService(object):
                 self.inQueue.qsize()))
             return
         except Exception as e:
+            traceback.print_exc()
             self.debug('Serve interrupted by unknown exception {}'.format(
                 str(e)))
+            ensureLater(10, self.serve)
 
     async def send(self, data, topic=None):
         """
@@ -201,6 +223,8 @@ class JSONPubsubService(PubsubService):
     JSON pubsub listener, handling incoming messages as JSON objects
     """
 
+    jsonMessageReceived = AsyncSignal(str, str, bytes)
+
     def msgDataToJson(self, msg):
         """
         Decode JSON data contained in a pubsub message
@@ -217,23 +241,29 @@ class JSONPubsubService(PubsubService):
                 data = await self.inQueue.get()
 
                 if data is None:
-                    break
+                    continue
 
                 msg = self.msgDataToJson(data)
                 if msg is None:
+                    self.debug('Invalid JSON message')
                     continue
 
+                sender = data['from'] if isinstance(data['from'], str) else \
+                    data['from'].decode()
+
                 try:
-                    await self.processJsonMessage(data['from'].decode(), msg)
+                    await self.processJsonMessage(sender, msg)
                 except Exception as exc:
-                    logger.debug(
+                    self.debug(
                         'processJsonMessage error: {}'.format(str(exc)))
+                    traceback.print_exc()
                     await self.errorsQueue.put((msg, exc))
                     self._errorsCount += 1
         except asyncio.CancelledError:
-            return
-        except Exception:
-            return
+            self.debug('JSON process cancelled')
+        except Exception as err:
+            self.debug('JSON process exception: {}'.format(
+                str(err)))
 
     async def processJsonMessage(self, sender, msg):
         """ Implement this method to process incoming JSON messages"""
@@ -335,10 +365,11 @@ class PSMainService(JSONPubsubService):
 class PSPeersService(JSONPubsubService):
     def __init__(self, ipfsCtx, client):
         super().__init__(ipfsCtx, client, topic=TOPIC_PEERS,
-                         runPeriodic=True)
+                         runPeriodic=True,
+                         filterSelfMessages=False)
 
         self._curProfile = None
-        self._identEvery = 45
+        self._identEvery = 25
         self.ipfsCtx.profileChanged.connect(self.onProfileChanged)
 
     @property
@@ -352,15 +383,6 @@ class PSPeersService(JSONPubsubService):
     @asyncify
     async def onProfileChanged(self, pName, profile):
         await profile.userInfo.loaded
-
-        try:
-            profile.userInfo.entryChanged.disconnect(self.userInfoChanged)
-            profile.userInfo.available.disconnect(self.userInfoAvail)
-        except Exception:
-            pass
-
-        self.curProfile.userInfo.entryChanged.connect(self.userInfoChanged)
-        self.curProfile.userInfo.available.connect(self.userInfoAvail)
         await self.sendIdent(self.curProfile)
 
     @asyncify
@@ -381,54 +403,59 @@ class PSPeersService(JSONPubsubService):
         nodeId = op.ctx.node.id
         uInfo = profile.userInfo
 
-        if not uInfo.valid():
-            logger.debug('Profile info, ident message not sent')
+        ipid = await op.ipidManager.load(
+            profile.userInfo.personDid,
+            localIdentifier=True
+        )
+
+        if not ipid:
+            logger.debug('Failed to load local DID')
             return
 
-        cfgMaps = []
+        msg = await PeerIdentMessageV3.make(
+            nodeId,
+            profile.dagUser.dagCid,
+            profile.keyRootId,
+            uInfo,
+            profile.userInfo.personDid,
+            ipid.docCid
+        )
 
-        if self.ipfsCtx.inOrbit:
-            if profile.orbitalCfgMap:
-                cfgMaps.append(profile.orbitalCfgMap.data)
-
-        if uInfo.schemaVersion == 1:
-            msg = PeerIdentMessageV2.make(
-                nodeId,
-                uInfo.objHash,
-                uInfo.root,
-                profile.dagUser.dagCid,
-                profile.keyRootId,
-                self.ipfsCtx.p2p.servicesFormatted(),
-                cfgMaps
-            )
-
-            logger.debug('Sending ident message')
-            await self.send(str(msg))
-        else:
-            logger.debug('Unknown schema version, ident message not sent')
+        logger.debug('Sending ident message')
+        await self.send(str(msg))
 
     async def processJsonMessage(self, sender, msg):
         msgType = msg.get('msgtype', None)
 
-        if msgType == PeerIdentMessageV1.TYPE:
-            logger.debug('Received ident message (v1) from {}'.format(sender))
-            await self.handleIdentMessageV1(sender, msg)
-        elif msgType == PeerIdentMessageV2.TYPE:
-            logger.debug('Received ident message (v2) from {}'.format(sender))
-            await self.handleIdentMessageV2(sender, msg)
+        if msgType == PeerIdentMessageV3.TYPE:
+            logger.debug('Received ident message (v3) from {}'.format(sender))
+            await self.handleIdentMessageV3(sender, msg)
         elif msgType == PeerLogoutMessage.TYPE:
             logger.debug('Received logout message from {}'.format(sender))
             await self.handleLogoutMessage(sender, msg)
+        elif msgType == PeerIpHandleChosen.TYPE:
+            logger.debug('Received iphandle message from {}'.format(sender))
+            await self.handleIpHandleMessage(sender, msg)
 
         await asyncio.sleep(0)
+
+    @ipfsOp
+    async def handleIpHandleMessage(self, ipfsop, sender, msg):
+        profile = ipfsop.ctx.currentProfile
+
+        iMsg = PeerIpHandleChosen(msg)
+        if iMsg.valid():
+            self.info('Welcoming {} to the network!'.format(iMsg.iphandle))
+            await ipfsop.addString(iMsg.iphandle)
+            await profile.ipHandles.register(iMsg.iphandle)
 
     async def handleLogoutMessage(self, sender, msg):
         lMsg = PeerLogoutMessage(msg)
         if lMsg.valid():
             await self.ipfsCtx.peers.unregister(sender)
 
-    async def handleIdentMessageV1(self, sender, msg):
-        iMsg = PeerIdentMessageV1(msg)
+    async def handleIdentMessageV3(self, sender, msg):
+        iMsg = PeerIdentMessageV3(msg)
         if not iMsg.valid():
             logger.debug('Received invalid ident message')
             return
@@ -437,24 +464,20 @@ class PSPeersService(JSONPubsubService):
             # You forging pubsub messages, son ?
             return
 
-        await self.ipfsCtx.peers.registerFromIdent(iMsg)
-
-    async def handleIdentMessageV2(self, sender, msg):
-        iMsg = PeerIdentMessageV2(msg)
-        if not iMsg.valid():
-            logger.debug('Received invalid ident message')
-            return
-
-        if sender != iMsg.peer:
-            # You forging pubsub messages, son ?
-            return
-
-        await self.ipfsCtx.peers.registerFromIdent(iMsg)
+        try:
+            await self.ipfsCtx.peers.registerFromIdent(iMsg)
+        except Exception as e:
+            logger.debug('Registering from indent failed for peer: {}'.format(
+                sender))
+            raise e
 
     @ipfsOp
-    async def shutdown(self, op):
-        msg = PeerLogoutMessage.make(op.ctx.node.id)
+    async def sendLogoutMessage(self, ipfsop):
+        msg = PeerLogoutMessage.make(ipfsop.ctx.node.id)
         await self.send(str(msg))
+
+    async def shutdown(self):
+        await self.sendLogoutMessage()
 
     async def periodic(self):
         while True:
@@ -474,11 +497,13 @@ class PSChatService(JSONPubsubService):
         msgType = msg.get('msgtype', None)
 
         if msgType == ChatRoomMessage.TYPE:
+            self.debug('Chat message received')
             await self.handleChatMessage(msg)
 
     async def handleChatMessage(self, msg):
         cMsg = ChatRoomMessage(msg)
         if not cMsg.valid():
+            self.debug('Invalid chat message')
             return
 
         self.ipfsCtx.pubsub.chatRoomMessageReceived.emit(cMsg)

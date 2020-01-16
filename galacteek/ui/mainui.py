@@ -1,5 +1,4 @@
 import functools
-import os.path
 
 from logbook import Handler
 from logbook import StringFormatterHandlerMixin
@@ -16,21 +15,22 @@ from PyQt5.QtWidgets import QToolButton
 from PyQt5.QtWidgets import QPushButton
 from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QVBoxLayout
-from PyQt5.QtWidgets import QTextBrowser
-from PyQt5.QtWidgets import QToolTip
+from PyQt5.QtWidgets import QTextEdit
+from PyQt5.QtWidgets import QLineEdit
 
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QUrl
 from PyQt5.QtCore import QTimer
 from PyQt5.QtCore import QDateTime
 from PyQt5.QtCore import QSize
 from PyQt5.QtCore import QPoint
-from PyQt5.QtCore import QRect
 
 from PyQt5.Qt import QSizePolicy
 
 from PyQt5.QtGui import QKeySequence
 from PyQt5.QtGui import QTextCursor
+from PyQt5.QtGui import QTextDocument
 
 from PyQt5 import QtWebEngineWidgets
 
@@ -45,7 +45,6 @@ from galacteek.ui import mediaplayer
 from galacteek.ipfs.wrappers import *
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.cidhelpers import IPFSPath
-from galacteek.ipfs.cidhelpers import joinIpns
 
 from galacteek.core.orbitdb import GalacteekOrbitConnector
 from galacteek.dweb.page import HashmarksPage, DWebView, WebTab
@@ -67,12 +66,17 @@ from . import eventlog
 from . import pin
 from . import chat
 
+from .dids import DIDExplorer
 from .clips import RotatingCubeClipSimple
 from .clips import RotatingCubeRedFlash140d
 from .eth import EthereumStatusButton
 from .feeds import AtomFeedsViewTab
 from .feeds import AtomFeedsView
 from .textedit import TextEditorTab
+from .iprofile import ProfileEditDialog
+from .iprofile import ProfileButton
+from .peers import PeersServiceSearchDock
+from .pubsub import PubsubSnifferWidget
 from .pyramids import MultihashPyramidsToolBar
 from .quickaccess import QuickAccessToolBar
 from .helpers import *
@@ -113,15 +117,53 @@ def iAbout():
             </a>
         </p>
         <p>Authors: see
-        <a href="https://github.com/eversum/galacteek/blob/master/AUTHORS.rst">
+        <a href="https://github.com/pinnaculum/galacteek/blob/master/AUTHORS.rst">
             AUTHORS.rst
         </a>
         </p>
-        <p>galacteek version {0}</p>''').format(__version__)
+        <p>galacteek version {0}</p>''').format(__version__)  # noqa
 
 
 class UserLogsWindow(QMainWindow):
     hidden = pyqtSignal()
+
+    def __init__(self):
+        super(UserLogsWindow, self).__init__()
+        self.toolbar = QToolBar(self)
+        self.toolbar.setMovable(False)
+        self.addToolBar(Qt.TopToolBarArea, self.toolbar)
+
+        self.logsBrowser = QTextEdit(self)
+        self.logsBrowser.setReadOnly(True)
+        self.logsBrowser.setObjectName('logsTextWidget')
+        self.logsBrowser.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        self.searchBack = QPushButton('Search backward')
+        self.searchBack.clicked.connect(self.onSearchBack)
+        self.searchFor = QPushButton('Search forward')
+        self.searchFor.clicked.connect(self.onSearchForward)
+
+        self.logsSearcher = QLineEdit(self)
+        self.logsSearcher.setClearButtonEnabled(True)
+        self.toolbar.addWidget(self.logsSearcher)
+        self.toolbar.addWidget(self.searchBack)
+        self.toolbar.addWidget(self.searchFor)
+        self.logsSearcher.returnPressed.connect(self.onSearchForward)
+        self.setCentralWidget(self.logsBrowser)
+
+    def onSearchBack(self):
+        flags = QTextDocument.FindCaseSensitively | QTextDocument.FindBackward
+        self.searchText(flags)
+
+    def onSearchForward(self):
+        flags = QTextDocument.FindCaseSensitively
+        self.searchText(flags)
+
+    def searchText(self, flags):
+        text = self.logsSearcher.text()
+        if text:
+            self.logsBrowser.find(text, flags)
 
     def hideEvent(self, event):
         self.hidden.emit()
@@ -137,6 +179,7 @@ class MainWindowLogHandler(Handler, StringFormatterHandlerMixin):
 
     modulesColorTable = {
         'galacteek.ui.resource': '#7f8491',
+        'galacteek.did.ipid': '#FA8A47',
         'galacteek.core.profile': 'blue'
     }
 
@@ -306,10 +349,6 @@ class MainToolBar(QToolBar):
         pass
 
 
-class ProfileButton(PopupToolButton):
-    pass
-
-
 class TabWidgetKeyFilter(QObject):
     nextPressed = pyqtSignal()
 
@@ -409,19 +448,13 @@ class MainWindow(QMainWindow):
         self.logsPopupWindow.setWindowTitle('{}: logs'.format(GALACTEEK_NAME))
         self.logsPopupWindow.hide()
 
-        self.logsBrowser = QTextBrowser(self.logsPopupWindow)
-        self.logsBrowser.setObjectName('logsTextWidget')
-        self.logsPopupWindow.setCentralWidget(self.logsBrowser)
-        self.logsBrowser.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Expanding)
-
         self.logsPopupWindow.setMinimumSize(QSize(
             (2 * self.app.desktopGeometry.width()) / 3,
             self.app.desktopGeometry.height() / 2
         ))
 
         self.userLogsHandler = MainWindowLogHandler(
-            self.logsBrowser, window=self,
+            self.logsPopupWindow.logsBrowser, window=self,
             level='DEBUG' if self.app.debugEnabled else 'INFO')
 
         loggerMain.handlers.append(self.userLogsHandler)
@@ -436,6 +469,9 @@ class MainWindow(QMainWindow):
         self.tabnFeeds = iAtomFeeds()
 
         self.menuManual = QMenu(iManual(), self)
+
+        # DID explorer
+        self.didExplorer = DIDExplorer()
 
         # Global pin-all button
         self.pinAllGlobalButton = QToolButton(self)
@@ -474,6 +510,17 @@ class MainWindow(QMainWindow):
         self.mPlayerOpenAction = QAction(getIcon('multimedia.png'),
                                          iMediaPlayer(),
                                          triggered=self.onOpenMediaPlayer)
+
+        self.psniffAction = QAction(getIcon('network-transmit.png'),
+                                    iPubSubSniff(),
+                                    self,
+                                    triggered=self.openPsniffTab)
+
+        self.searchServicesAction = QAction(getIcon('ipservice.png'),
+                                            'Search IP services',
+                                            self,
+                                            shortcut=QKeySequence('Ctrl+i'),
+                                            triggered=self.onSearchServices)
 
         self.editorOpenAction = QAction(getIcon('text-editor.png'),
                                         iTextEditor(),
@@ -514,6 +561,8 @@ class MainWindow(QMainWindow):
 
         self.browseButton.menu.addAction(self.browseAction)
         self.browseButton.menu.addAction(self.browseAutopinAction)
+        self.browseButton.menu.addSeparator()
+        self.browseButton.menu.addAction(self.searchServicesAction)
         self.browseButton.menu.addSeparator()
         self.browseButton.menu.addAction(self.editorOpenAction)
         self.browseButton.menu.addSeparator()
@@ -556,25 +605,21 @@ class MainWindow(QMainWindow):
 
         # Profile button
         self.profileMenu = QMenu(self)
-        iconProfile = getIcon('profile-user.png')
+        iconProfile = getIcon('helmet.png')
         self.profileMenu.addAction(iconProfile,
                                    'Edit profile',
                                    self.onProfileEditDialog)
-        self.profileMenu.addAction(getIcon('go-home.png'),
-                                   'View homepage',
-                                   self.onProfileViewHomepage)
         self.profileMenu.addSeparator()
 
         self.userWebsiteManager = userwebsite.UserWebsiteManager(
             parent=self.profileMenu)
         self.profileMenu.addMenu(self.userWebsiteManager.blogMenu)
 
-        self.profileEditButton = ProfileButton(
+        self.profileButton = ProfileButton(
             menu=self.profileMenu,
-            mode=QToolButton.InstantPopup,
             icon=iconProfile
         )
-        self.profileEditButton.setEnabled(False)
+        self.profileButton.setEnabled(False)
 
         # Hashmarks mgr button
 
@@ -593,6 +638,7 @@ class MainWindow(QMainWindow):
 
         # Peers button
         self.peersButton = QToolButton(self)
+        self.peersButton.setToolTip('Peers')
         self.peersButton.setIcon(getIcon('peers.png'))
         self.peersButton.clicked.connect(self.onPeersMgrClicked)
 
@@ -620,6 +666,8 @@ class MainWindow(QMainWindow):
                        self.onOpenEventLog)
         menu.addAction(getIcon('lock-and-key.png'), iKeys(),
                        self.onIpfsKeysClicked)
+        menu.addSeparator()
+        menu.addAction(self.psniffAction)
         menu.addSeparator()
         menu.addAction(iClearHistory(), self.onClearHistory)
 
@@ -657,6 +705,8 @@ class MainWindow(QMainWindow):
         self.toolbarMain.addWidget(self.browseButton)
         self.toolbarMain.addWidget(self.hashmarkMgrButton)
         self.toolbarMain.addWidget(self.hashmarksSearcher)
+        self.toolbarMain.addWidget(self.profileButton)
+        self.toolbarMain.addWidget(self.peersButton)
         self.toolbarMain.addWidget(self.atomButton)
 
         self.toolbarMain.addSeparator()
@@ -672,9 +722,6 @@ class MainWindow(QMainWindow):
         self.toolbarMain.addWidget(self.toolbarTools)
         self.toolbarMain.addSeparator()
         self.toolbarMain.addWidget(self.qaToolbar)
-
-        self.toolbarTools.addWidget(self.peersButton)
-        self.toolbarTools.addWidget(self.profileEditButton)
 
         self.toolbarMain.actionStatuses = self.toolbarMain.addAction(
             'Statuses')
@@ -767,6 +814,11 @@ class MainWindow(QMainWindow):
         self.timerStatus.start(20000)
 
         self.enableButtons(False)
+
+        # Docks
+        self.pSearchDock = PeersServiceSearchDock(self.app.peersTracker, self)
+        self.pSearchDock.setAllowedAreas(Qt.BottomDockWidgetArea)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.pSearchDock)
 
         # Connect the IPFS context signals
         self.app.ipfsCtx.ipfsConnectionReady.connect(self.onConnReady)
@@ -862,30 +914,28 @@ class MainWindow(QMainWindow):
         )
 
         self.logsPopupWindow.move(popupPoint)
-        self.logsBrowser.moveCursor(QTextCursor.End)
+        self.logsPopupWindow.logsBrowser.moveCursor(QTextCursor.End)
         self.logsPopupWindow.setVisible(checked)
 
     def onProfileEditDialog(self):
         runDialog(ProfileEditDialog, self.app.ipfsCtx.currentProfile,
-                  title='Profile Edit dialog')
+                  title='IP profile')
 
     def onProfileWebsiteUpdated(self):
-        self.profileEditButton.setStyleSheet('''
+        self.profileButton.setStyleSheet('''
             QToolButton {
                 background-color: #B7CDC2;
             }
         ''')
         self.app.loop.call_later(
-            3, self.profileEditButton.setStyleSheet,
+            3, self.profileButton.setStyleSheet,
             'QToolButton {}'
         )
 
-    def onProfileInfoChanged(self, profile):
-        # Regen website
-        ensure(profile.userWebsite.update())
-
     @asyncify
     async def onProfileChanged(self, pName, profile):
+        self.profileButton.setEnabled(False)
+
         if not profile.initialized:
             return
 
@@ -897,26 +947,10 @@ class MainWindow(QMainWindow):
 
         profile.sharedHManager.hashmarksLoaded.connect(hashmarksLoaded)
 
-        self.profileEditButton.setEnabled(False)
         await profile.userInfo.loaded
-        self.profileEditButton.setEnabled(True)
+        self.profileButton.setEnabled(True)
 
-        if profile.userWebsite:
-            profile.userWebsite.websiteUpdated.connect(
-                self.onProfileWebsiteUpdated
-            )
-
-        if not profile.userInfo.usernameSet:
-            QToolTip.showText(
-                self.profileEditButton.mapToGlobal(
-                    QPoint(0, 16)),
-                "Your profile's username is not set!",
-                self.profileEditButton, QRect(0, 0, 0, 0), 1800
-            )
-
-        profile.userInfo.changed.connect(
-            lambda: self.onProfileInfoChanged(profile)
-        )
+        await self.profileButton.changeProfile(profile)
 
         for action in self.profilesActionGroup.actions():
             if action.data() == pName:
@@ -926,10 +960,6 @@ class MainWindow(QMainWindow):
                 if filesM:
                     filesM.setupModel()
                     filesM.pathSelectorDefault()
-
-    def onProfileViewHomepage(self):
-        self.addBrowserTab().browseFsPath(os.path.join(
-            joinIpns(self.app.ipfsCtx.currentProfile.keyRootId), 'index.html'))
 
     def onProfilesList(self, pList):
         currentList = [action.data() for action in
@@ -1069,7 +1099,7 @@ class MainWindow(QMainWindow):
                 self.atomButton,
                 self.hashmarkMgrButton,
                 self.hashmarksSearcher,
-                self.profileEditButton]:
+                self.profileButton]:
             btn.setEnabled(flag)
 
     def statusMessage(self, msg):
@@ -1141,12 +1171,15 @@ class MainWindow(QMainWindow):
 
         # Get IPFS peers list
         peers = await ipfsop.peersList()
-        if not peers:
+        peersCount = len(peers)
+
+        if peersCount == 0:
+            await ipfsop.noPeersFound()
             self.setConnectionInfoMessage(iCxButNoPeers(nodeId, nodeAgent))
             self.ipfsStatusCube.clip.setSpeed(0)
             return
 
-        peersCount = len(peers)
+        await ipfsop.peersCountStatus(peersCount)
 
         # TODO: compute something more precise, probably based on the
         # swarm's high/low config
@@ -1225,6 +1258,10 @@ class MainWindow(QMainWindow):
             self.allTabs.remove(tab)
             del tab
 
+    def openPsniffTab(self):
+        self.registerTab(
+            PubsubSnifferWidget(self), iPubSubSniff(), current=True)
+
     def addEditorTab(self, path=None, editing=True):
         tab = TextEditorTab(editing=editing, parent=self)
 
@@ -1278,8 +1315,9 @@ class MainWindow(QMainWindow):
         self.registerTab(keysTab, name, current=True)
 
     def onHelpDonate(self):
-        bcAddress = '3HSsNcwzkiWGu6wB18BC6D37JHExpxZvyS'
-        runDialog(DonateDialog, bcAddress)
+        tab = self.app.mainWindow.addBrowserTab()
+        tab.enterUrl(
+            QUrl('https://patreon.com/{}'.format(GALACTEEK_NAME)))
 
     def addBrowserTab(self, label='No page loaded', pinBrowsed=False,
                       minProfile=None, current=True):
@@ -1309,7 +1347,8 @@ class MainWindow(QMainWindow):
             return self.tabWidget.setCurrentWidget(ft)
 
         pMgr = peers.PeersManager(self, self.app.peersTracker)
-        self.registerTab(pMgr, name, current=current)
+        self.registerTab(pMgr, name, icon=getIcon('peers.png'),
+                         current=current)
 
     def quit(self):
         # Qt and application exit
@@ -1356,7 +1395,7 @@ class MainWindow(QMainWindow):
         tab = self.findTabWithName(self.tabnChat)
         if tab:
             tab.focusMessage()
-            return self.tabWidget.setCurrentWidget(ft)
+            return self.tabWidget.setCurrentWidget(tab)
 
         self.chatRoomWidget.focusMessage()
 
@@ -1376,3 +1415,6 @@ class MainWindow(QMainWindow):
         # TODO
         # Called when an object was served by the native IPFS scheme handler
         pass
+
+    def onSearchServices(self):
+        self.pSearchDock.searchMode()

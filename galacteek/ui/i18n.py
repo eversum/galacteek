@@ -27,6 +27,51 @@ def iUnixFSNode():
     return QCoreApplication.translate('GalacteekWindow', 'UnixFS node')
 
 
+# Decentralized identifiers (IPID)
+
+
+def iDID():
+    return QCoreApplication.translate('GalacteekWindow', 'DID')
+
+
+def iDIDLong():
+    return QCoreApplication.translate(
+        'GalacteekWindow', 'Decentralized Identifier')
+
+
+def iIPID():
+    return QCoreApplication.translate(
+        'GalacteekWindow', 'IPID')
+
+
+def iIPIDLong():
+    return QCoreApplication.translate(
+        'GalacteekWindow', 'InterPlanetary Identifier')
+
+
+def iIPServices():
+    return QCoreApplication.translate(
+        'GalacteekWindow', 'InterPlanetary Services')
+
+
+# Space jargon
+
+
+def iIPHandle():
+    return QCoreApplication.translate(
+        'GalacteekWindow', 'IP handle')
+
+
+def iConstellation():
+    return QCoreApplication.translate(
+        'GalacteekWindow', 'Constellation')
+
+
+def iVirtualPlanet():
+    return QCoreApplication.translate(
+        'GalacteekWindow', 'Virtual Planet')
+
+
 # Main window messages
 
 
@@ -70,6 +115,10 @@ def iItemsInPinningQueue(itemsCount):
         'Items queued for pinning: {}'.format(itemsCount))
 
 
+def iPubSubSniff():
+    return QCoreApplication.translate('GalacteekWindow', 'Pubsub sniffer')
+
+
 def iBrowse():
     return QCoreApplication.translate('GalacteekWindow', 'Browse')
 
@@ -80,6 +129,10 @@ def iBrowseAutoPin():
 
 def iHelp():
     return QCoreApplication.translate('GalacteekWindow', 'Help')
+
+
+def iFollow():
+    return QCoreApplication.translate('BrowserTabForm', 'Follow')
 
 
 def iUnknown():

@@ -10,6 +10,7 @@ galacteek's manual (english)
     Settings <settings>
     Toolbars <toolbars>
     Using the clipboard <clipboard>
+    Decentralized Identity <did>
     Connection status <status>
     Shortcuts <shortcuts>
     Hashmarks <hashmarks>

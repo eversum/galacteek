@@ -9,6 +9,8 @@ import re
 from distutils.version import StrictVersion
 
 from PyQt5.QtCore import QProcess
+from PyQt5.QtCore import QCoreApplication
+from PyQt5.QtCore import Qt
 
 from galacteek import log
 from galacteek import ensure
@@ -105,6 +107,8 @@ def galacteekGui(args):
         glogger.basicConfig(level='DEBUG')
     else:
         glogger.basicConfig(level='INFO')
+
+    QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
 
     # Initialize webengine schemes before creating the application
     initializeSchemes()

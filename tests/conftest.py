@@ -10,13 +10,13 @@ from galacteek.ipfs import asyncipfsd
 glogger.basicConfig(level='DEBUG')
 
 
-@pytest.fixture
-def localipfsclient():
-    client = aioipfs.AsyncIPFS(host='127.0.0.1', port=5001)
+@pytest.fixture(scope='function')
+def localipfsclient(event_loop):
+    client = aioipfs.AsyncIPFS(loop=event_loop, host='127.0.0.1', port=5001)
     yield client
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope='function')
 def localipfsop(localipfsclient):
     op = IPFSOperator(localipfsclient)
     IPFSOpRegistry.regDefault(op)

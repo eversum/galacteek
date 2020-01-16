@@ -26,17 +26,25 @@ trap cleanup EXIT
 OLD_CWD="$(pwd)"
 VERSION=$(grep '__version__' galacteek/__init__.py|sed -e "s/__version__ = '\(.*\)'$/\1/")
 
+COMMIT_SHORT=$(echo $TRAVIS_COMMIT|cut -c 1-8)
+
+if [ "$TRAVIS_BRANCH" != "master" ]; then
+    DMG_DEST="Galacteek-${COMMIT_SHORT}.dmg"
+else
+    DMG_DEST="Galacteek-${VERSION}.dmg"
+fi
+
 pushd "$BUILD_DIR"/
 
 # install Miniconda
-wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh
-bash Miniconda3-latest-MacOSX-x86_64.sh -b -p ~/miniconda -f
-rm Miniconda3-latest-MacOSX-x86_64.sh 
+wget https://repo.continuum.io/miniconda/Miniconda3-4.6.14-MacOSX-x86_64.sh
+bash Miniconda3-4.6.14-MacOSX-x86_64.sh -b -p ~/miniconda -f
+rm Miniconda3-4.6.14-MacOSX-x86_64.sh
 
 export PATH="$HOME/miniconda/bin:$PATH"
 
 # create conda env
-conda create -n galacteek python --yes
+conda create -n galacteek python=3.7 --yes
 source activate galacteek
 
 # install dependencies
@@ -66,6 +74,14 @@ cp $HOME/bin/ipfs galacteek.app/Contents/Resources/bin
 # but raises an exception, still something to change here)
 # brew install libmagic
 # cp -av /usr/local/Cellar/libmagic/*/lib/* galacteek.app/Contents/Resources/lib
+
+brew update
+
+brew unlink python@2
+
+# zbar install
+brew install zbar
+cp -av /usr/local/Cellar/zbar/*/lib/*.dylib galacteek.app/Contents/Resources/lib
 
 # create entry script for galacteek
 cat > galacteek.app/Contents/MacOS/galacteek <<\EAT
@@ -106,4 +122,4 @@ git clone https://github.com/andreyvit/create-dmg $HOME/create-dmg
 # generate .dmg
 $HOME/create-dmg/create-dmg --hdiutil-verbose --volname "galacteek-${VERSION}" \
     --volicon "${OLD_CWD}"/share/icons/galacteek.icns \
-    --hide-extension galacteek.app Galacteek-$VERSION.dmg "$BUILD_DIR"/
+    --hide-extension galacteek.app $DMG_DEST "$BUILD_DIR"/

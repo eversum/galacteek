@@ -1,19 +1,33 @@
+from galacteek.ipfs import ipfsOp
+
+
 class P2PService:
     def __init__(self, name, description, protocolName, listenRange,
-                 handler, enabled=True):
+                handler=None, enabled=True, didDefaultRegister=False,
+                setupCtx=None):
         self._name = name
         self._description = description
         self._protocolName = protocolName
-        self._protocolNameFull = '/p2p/{0}'.format(protocolName)
+        self._protocolNameFull = '/x/{0}'.format(protocolName)
         self._listener = None
         self._listenRange = listenRange
         self._enabled = enabled
         self._handler = handler
         self._manager = None
+        self._setupCtx = setupCtx if setupCtx else {}
+        self._didDefaultRegister = didDefaultRegister
 
     @property
     def name(self):
         return self._name
+
+    @property
+    def setupCtx(self):
+        return self._setupCtx
+
+    @property
+    def didDefaultRegister(self):
+        return self._didDefaultRegister
 
     @property
     def enabled(self):
@@ -51,13 +65,17 @@ class P2PService:
     def manager(self, m):
         self._manager = m
 
-    async def start(self, client):
+    async def start(self):
         if not self.listener:
-            await self.createListener(client)
+            await self.createListener()
 
     async def stop(self):
         if self.listener:
             await self.listener.close()
+
+    @ipfsOp
+    async def createListener(self, ipfsop):
+        raise Exception('Implement createListener')
 
     async def serviceStreams(self):
         # Returns streams associated with this service
@@ -68,3 +86,6 @@ class P2PService:
         streams = await self.serviceStreams()
         if streams:
             return [s for s in streams if s['RemotePeer'] == peerId]
+
+    async def didServiceInstall(self, ipid):
+        pass

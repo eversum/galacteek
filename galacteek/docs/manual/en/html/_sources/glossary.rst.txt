@@ -61,6 +61,26 @@
 
             DAGs can model many different kinds of information.
 
+    DID
+
+        Decentralized Identifier.
+
+        The W3C defines DIDs precisely in the DID spec:
+
+            Decentralized Identifiers (DIDs) are a new type of identifier
+            for verifiable, decentralized digital identity. These new
+            identifiers are designed to enable the controller of a DID
+            to prove control over it and to be implemented independently of
+            any centralized registry, identity provider, or certificate
+            authority. DIDs are URLs that relate a DID subject to means
+            for trustable interactions with that subject. DIDs resolve
+            to DID Documents — simple documents that describe how to use
+            that specific DID. Each DID Document may express cryptographic
+            material, verification methods, and/or service endpoints.
+            These provide a set of mechanisms which enable a DID controller
+            to prove control of the DID. Service endpoints enable trusted
+            interactions with the DID subject.
+
     dweb
 
         The distributed web

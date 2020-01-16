@@ -137,7 +137,7 @@ def iLinkToQaToolbar():
         'BrowserTabForm', 'Link to Quick Access toolbar')
 
 
-def iFollow():
+def iFollowIpns():
     return QCoreApplication.translate('BrowserTabForm',
                                       'Follow IPNS resource')
 
@@ -758,6 +758,8 @@ class URLInputWidget(QLineEdit):
     def __init__(self, history, historyView, parent):
         super(URLInputWidget, self).__init__(parent)
 
+        self.setClearButtonEnabled(True)
+
         self.app = QCoreApplication.instance()
         self.history = history
         self.historyMatches = historyView
@@ -1165,7 +1167,7 @@ class BrowserTab(GalacteekTab):
                                       iBrowseIpnsHash(), self,
                                       triggered=self.onLoadIpns)
         self.followIpnsAction = QAction(getIconIpfsWhite(),
-                                        iFollow(), self,
+                                        iFollowIpns(), self,
                                         triggered=self.onFollowIpns)
         self.loadHomeAction = QAction(getIcon('go-home.png'),
                                       iBrowseHomePage(), self,
@@ -1999,7 +2001,7 @@ class BrowserTab(GalacteekTab):
         # convert it to base32 with cidhelpers.cidConvertBase32()
         # and replace the old CID in the URL
         #
-        # https://github.com/eversum/galacteek/issues/5
+        # https://github.com/pinnaculum/galacteek/issues/5
         #
 
         if inputStr.startswith('ipfs://'):

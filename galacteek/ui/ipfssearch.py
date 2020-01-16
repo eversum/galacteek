@@ -1,16 +1,13 @@
 import asyncio
 import async_timeout
-import uuid
 
 from PyQt5.QtWebEngineWidgets import QWebEnginePage
 from PyQt5.QtWebEngineWidgets import QWebEngineView
-from PyQt5.QtWebEngineWidgets import QWebEngineProfile
 from PyQt5.QtWebChannel import QWebChannel
 
 from PyQt5.QtCore import QObject
 from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtCore import QUrl
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QRegularExpression
 
@@ -32,7 +29,6 @@ from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs import ipfssearch
 from galacteek.dweb.render import renderTemplate
-from galacteek.core.analyzer import ResourceAnalyzer
 from galacteek import ensure
 from galacteek import log
 
@@ -124,7 +120,7 @@ class BaseSearchPage(QWebEnginePage):
         self.pageRendered.connect(self.onPageRendered)
 
     def onPageRendered(self, html):
-        self.setHtml(html, baseUrl=QUrl('qrc:/'))
+        self.setHtml(html)
 
 
 class SearchInProgressPage(BaseSearchPage):
@@ -144,88 +140,40 @@ class SearchResultsPageFactory(QObject):
         super().__init__(parent)
         self.app = QApplication.instance()
         self.resultsTemplate = self.app.getJinjaTemplate('ipfssearch.html')
-
-        self.webProfile = QWebEngineProfile()
-        self.installScripts()
-
-        self._pages = {}
-        self.genPages(3)
-
-    def installScripts(self):
-        self.webScripts = self.webProfile.scripts()
-
-        exSc = self.webScripts.findScript('ipfs-http-client')
-        if self.app.settingsMgr.jsIpfsApi is True and exSc.isNull():
-            for script in self.app.scriptsIpfs:
-                self.webScripts.insert(script)
-
-    def genPages(self, count):
-        [self.makePage() for i in range(0, count)]
+        self.webProfile = self.app.webProfiles['ipfs']
 
     def getPage(self):
-        for uid, data in self._pages.items():
-            page = data['page']
-            if not page.used:
-                page.used = True
-                self.app.loop.call_soon(self.genPages, 2)
-                return page, data['handler'], data['channel']
-
-    def makePage(self):
-        uid = str(uuid.uuid4())
-        handler = IPFSSearchHandler(self)
-        channel = QWebChannel()
-
-        self._pages[uid] = {
-            'channel': channel,
-            'page': None,
-            'handler': handler
-        }
-
-        channel.registerObject('ipfssearch', handler)
-
-        resultsPage = SearchResultsPage(
+        return SearchResultsPage(
             self.webProfile,
-            handler,
             self.resultsTemplate,
-            None,
             self.app.getIpfsConnectionParams(),
-            parent=self,
-            webchannel=self._pages[uid]['channel']
+            parent=self
         )
-
-        self._pages[uid]['page'] = resultsPage
-        return resultsPage
 
 
 class SearchResultsPage(BaseSearchPage):
     def __init__(
             self,
             profile,
-            handler,
             tmplMain,
-            tmplHits,
             ipfsConnParams,
             webchannel=None,
             parent=None):
         super(SearchResultsPage, self).__init__(parent, profile=profile)
 
-        self.used = False
-
-        if webchannel:
-            self.setWebChannel(webchannel)
+        self.channel = QWebChannel(self)
+        self.handler = IPFSSearchHandler(self)
+        self.channel.registerObject('ipfssearch', self.handler)
+        self.setWebChannel(self.channel)
 
         self.app = QApplication.instance()
 
-        self.url = QUrl('qrc:/')
-        self.handler = handler
         self.template = tmplMain
-        self.templateHits = tmplHits
         self.ipfsConnParams = ipfsConnParams
-        self.noStatTimeout = 12
         ensure(self.render())
 
     def javaScriptConsoleMessage(self, level, message, lineNumber, sourceId):
-        log.info(
+        log.debug(
             'JS: level: {0}, source: {1}, line: {2}, message: {3}'.format(
                 level,
                 sourceId,
@@ -235,29 +183,20 @@ class SearchResultsPage(BaseSearchPage):
     async def render(self):
         html = await renderTemplate(self.template,
                                     ipfsConnParams=self.ipfsConnParams)
-        self.setHtml(html, baseUrl=QUrl('qrc:/'))
+        self.setHtml(html)
 
 
 class IPFSSearchHandler(QObject):
-    ready = pyqtSignal()
-
-    resultsReceived = pyqtSignal(ipfssearch.IPFSSearchResults, bool)
-
     resultReady = pyqtSignal(str, QVariant)
-
-    objectReady = pyqtSignal(str)
     objectStatAvailable = pyqtSignal(str, dict, dict)
-    objectStatUnavailable = pyqtSignal(str)
 
     filtersChanged = pyqtSignal()
     clear = pyqtSignal()
     resetForm = pyqtSignal()
-    vPageChanged = pyqtSignal(int)
     vPageStatus = pyqtSignal(int, int)
 
     searchTimeout = pyqtSignal(int)
     searchError = pyqtSignal()
-    searchCancelled = pyqtSignal()
     searchStarted = pyqtSignal(str)
     searchComplete = pyqtSignal()
 
@@ -265,8 +204,6 @@ class IPFSSearchHandler(QObject):
         super().__init__(parent)
 
         self.app = QApplication.instance()
-        self.analyzer = ResourceAnalyzer(self)
-        self.noStatTimeout = 8
 
         self.vPageCurrent = 0
         self.pagesPerVpage = 2
@@ -285,7 +222,6 @@ class IPFSSearchHandler(QObject):
     @vPageCurrent.setter
     def vPageCurrent(self, page):
         self._vPageCurrent = page
-        self.vPageChanged.emit(self.vPageCurrent)
 
     def setSearchWidget(self, widget):
         self.searchW = widget
@@ -293,9 +229,6 @@ class IPFSSearchHandler(QObject):
     def reload(self):
         self.vPageCurrent = 0
         self.filtersChanged.emit()
-
-    def init(self):
-        self.vPageCurrent = 0
 
     def formReset(self):
         self.resetForm.emit()
@@ -314,6 +247,7 @@ class IPFSSearchHandler(QObject):
 
             for task in self._tasks:
                 task.cancel()
+                self._tasks.remove(task)
         except Exception:
             log.debug('Failed to cancel search tasks')
 
@@ -354,22 +288,9 @@ class IPFSSearchHandler(QObject):
         self.vPageCurrent += 1
         self.spawnSearchTask()
 
-    @ipfsOp
-    async def fetch(self, op, path):
-        import tempfile
-        try:
-            data = await asyncio.wait_for(
-                op.client.cat(path), 5)
-        except BaseException:
-            pass
-        else:
-            file = tempfile.NamedTemporaryFile(delete=False)
-            file.write(data)
-            self.objectReady.emit(file.name)
-
     @pyqtSlot(str)
     def openLink(self, path):
-        ensure(self.app.resourceOpener.open(path))
+        ensure(self.app.resourceOpener.open(path, openingFrom='ipfssearch'))
 
     @pyqtSlot(str)
     def clipboardInput(self, path):
@@ -460,7 +381,7 @@ class IPFSSearchHandler(QObject):
         cid = hit['hash']
         path = joinIpfs(cid)
 
-        stat = await ipfsop.objStatCtxUpdate(path, timeout=self.noStatTimeout)
+        mType, stat = await self.app.rscAnalyzer(path)
         if stat:
             self.objectStatAvailable.emit(cid, stat, hit)
 
@@ -508,7 +429,6 @@ class IPFSSearchHandler(QObject):
             self.searchTimeout.emit(timeout)
             return
         except asyncio.CancelledError:
-            self.searchCancelled.emit()
             return
         except Exception as e:
             log.debug(
@@ -522,7 +442,6 @@ class IPFSSearchHandler(QObject):
 
 
 class IPFSSearchView(QWidget):
-    resultsReceived = pyqtSignal(ipfssearch.IPFSSearchResults, bool)
     titleNeedUpdate = pyqtSignal(str)
 
     def __init__(self, searchQuery='', parent=None):
@@ -536,24 +455,20 @@ class IPFSSearchView(QWidget):
 
         # Templates
         self.resultsTemplate = self.app.getJinjaTemplate('ipfssearch.html')
-        self.hitsTemplate = self.app.getJinjaTemplate('ipfssearch-hits.html')
         self.loadingTemplate = self.app.getJinjaTemplate(
             'ipfssearch-loading.html')
 
         self.browser = QWebEngineView(parent=self)
         self.layout().addWidget(self.browser)
 
-        self.resultsPage, self.handler, self.channel = \
-            self.app.mainWindow.ipfsSearchPageFactory.getPage()
+        self.resultsPage = self.app.mainWindow.ipfsSearchPageFactory.getPage()
         self.resultsPage.setParent(self)
 
-        self.handler.searchStarted.connect(
+        self.resultsPage.handler.searchStarted.connect(
             lambda query: self.titleNeedUpdate.emit(query))
 
         self.browser.setPage(self.resultsPage)
         self.browser.setFocus(Qt.OtherFocusReason)
-
-        self.handler.init()
 
 
 class IPFSSearchTab(GalacteekTab):
@@ -564,10 +479,3 @@ class IPFSSearchTab(GalacteekTab):
         self.view.titleNeedUpdate.connect(
             lambda text: self.setTabName(iIpfsSearchText(text[0:12])))
         self.addToLayout(self.view)
-
-    def onClose(self):
-        self.view.handler.cleanup()
-        self.view.handler.formReset()
-        self.view.resultsPage.used = False
-        del self.view
-        return True

@@ -93,10 +93,17 @@ class WebsiteAddPostDialog(QDialog):
         if len(title) == 0 or len(self.contents) == 0:
             return messageBox('Please provide a title and post body')
 
-        self.done(1)
+        self.setEnabled(False)
         ensure(self.blogPost(title, self.contents))
 
     @ipfsOp
     async def blogPost(self, ipfsop, title, body):
         profile = ipfsop.ctx.currentProfile
-        await profile.userWebsite.blogPost(title, body)
+
+        try:
+            await profile.userWebsite.blogPost(title, body)
+        except Exception as err:
+            messageBox(str(err))
+            self.setEnabled(True)
+        else:
+            self.done(1)

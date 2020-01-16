@@ -3,6 +3,7 @@ from .objects import GObject
 from .objects import pyqtSignal
 
 
+from galacteek import AsyncSignal
 from galacteek.ipfs.dag import EvolvingDAG
 
 
@@ -12,3 +13,9 @@ class DAGSignalsTower(GObject):
 
 class URLSchemesTower(GObject):
     qMappingsChanged = pyqtSignal()
+
+
+class DIDTower:
+    didServiceOpenRequest = AsyncSignal(str, str, dict)
+    didServiceObjectOpenRequest = AsyncSignal(
+        str, str, str, _id='didObjectOpen')

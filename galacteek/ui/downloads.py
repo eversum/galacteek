@@ -126,6 +126,6 @@ class DownloadsManager(QObject):
             logUser.debug('Saved webpage to {}'.format(cid))
 
             if curProfile and cid:
-                curProfile.webPageSaved.emit(entry, title)
+                await curProfile.webPageSaved.emit(entry, title)
 
             self.app.systemTrayMessage('Downloads', iPageSaved(title))

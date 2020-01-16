@@ -5,9 +5,14 @@ from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 from datetime import datetime
 
-from galacteek.core import isoformat
-from galacteek.core.jtraverse import traverseParser
 from galacteek import log
+from galacteek.core import isoformat
+from galacteek.core import utcDatetimeIso
+from galacteek.core.iphandle import ipHandleRe
+from galacteek.core.jtraverse import traverseParser
+from galacteek.ipfs.cidhelpers import ipfsCid32Re
+from galacteek.ipfs.cidhelpers import stripIpfs
+from galacteek.did import ipidIdentRe
 
 
 class Encoder(json.JSONEncoder):
@@ -47,6 +52,9 @@ class PubsubMessage(collections.UserDict):
         else:
             return True
 
+    def jsonAttr(self, path):
+        return self.parser.traverse(path)
+
     def valid(self):
         return self.validSchema()
 
@@ -85,6 +93,7 @@ class MarksBroadcastMessage(PubsubMessage):
     def make(peerid, ipfsmarks):
         msg = MarksBroadcastMessage({
             'msgtype': MarksBroadcastMessage.TYPE,
+            'date': utcDatetimeIso(),
             'msg': {
                 'peerid': peerid,
                 'ipfsmarks': ipfsmarks
@@ -94,11 +103,11 @@ class MarksBroadcastMessage(PubsubMessage):
 
     @property
     def peer(self):
-        return self.parser.traverse('msg.peerid')
+        return self.jsonAttr('msg.peerid')
 
     @property
     def marks(self):
-        return self.parser.traverse('msg.ipfsmarks')
+        return self.jsonAttr('msg.ipfsmarks')
 
 
 class PeerIdentMessageV1(PubsubMessage):
@@ -208,23 +217,23 @@ class PeerIdentMessageV1(PubsubMessage):
 
     @property
     def peer(self):
-        return self.parser.traverse('msg.peerid')
+        return self.jsonAttr('msg.peerid')
 
     @property
     def username(self):
-        return self.parser.traverse('msg.userinfo.username')
+        return self.jsonAttr('msg.userinfo.username')
 
     @property
     def lastname(self):
-        return self.parser.traverse('msg.userinfo.lastname')
+        return self.jsonAttr('msg.userinfo.lastname')
 
     @property
     def country(self):
-        return self.parser.traverse('msg.userinfo.country.name')
+        return self.jsonAttr('msg.userinfo.country.name')
 
     @property
     def city(self):
-        return self.parser.traverse('msg.userinfo.city')
+        return self.jsonAttr('msg.userinfo.city')
 
     @property
     def location(self):
@@ -240,27 +249,27 @@ class PeerIdentMessageV1(PubsubMessage):
 
     @property
     def dateCreated(self):
-        return self.parser.traverse('msg.userinfo.date.created')
+        return self.jsonAttr('msg.userinfo.date.created')
 
     @property
     def dagCid(self):
-        return self.parser.traverse('msg.user.publicdag.cid')
+        return self.jsonAttr('msg.user.publicdag.cid')
 
     @property
     def dagIpns(self):
-        return self.parser.traverse('msg.user.publicdag.ipns')
+        return self.jsonAttr('msg.user.publicdag.ipns')
 
     @property
     def mainPagePath(self):
-        return self.parser.traverse('msg.user.mainpage')
+        return self.jsonAttr('msg.user.mainpage')
 
     @property
     def userInfoObjCid(self):
-        return self.parser.traverse('msg.userinfoobjref')
+        return self.jsonAttr('msg.userinfoobjref')
 
     @property
     def rsaPubKeyPem(self):
-        return self.parser.traverse('msg.userinfo.crypto.rsa.pubkeypem')
+        return self.jsonAttr('msg.userinfo.crypto.rsa.pubkeypem')
 
     @property
     def msgdata(self):
@@ -360,6 +369,7 @@ class PeerIdentMessageV2(PubsubMessage):
              orbitCfgMaps):
         msg = PeerIdentMessageV2({
             'msgtype': PeerIdentMessageV2.TYPE,
+            'date': utcDatetimeIso(),
             'version': 2,
             'msg': {
                 'peerid': peerId,
@@ -379,23 +389,23 @@ class PeerIdentMessageV2(PubsubMessage):
 
     @property
     def peer(self):
-        return self.parser.traverse('msg.peerid')
+        return self.jsonAttr('msg.peerid')
 
     @property
     def username(self):
-        return self.parser.traverse('msg.userinfo.username')
+        return self.jsonAttr('msg.userinfo.username')
 
     @property
     def lastname(self):
-        return self.parser.traverse('msg.userinfo.lastname')
+        return self.jsonAttr('msg.userinfo.lastname')
 
     @property
     def country(self):
-        return self.parser.traverse('msg.userinfo.country.name')
+        return self.jsonAttr('msg.userinfo.country.name')
 
     @property
     def city(self):
-        return self.parser.traverse('msg.userinfo.city')
+        return self.jsonAttr('msg.userinfo.city')
 
     @property
     def location(self):
@@ -411,34 +421,217 @@ class PeerIdentMessageV2(PubsubMessage):
 
     @property
     def dateCreated(self):
-        return self.parser.traverse('msg.userinfo.date.created')
+        return self.jsonAttr('msg.userinfo.date.created')
 
     @property
     def dagCid(self):
-        return self.parser.traverse('msg.user.publicdag.cid')
+        return self.jsonAttr('msg.user.publicdag.cid')
 
     @property
     def dagIpns(self):
-        return self.parser.traverse('msg.user.publicdag.ipns')
+        return self.jsonAttr('msg.user.publicdag.ipns')
 
     @property
     def mainPagePath(self):
-        return self.parser.traverse('msg.user.mainpage')
+        return self.jsonAttr('msg.user.mainpage')
 
     @property
     def userInfoObjCid(self):
-        return self.parser.traverse('msg.userinfoobjref')
+        return self.jsonAttr('msg.userinfoobjref')
 
     @property
     def rsaPubKeyPem(self):
-        return self.parser.traverse('msg.userinfo.crypto.rsa.pubkeypem')
+        return self.jsonAttr('msg.userinfo.crypto.rsa.pubkeypem')
 
     @property
     def msgdata(self):
         return self.data['msg']
 
     def valid(self):
-        return self.validSchema(schema=PeerIdentMessageV1.schema)
+        return self.validSchema(schema=PeerIdentMessageV2.schema)
+
+
+class PeerIdentMessageV3(PubsubMessage):
+    TYPE = 'peerident.v3'
+
+    schema = {
+        "title": "Peer ident",
+        "description": "Peer identification message, V3",
+        "type": "object",
+        "properties": {
+            "msgtype": {
+                "type": "string",
+                "pattern": "^{0}$".format(TYPE)
+            },
+            "msg": {
+                "type": "object",
+                "properties": {
+                    "peerid": {"type": "string"},
+                    "user": {
+                        "type": "object",
+                        "properties": {
+                            "identity": {
+                                "type": "object",
+                                "properties": {
+                                    "vplanet": {
+                                        "type": "string"
+                                    },
+                                    "iphandle": {
+                                        "type": "string",
+                                        "pattern": ipHandleRe.pattern
+                                    },
+                                    "persondid": {
+                                        "type": "string",
+                                        "pattern": ipidIdentRe.pattern
+                                    },
+                                    "iphandleqrpngcid": {
+                                        "type": "string",
+                                        "pattern": ipfsCid32Re.pattern
+                                    },
+                                    "orgs": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "pattern": ipidIdentRe.pattern
+                                        }
+                                    }
+                                },
+                                "required": [
+                                    "vplanet",
+                                    "iphandle",
+                                    "iphandleqrpngcid",
+                                    "persondid"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "identity"
+                        ],
+                    }
+                },
+                "required": ["peerid"]
+            },
+        },
+    }
+
+    @staticmethod
+    async def make(peerId, userDagCid, userDagIpns, userInfo,
+                   personDid, personDidCurCid,
+                   p2pServices=None):
+        p2pServices = p2pServices if p2pServices else []
+        qrPngNodeCid = stripIpfs(
+            await userInfo.identityResolve('iphandleqr/png')
+        )
+
+        msg = PeerIdentMessageV3({
+            'msgtype': PeerIdentMessageV3.TYPE,
+            'date': utcDatetimeIso(),
+            'msg': {
+                'peerid': peerId,
+                'user': {
+                    'identity': {
+                        'vplanet': userInfo.vplanet,
+                        'iphandle': userInfo.iphandle,
+                        'iphandleqrpngcid': qrPngNodeCid,
+                        'persondid': userInfo.personDid,
+                        'persondidcurrentcid': personDidCurCid,
+                        'orgs': []
+                    },
+                    'p2pservices': p2pServices
+                }
+            }
+        })
+        return msg
+
+    @property
+    def peer(self):
+        return self.jsonAttr('msg.peerid')
+
+    @property
+    def iphandle(self):
+        return self.jsonAttr('msg.user.identity.iphandle')
+
+    @property
+    def iphandleqrpngcid(self):
+        return self.jsonAttr('msg.user.identity.iphandleqrpngcid')
+
+    @property
+    def vplanet(self):
+        return self.jsonAttr('msg.user.identity.vplanet')
+
+    @property
+    def personDid(self):
+        return self.jsonAttr('msg.user.identity.persondid')
+
+    @property
+    def personDidCurCid(self):
+        return self.jsonAttr('msg.user.identity.persondidcurrentcid')
+
+    def dateMessage(self):
+        return self.jsonAttr('date')
+
+    @property
+    def msgdata(self):
+        return self.data['msg']
+
+    def valid(self):
+        return self.validSchema(schema=PeerIdentMessageV3.schema)
+
+
+class PeerIpHandleChosen(PubsubMessage):
+    TYPE = 'peeriphandlechange'
+
+    schema = {
+        "title": "Peer IP name",
+        "description": "Peer IP name",
+        "type": "object",
+        "properties": {
+            "msgtype": {
+                "type": "string",
+                "pattern": "^{0}$".format(TYPE)
+            },
+            "msg": {
+                "type": "object",
+                "properties": {
+                    "peerid": {"type": "string"},
+                    "iphandle": {
+                        "type": "string",
+                        "pattern": ipHandleRe.pattern
+                    },
+                    "iphandleqrpngcid": {"type": "string"}
+                },
+                "required": [
+                    "iphandle",
+                    "iphandleqrpngcid"
+                ]
+            }
+        }
+    }
+
+    @staticmethod
+    def make(peerId, ipHandle: str,
+             ipHandleQrCid: str,
+             ipHandleQrPngCid: str):
+
+        msg = PeerIpHandleChosen({
+            'msgtype': PeerIpHandleChosen.TYPE,
+            'date': utcDatetimeIso(),
+            'msg': {
+                'peerid': peerId,
+                'iphandle': ipHandle,
+                'iphandleqrrawcid': ipHandleQrCid,
+                'iphandleqrpngcid': ipHandleQrPngCid
+            }
+        })
+        return msg
+
+    @property
+    def peer(self):
+        return self.jsonAttr('msg.peerid')
+
+    @property
+    def iphandle(self):
+        return self.jsonAttr('msg.iphandle')
 
 
 class PeerLogoutMessage(PubsubMessage):
@@ -470,7 +663,7 @@ class PeerLogoutMessage(PubsubMessage):
 
     @property
     def peer(self):
-        return self.parser.traverse('msg.peerid')
+        return self.jsonAttr('msg.peerid')
 
     def valid(self):
         return self.validSchema(schema=PeerLogoutMessage.schema)
@@ -531,23 +724,23 @@ class ChatRoomMessage(PubsubMessage):
 
     @property
     def message(self):
-        return self.parser.traverse('msg.message')
+        return self.jsonAttr('msg.message')
 
     @property
     def sender(self):
-        return self.parser.traverse('msg.sender')
+        return self.jsonAttr('msg.sender')
 
     @property
     def channel(self):
-        return self.parser.traverse('msg.channel')
+        return self.jsonAttr('msg.channel')
 
     @property
     def date(self):
-        return self.parser.traverse('msg.date')
+        return self.jsonAttr('msg.date')
 
     @property
     def level(self):
-        return self.parser.traverse('msg.level')
+        return self.jsonAttr('msg.level')
 
     @property
     def links(self):

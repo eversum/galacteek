@@ -17,18 +17,11 @@
    <item>
     <layout class="QVBoxLayout" name="verticalLayout">
      <item>
-      <layout class="QHBoxLayout" name="horizontalLayout_3">
+      <layout class="QHBoxLayout" name="hLayoutTop">
        <item>
         <widget class="QLabel" name="label">
          <property name="text">
-          <string>Peers registered</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="peersCountLabel">
-         <property name="text">
-          <string/>
+          <string>Right-click/double-click on a peer to discover IP services</string>
          </property>
         </widget>
        </item>
@@ -45,30 +38,10 @@
          </property>
         </spacer>
        </item>
-       <item>
-        <widget class="QLabel" name="label_2">
-         <property name="text">
-          <string>Search</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLineEdit" name="search">
-         <property name="maximumSize">
-          <size>
-           <width>250</width>
-           <height>16777215</height>
-          </size>
-         </property>
-         <property name="maxLength">
-          <number>128</number>
-         </property>
-        </widget>
-       </item>
       </layout>
      </item>
      <item>
-      <widget class="QTreeView" name="tree"/>
+      <widget class="QTreeView" name="peersMgrView"/>
      </item>
     </layout>
    </item>

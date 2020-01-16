@@ -14,6 +14,9 @@ if [ "$TRAVIS_OS_NAME" = "linux" ]; then
 	wget https://dist.ipfs.io/go-ipfs/v0.4.22/go-ipfs_v0.4.22_linux-amd64.tar.gz
 	tar -C $HOME -xzvf go-ipfs_v0.4.22_linux-amd64.tar.gz
 
+	wget https://github.com/wasmerio/wasmer/releases/download/0.12.0/wasmer-linux-amd64.tar.gz
+	tar -C $HOME -xzvf wasmer-linux-amd64.tar.gz
+
 	export DISPLAY=":99.0"
 	/sbin/start-stop-daemon --start --quiet --pidfile /tmp/custom_xvfb_99.pid --make-pidfile --background --exec /usr/bin/Xvfb -- :99 -screen 0 1920x1200x24 -ac +extension GLX +render -noreset
 	sleep 3

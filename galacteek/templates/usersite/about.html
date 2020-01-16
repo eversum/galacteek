@@ -3,7 +3,11 @@
 {% block body %}
 
 <div>
-    <h2>{{ profile.userInfo.username }}</h2>
+{% if profile.userInfo.spaceHandle.valid %}
+    <h2>{{ profile.userInfo.spaceHandle.short }}</h2>
+{% else %}
+    <h2>No valid IP handle assigned yet</h2>
+{% endif %}
     <div>
         <p>
         <a href="{{ site_ipns_url(siteIpns, 'media/images/avatar') }}">

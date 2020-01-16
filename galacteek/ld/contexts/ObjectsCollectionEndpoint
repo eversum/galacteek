@@ -1,0 +1,13 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "type": "@type",
+
+    "dc": "http://purl.org/dc/terms/",
+    "collection": "ipschema://galacteek.ld.contexts/ObjectsCollectionEndpoint#",
+
+    "created": {"@id": "dc:created", "@type": "xsd:dateTime"},
+    "name": {"@id": "collection:name", "@type": "xsd:string"},
+    "objects": {"@id": "collection:objects", "@type": "@id", "@container": "@set"}
+  }
+}

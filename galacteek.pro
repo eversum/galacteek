@@ -6,6 +6,7 @@ SOURCES = galacteek/application.py \
 	galacteek/ui/colors.py \
 	galacteek/ui/dag.py \
 	galacteek/ui/dialogs.py \
+	galacteek/ui/dids.py \
 	galacteek/ui/downloads.py \
 	galacteek/ui/feeds.py \
 	galacteek/ui/files.py \

@@ -1,0 +1,14 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "type": "@type",
+    "id": "@id",
+
+    "ipfsObject": "ipschema://galacteek.ld.contexts/IpfsObject#",
+
+    "objectPath": {"@id": "ipfsObject:path", "@type": "xsd:string"},
+    "objectName": {"@id": "ipfsObject:name", "@type": "xsd:string"},
+    "objectDescription": {"@id": "ipfsObject:descr", "@type": "xsd:string"},
+    "objectTags": {"@id": "ipfsObject:tags", "@type": "@id", "@container": "@set"}
+  }
+}

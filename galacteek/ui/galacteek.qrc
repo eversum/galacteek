@@ -1,5 +1,13 @@
 <RCC>
   <qresource>
+    <file>../../share/icons/blocks-cluster.png</file>
+    <file>../../share/icons/helmet.png</file>
+    <file>../../share/icons/ipservice.png</file>
+    <file>../../share/icons/planets/mercury.png</file>
+    <file>../../share/icons/planets/jupiter.png</file>
+    <file>../../share/icons/planets/earth.png</file>
+    <file>../../share/icons/planets/mars.png</file>
+    <file>../../share/icons/planets/neptune.png</file>
     <file>../../share/icons/galacteek-incandescent.png</file>
     <file>../../share/clips/funky-cube-1.gif</file>
     <file>../../share/clips/rotating-cube-redflash-140-6fps.gif</file>
@@ -60,6 +68,7 @@
     <file>../../share/icons/mimetypes/image-x-generic.png</file>
     <file>../../share/icons/mimetypes/inode-directory.png</file>
     <file>../../share/icons/mimetypes/application-pdf.png</file>
+    <file>../../share/icons/mimetypes/application-wasm.png</file>
     <file>../../share/icons/mimetypes/text-plain.png</file>
     <file>../../share/icons/mimetypes/text-x-adasrc.png</file>
     <file>../../share/icons/mimetypes/text-x-authors.png</file>
@@ -128,7 +137,6 @@
     <file>../../share/icons/galacteek.png</file>
     <file>../../share/icons/hashmark-black.png</file>
     <file>../../share/icons/peers.png</file>
-    <file>../../share/icons/profile-user.png</file>
     <file>../../share/icons/ipfs-cube-64.png</file>
     <file>../../share/icons/unknown-file.png</file>
     <file>../../share/icons/expand.png</file>
@@ -179,6 +187,10 @@
     <file>../../share/icons/add-file.png</file>
   </qresource>
   <qresource>
+    <file>../../share/icons/planets/pluto.png</file>
+    <file>../../share/icons/planets/saturn.png</file>
+    <file>../../share/icons/planets/uranus.png</file>
+    <file>../../share/icons/planets/venus.png</file>
     <file>../../share/icons/ipfs-qrcode.png</file>
     <file>../../share/translations/galacteek_en.ts</file>
     <file>../../share/translations/galacteek_en.qm</file>

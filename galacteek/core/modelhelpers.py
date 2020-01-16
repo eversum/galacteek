@@ -4,8 +4,10 @@ import re
 
 from PyQt5.QtGui import QStandardItem
 from PyQt5.QtCore import QModelIndex
+from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QObject
 from PyQt5.QtCore import pyqtSignal
+
 
 """ Helper functions to operate on QT item models """
 
@@ -39,7 +41,7 @@ def modelWalk(model, parent=QModelIndex(), search=None,
             index = model.index(row, col, parent)
             if not index:
                 continue
-            data = model.data(index)
+            data = model.data(index, Qt.EditRole)
             if search:
                 if search == str(data):
                     if delete:
@@ -92,7 +94,7 @@ async def modelWalkAsync(model, parent=QModelIndex(), search=None,
             index = model.index(row, col, parent)
             if not index:
                 continue
-            data = model.data(index)
+            data = model.data(index, Qt.EditRole)
             if search:
                 if search == data:
                     if delete:

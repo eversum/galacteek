@@ -5,9 +5,11 @@
 # You need to run "make dists" before running the script
 #
 
+COMMIT_SHORT=$(echo $TRAVIS_COMMIT|cut -c 1-8)
+
 MINICONDA_DIST="Miniconda3-4.6.14-Linux-x86_64.sh"
-GOIPFS_TGZ="go-ipfs_v0.4.21_linux-amd64.tar.gz"
-GOIPFS_DISTURL="https://dist.ipfs.io/go-ipfs/v0.4.21/${GOIPFS_TGZ}"
+GOIPFS_TGZ="go-ipfs_v0.4.22_linux-amd64.tar.gz"
+GOIPFS_DISTURL="https://dist.ipfs.io/go-ipfs/v0.4.22/${GOIPFS_TGZ}"
 
 if [ $# -lt 1 ]; then
     G_VERSION=$(grep '__version__' ../galacteek/__init__.py|sed -e "s/__version__\s=\s'\(.*\)'$/\1/")
@@ -15,6 +17,16 @@ else
     G_VERSION=$1
 fi
 
+if [ "$TRAVIS_BRANCH" != "master" ]; then
+    echo "Short commit ID: ${COMMIT_SHORT}"
+    APPIMAGE_DEST="Galacteek-${COMMIT_SHORT}-x86_64.AppImage"
+    APPIMAGE_WASMER_DEST="Galacteek-wasmer-${COMMIT_SHORT}-x86_64.AppImage"
+else
+    APPIMAGE_DEST="Galacteek-${G_VERSION}-x86_64.AppImage"
+    APPIMAGE_WASMER_DEST="Galacteek-wasmer-${G_VERSION}-x86_64.AppImage"
+fi
+
+echo "Travis commit: ${TRAVIS_COMMIT}"
 echo "Building AppImage for version: ${G_VERSION}"
 
 if ! [ -e $MINICONDA_DIST ]; then
@@ -53,8 +65,13 @@ else
     echo "Miniconda found, continuing"
 fi
 
+export PATH="$APPDIR/usr/bin:$PATH"
+
 # Enter the venv
 . "$APPDIR"/usr/bin/activate
+
+# Install necessary conda packages
+conda install -y -c conda-forge libxkbcommon
 
 # Install the wheel from local dists
 
@@ -69,6 +86,8 @@ cp ../galacteek.appdata.xml $APPDIR/usr/share/metainfo
 cp ../share/icons/galacteek.png $APPDIR
 cp ../share/icons/galacteek.png $APPDIR/usr/share/icons/hicolor/512x512/apps
 cp /tmp/go-ipfs/ipfs $APPDIR/usr/bin
+find /usr/lib -iname 'libzbar.so*' -exec cp -av {} $APPDIR/usr/lib \;
+find /usr/lib -iname 'libjpeg.so*' -exec cp -av {} $APPDIR/usr/lib \;
 
 # Remove unnecessary stuff
 pushd "$APPDIR"/usr
@@ -127,4 +146,8 @@ wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appima
 chmod +x appimagetool*.AppImage
 
 echo "AppDir successfully created, running appimagetool"
-ARCH=x86_64 ./appimagetool-x86_64.AppImage -n $APPDIR Galacteek-${G_VERSION}-x86_64.AppImage
+ARCH=x86_64 ./appimagetool-x86_64.AppImage -n $APPDIR $APPIMAGE_DEST
+
+cp $HOME/bin/wasmer $APPDIR/usr/bin
+echo "AppDir successfully created, running appimagetool (wasmer image)"
+ARCH=x86_64 ./appimagetool-x86_64.AppImage -n $APPDIR $APPIMAGE_WASMER_DEST

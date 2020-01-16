@@ -4,18 +4,24 @@
 {% macro render_blog_post(post, from_index=false) %}
   <div class="blog-post">
   {% if from_index %}
-    <h2>
-        <a href="blog/{{ post.postname }}/view">{{ post.title }}</a>
+    <h2 class="blog-title">
+     <a href="{{ post.postname }}/view">{{ post.title }}</a>
     </h2>
+
+    <p class="blog-meta">
+      written by <b>{{ post.author }}</b>
+      at {{ post.date_published|dtclean }}
+    </p>
   {% else %}
-    <h2>{{ post.title }}</h2>
+    <h2 class="blog-title">{{ post.title }}</h2>
+
+    <p class="blog-meta">
+    written by <b>{{ post.author }}</b> at {{ post.date_published|dtclean }}
+    </p>
   {% endif %}
-  <p class="blog-meta">
-  written by <a href="about.html"><b>{{ post.author }}</b></a>
-  on {{ post.date_published|dtclean }}
-  </p>
-      <div class="blog-post-body">
-          {{ post.body|markdown }}
-      </div>
+
+    <div class="blog-post-body">
+        {{ post.body|markdown }}
+    </div>
   </div>
 {% endmacro %}

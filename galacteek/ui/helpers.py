@@ -59,6 +59,10 @@ def getMimeIcon(mType):
     return app.mimeTypeIcons.get(mType)
 
 
+def getPlanetIcon(planet):
+    return getIcon('planets/{}'.format(planet))
+
+
 def preloadMimeIcons():
     icons = {}
     mIconsDir = QDir(':/share/icons/mimetypes')
@@ -311,10 +315,11 @@ def inputText(title='', label='', parent=None):
         return text
 
 
-def inputTextLong(title='', label='', text='', parent=None):
+def inputTextLong(title='', label='', text='', inputMethod=None,
+                  parent=None):
     text, ok = QInputDialog.getText(
         parent, title, label, QLineEdit.Normal,
-        text, Qt.Dialog, Qt.ImhNone)
+        text, Qt.Dialog, inputMethod)
     if ok:
         return text
 

@@ -26,6 +26,7 @@ from PyQt5.QtWebEngineWidgets import QWebEnginePage
 
 from PyQt5.QtCore import QRect
 from PyQt5.QtCore import QEvent
+from PyQt5.QtCore import QFileInfo
 from PyQt5.QtCore import QRegExp
 from PyQt5.QtCore import QTimer
 from PyQt5.QtCore import pyqtSignal
@@ -157,6 +158,30 @@ class URLDragAndDropProcessor:
                 self.ipfsObjectDropped.emit(path)
 
         event.acceptProposedAction()
+
+    @ipfsOp
+    async def importDroppedFileFromUrl(self, ipfsop, url,
+                                       maxFileSize=2 * 1024 * 1024):
+        try:
+            path = url.toLocalFile()
+            fileInfo = QFileInfo(path)
+
+            if fileInfo.isFile():
+                file = QFile(path)
+
+                if file.open(QIODevice.ReadOnly):
+                    size = file.size()
+
+                    if size and size < maxFileSize:
+                        entry = await ipfsop.addPath(path)
+                        file.close()
+
+                        if entry:
+                            return entry
+
+                    file.close()
+        except Exception:
+            pass
 
 
 class CheckableToolButton(QToolButton):

@@ -110,5 +110,10 @@ class IpfsRSAAgent:
             self.debug('decryptMfsJson failed for {0}, '
                        'IPFS error was {1}'.format(path, err.message))
 
+    @ipfsOp
+    async def pssSign(self, op, message):
+        return await self.rsaExec.pssSign(
+            message, await self.__rsaReadPrivateKey())
+
     async def __rsaReadPrivateKey(self):
         return await asyncReadFile(self.privKeyPath)

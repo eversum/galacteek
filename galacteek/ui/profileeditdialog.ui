@@ -17,7 +17,7 @@
    <item>
     <layout class="QVBoxLayout" name="verticalLayout">
      <item>
-      <widget class="QTabWidget" name="tabWidget">
+      <widget class="QTabWidget" name="pEditTabWidget">
        <property name="currentIndex">
         <number>0</number>
        </property>
@@ -26,42 +26,22 @@
          <string>User information</string>
         </attribute>
         <layout class="QGridLayout" name="gridLayout_2">
-         <item row="6" column="0">
-          <widget class="QLabel" name="label_4">
+         <item row="4" column="0">
+          <widget class="QLabel" name="label_5">
            <property name="text">
-            <string>Email</string>
+            <string>DID (IPID)</string>
            </property>
           </widget>
          </item>
          <item row="2" column="1">
-          <widget class="QLineEdit" name="username">
-           <property name="maxLength">
-            <number>128</number>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QLabel" name="label">
+          <widget class="QLabel" name="labelInfo">
            <property name="text">
-            <string>Username</string>
+            <string/>
            </property>
           </widget>
          </item>
          <item row="4" column="1">
-          <widget class="QLineEdit" name="firstname">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="maxLength">
-            <number>64</number>
-           </property>
-          </widget>
-         </item>
-         <item row="13" column="1">
-          <widget class="QLabel" name="profileCryptoId">
+          <widget class="QLabel" name="profileDid">
            <property name="text">
             <string/>
            </property>
@@ -70,76 +50,58 @@
            </property>
           </widget>
          </item>
-         <item row="7" column="0">
+         <item row="6" column="0">
           <widget class="QLabel" name="label_6">
            <property name="text">
-            <string>Organization</string>
+            <string>Virtual Planet</string>
            </property>
           </widget>
          </item>
-         <item row="4" column="0">
-          <widget class="QLabel" name="label_2">
+         <item row="3" column="1">
+          <widget class="QLabel" name="ipHandle">
            <property name="text">
-            <string>First name</string>
+            <string/>
+           </property>
+           <property name="textInteractionFlags">
+            <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
            </property>
           </widget>
          </item>
-         <item row="8" column="0">
-          <widget class="QLabel" name="label_8">
-           <property name="text">
-            <string>City</string>
-           </property>
-          </widget>
-         </item>
-         <item row="11" column="1">
+         <item row="9" column="1">
           <spacer name="verticalSpacer">
            <property name="orientation">
             <enum>Qt::Vertical</enum>
            </property>
            <property name="sizeType">
-            <enum>QSizePolicy::MinimumExpanding</enum>
+            <enum>QSizePolicy::Maximum</enum>
            </property>
            <property name="sizeHint" stdset="0">
             <size>
              <width>20</width>
-             <height>20</height>
+             <height>40</height>
             </size>
            </property>
           </spacer>
          </item>
-         <item row="5" column="0">
-          <widget class="QLabel" name="label_3">
-           <property name="text">
-            <string>Last name</string>
+         <item row="7" column="1">
+          <widget class="QLineEdit" name="username">
+           <property name="maxLength">
+            <number>16</number>
+           </property>
+           <property name="clearButtonEnabled">
+            <bool>false</bool>
            </property>
           </widget>
          </item>
-         <item row="13" column="0">
-          <widget class="QLabel" name="label_5">
+         <item row="7" column="0">
+          <widget class="QLabel" name="label">
            <property name="text">
-            <string>Current cryptographic identifier</string>
+            <string>Username</string>
            </property>
           </widget>
          </item>
          <item row="5" column="1">
-          <widget class="QLineEdit" name="lastname">
-           <property name="maxLength">
-            <number>128</number>
-           </property>
-          </widget>
-         </item>
-         <item row="1" column="1">
-          <widget class="QLabel" name="labelWarning">
-           <property name="text">
-            <string>Only the username is strictly required</string>
-           </property>
-           <property name="wordWrap">
-            <bool>true</bool>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="1">
-          <spacer name="verticalSpacer_3">
+          <spacer name="verticalSpacer_4">
            <property name="orientation">
             <enum>Qt::Vertical</enum>
            </property>
@@ -154,42 +116,15 @@
            </property>
           </spacer>
          </item>
-         <item row="10" column="0">
-          <widget class="QLabel" name="label_7">
-           <property name="text">
-            <string>Country</string>
-           </property>
-          </widget>
-         </item>
-         <item row="10" column="1">
-          <widget class="QComboBox" name="countryBox"/>
-         </item>
          <item row="6" column="1">
-          <widget class="QLineEdit" name="email">
-           <property name="maxLength">
-            <number>128</number>
-           </property>
-          </widget>
+          <widget class="QComboBox" name="vPlanet"/>
          </item>
-         <item row="7" column="1">
-          <widget class="QLineEdit" name="org">
-           <property name="maxLength">
-            <number>128</number>
-           </property>
-          </widget>
-         </item>
-         <item row="8" column="1">
-          <widget class="QLineEdit" name="city"/>
-         </item>
-         <item row="9" column="0">
-          <widget class="QLabel" name="label_9">
+         <item row="3" column="0">
+          <widget class="QLabel" name="label_4">
            <property name="text">
-            <string>Gender</string>
+            <string>Your IP handle</string>
            </property>
           </widget>
-         </item>
-         <item row="9" column="1">
-          <widget class="QComboBox" name="gender"/>
          </item>
         </layout>
        </widget>
@@ -230,7 +165,7 @@
            <item>
             <widget class="QPushButton" name="changeIconButton">
              <property name="text">
-              <string>Change Icon</string>
+              <string>Change avatar</string>
              </property>
             </widget>
            </item>
@@ -238,28 +173,81 @@
          </item>
         </layout>
        </widget>
-       <widget class="QWidget" name="tab_3">
-        <attribute name="title">
-         <string>Bio</string>
-        </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_6">
-         <item>
-          <layout class="QVBoxLayout" name="verticalLayout_5">
-           <item>
-            <widget class="QTextEdit" name="bio"/>
-           </item>
-          </layout>
-         </item>
-        </layout>
-       </widget>
       </widget>
+     </item>
+     <item>
+      <layout class="QHBoxLayout" name="horizontalLayout_3">
+       <item>
+        <spacer name="horizontalSpacer_2">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Maximum</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>120</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QLabel" name="labelWarning">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <layout class="QHBoxLayout" name="horizontalLayout">
+       <item>
+        <widget class="QToolButton" name="lockButton">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="icon">
+          <iconset resource="galacteek.qrc">
+           <normaloff>:/share/icons/kgpg.png</normaloff>:/share/icons/kgpg.png</iconset>
+         </property>
+         <property name="iconSize">
+          <size>
+           <width>32</width>
+           <height>32</height>
+          </size>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="horizontalSpacer">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
      </item>
     </layout>
    </item>
    <item>
     <layout class="QHBoxLayout" name="horizontalLayout_2">
      <item>
-      <widget class="QPushButton" name="cancelButton">
+      <widget class="QPushButton" name="closeButton">
        <property name="maximumSize">
         <size>
          <width>120</width>
@@ -267,7 +255,7 @@
         </size>
        </property>
        <property name="text">
-        <string>Cancel</string>
+        <string>Close</string>
        </property>
       </widget>
      </item>
@@ -294,6 +282,8 @@
    </item>
   </layout>
  </widget>
- <resources/>
+ <resources>
+  <include location="galacteek.qrc"/>
+ </resources>
  <connections/>
 </ui>

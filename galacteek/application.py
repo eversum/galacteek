@@ -45,6 +45,7 @@ from galacteek.core.db import SqliteDatabase
 from galacteek.core.models.atomfeeds import AtomFeedsModel
 from galacteek.core.signaltowers import DAGSignalsTower
 from galacteek.core.signaltowers import URLSchemesTower
+from galacteek.core.signaltowers import DIDTower
 from galacteek.core.analyzer import ResourceAnalyzer
 
 from galacteek.core.schemes import SCHEME_MANUAL
@@ -55,12 +56,16 @@ from galacteek.core.schemes import NativeIPFSSchemeHandler
 from galacteek.core.schemes import ObjectProxySchemeHandler
 from galacteek.core.schemes import MultiObjectHostSchemeHandler
 
+from galacteek.space.solarsystem import SolarSystem
+
 from galacteek.ipfs import asyncipfsd, cidhelpers
 from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.wrappers import *
 from galacteek.ipfs.feeds import FeedFollower
+
+from galacteek.did.ipid import IPIDManager
 
 from galacteek.ipdapps.loader import DappsRegistry
 
@@ -326,6 +331,10 @@ class GalacteekApplication(QApplication):
         return self._ipfsDataLocation
 
     @property
+    def nsCacheLocation(self):
+        return self._nsCacheLocation
+
+    @property
     def orbitDataLocation(self):
         return self._orbitDataLocation
 
@@ -372,6 +381,7 @@ class GalacteekApplication(QApplication):
         self.systemTray.setContextMenu(systemTrayMenu)
 
     def initMisc(self):
+        self.solarSystem = SolarSystem()
         self.mimeTypeIcons = preloadMimeIcons()
         self.multihashDb = IPFSObjectMetadataDatabase(self._mHashDbLocation,
                                                       loop=self.loop)
@@ -393,6 +403,10 @@ class GalacteekApplication(QApplication):
         self.tempDir = QTemporaryDir()
         self.tempDirWeb = self.tempDirCreate(
             self.tempDir.path(), 'webdownloads')
+
+        self.ipidManager = IPIDManager(
+            resolveTimeout=self.settingsMgr.ipidIpnsTimeout
+        )
 
     def tempDirCreate(self, basedir, name=None):
         tmpdir = QDir(basedir)
@@ -476,6 +490,7 @@ class GalacteekApplication(QApplication):
                                  pubsubHashmarksExch=hExchEnabled)
         await self.ipfsCtx.profilesInit()
         await self.qSchemeHandler.start()
+        await self.importLdContexts()
 
         self.feedFollower = FeedFollower(self, self.marksLocal)
         self.feedFollowerTask = self.task(self.feedFollower.process)
@@ -508,6 +523,37 @@ class GalacteekApplication(QApplication):
                 result=replResult))
 
     @ipfsOp
+    async def importLdContexts(self, ipfsop):
+        """
+        Import the JSON-LD contexts and associate the
+        directory entry with the 'galacteek.ld.contexts' key
+        """
+
+        contextsPath = ipfsop.ldContextsRootPath()
+
+        if not os.path.isdir(contextsPath):
+            log.debug('LD contexts not found')
+            return
+
+        entry = await ipfsop.addPath(
+            contextsPath, recursive=True,
+            hidden=False
+        )
+        if entry:
+            ldKeyName = 'galacteek.ld.contexts'
+            log.debug('LD contexts sitting at: {}'.format(
+                entry.get('Hash')))
+            await ipfsop.keyGen(
+                ldKeyName,
+                checkExisting=True
+            )
+            ensure(ipfsop.publish(
+                entry['Hash'],
+                key=ldKeyName,
+                allow_offline=True
+            ))
+
+    @ipfsOp
     async def importQtResource(self, op, path):
         rscFile = QFile(':{0}'.format(path))
 
@@ -535,7 +581,8 @@ class GalacteekApplication(QApplication):
     def getIpfsOperator(self):
         """ Returns a new IPFSOperator with the currently active IPFS client"""
         return IPFSOperator(self.ipfsClient, ctx=self.ipfsCtx,
-                            debug=self.debugEnabled)
+                            debug=self.debugEnabled,
+                            nsCachePath=self.nsCacheLocation)
 
     def getIpfsConnectionParams(self):
         mgr = self.settingsMgr
@@ -568,6 +615,7 @@ class GalacteekApplication(QApplication):
         self.ipfsClient = client
         self.ipfsCtx.ipfsClient = client
         self.ipfsOpMain = self.getIpfsOperator()
+        self.ipfsOpMain.ipidManager = self.ipidManager
 
         IPFSOpRegistry.regDefault(self.ipfsOpMain)
 
@@ -595,7 +643,8 @@ class GalacteekApplication(QApplication):
     def setupMainObjects(self):
         self.towers = {
             'dags': DAGSignalsTower(self),
-            'schemes': URLSchemesTower(self)
+            'schemes': URLSchemesTower(self),
+            'did': DIDTower()
         }
 
         self.rscAnalyzer = ResourceAnalyzer(parent=self)
@@ -638,13 +687,13 @@ class GalacteekApplication(QApplication):
             qtDataLocation, self._appProfile)
 
         self._ipfsBinLocation = os.path.join(qtDataLocation, 'ipfs-bin')
-        self._ipfsDataLocation = os.path.join(self._dataLocation, 'ipfs')
-        self._orbitDataLocation = os.path.join(self._dataLocation, 'orbitdb')
-        self._mHashDbLocation = os.path.join(self._dataLocation, 'mhashmetadb')
-        self._sqliteDbLocation = os.path.join(self._dataLocation, 'db.sqlite')
-        self.marksDataLocation = os.path.join(self._dataLocation, 'marks')
-        self.uiDataLocation = os.path.join(self._dataLocation, 'ui')
-        self.cryptoDataLocation = os.path.join(self._dataLocation, 'crypto')
+        self._ipfsDataLocation = os.path.join(self.dataLocation, 'ipfs')
+        self._orbitDataLocation = os.path.join(self.dataLocation, 'orbitdb')
+        self._mHashDbLocation = os.path.join(self.dataLocation, 'mhashmetadb')
+        self._sqliteDbLocation = os.path.join(self.dataLocation, 'db.sqlite')
+        self.marksDataLocation = os.path.join(self.dataLocation, 'marks')
+        self.uiDataLocation = os.path.join(self.dataLocation, 'ui')
+        self.cryptoDataLocation = os.path.join(self.dataLocation, 'crypto')
         self.gpgDataLocation = os.path.join(self.cryptoDataLocation, 'gpg')
         self.localMarksFileLocation = os.path.join(self.marksDataLocation,
                                                    'ipfsmarks.local.json')
@@ -652,6 +701,8 @@ class GalacteekApplication(QApplication):
                                                      'ipfsmarks.network.json')
         self.pinStatusLocation = os.path.join(self.dataLocation,
                                               'pinstatus.json')
+        self._nsCacheLocation = os.path.join(self.dataLocation,
+                                             'nscache.json')
 
         qtConfigLocation = QStandardPaths.writableLocation(
             QStandardPaths.ConfigLocation)
@@ -712,6 +763,7 @@ class GalacteekApplication(QApplication):
             routingMode=sManager.getSetting(section, CFG_KEY_ROUTINGMODE),
             pubsubRouter=sManager.getSetting(section, CFG_KEY_PUBSUB_ROUTER),
             namesysPubsub=sManager.isTrue(section, CFG_KEY_NAMESYS_PUBSUB),
+            pubsubSigning=sManager.isTrue(section, CFG_KEY_PUBSUB_USESIGNING),
             nice=sManager.getInt(section, CFG_KEY_NICE),
             pubsubEnable=pubsubEnabled, corsEnable=corsEnabled,
             migrateRepo=migrateRepo, debug=self.debug,

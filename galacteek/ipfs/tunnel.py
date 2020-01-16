@@ -150,6 +150,9 @@ class P2PListener(object):
                 continue
         return None
 
+    async def stop(self):
+        await self.close()
+
     async def close(self):
         protocol = await self.protocol()
         log.debug('P2PListener: closing {0}'.format(protocol))
@@ -173,17 +176,30 @@ class P2PTunnelsManager:
     @ipfsOp
     async def streams(self, op):
         try:
-            resp = await op.client.p2p.stream_ls(headers=True)
-            return resp['Streams']
-        except aioipfs.APIError:
+            resp = await op.client.p2p.ls(headers=True)
+            return resp['Listeners']
+        except aioipfs.APIError as err:
+            log.debug('Error listing streams: {}'.format(err.message))
+            return None
+        except Exception as err:
+            log.debug('Error listing streams: {}'.format(str(err)))
             return None
 
     @ipfsOp
     async def streamsForProtocol(self, op, protocol):
         allStreams = await self.streams()
         if allStreams:
+            log.debug('streamsForProtocol: {!r}'.format(allStreams))
             return [stream for stream in allStreams if
                     stream['Protocol'] == protocol]
+
+    @ipfsOp
+    async def streamsForListenAddr(self, op, addr):
+        allStreams = await self.streams()
+        if allStreams:
+            log.debug('streamsForListenAddr: {!r}'.format(allStreams))
+            return [stream for stream in allStreams if
+                    stream['ListenAddress'] == addr]
 
 
 @ipfsOpFn
@@ -197,7 +213,8 @@ async def dial(ipfsop, peer, protocol, address):
         log.debug('Stream dial {0} {1}'.format(peer, proto))
         try:
             resp = await op.client.p2p.dial(proto, address, peer)
-        except aioipfs.APIError:
+        except aioipfs.APIError as err:
+            log.debug(err.message)
             return
 
         if resp:

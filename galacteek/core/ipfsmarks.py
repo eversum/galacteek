@@ -264,7 +264,7 @@ class MultihashPyramid(collections.UserDict):
     @staticmethod
     def make(name, description='Pyramid', icon=None, ipnskey=None,
              internal=False, publishdelay=0, comment=None, flags=0,
-             allowoffline=True, lifetime='48h',
+             allowoffline=False, lifetime='48h',
              maxhashmarks=pyramidMaxHmarksDefault,
              type=None):
         datecreated = utcDatetimeIso()

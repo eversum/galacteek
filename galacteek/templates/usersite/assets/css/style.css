@@ -1,5 +1,5 @@
 body {
-    background-color: #b7bbc8;
+    background-color: #DAD6B5;
 }
 
 header nav ul {
@@ -26,13 +26,23 @@ header nav ul li a {
     -webkit-box-shadow: 0 8px 6px -6px black;
     -moz-box-shadow: 0 8px 6px -6px black;
     box-shadow: 0 8px 6px -6px black;
-    background-color: #e0e0d1;
+    background-color: #DAD9EB;
     padding: 10px;
     margin-bottom: 20px;
+    margin-top: 20px;
+    margin-right: 50px;
 }
 
-.blog-post-content {
-    margin-left: 10px;
+h2.blog-title {
+    color: #2457A2;
+}
+
+a {
+    color: #2457A2;
+}
+
+.blog-post-body {
+    margin-left: 20px;
 }
 
 .blog-posts {

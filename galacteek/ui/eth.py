@@ -67,8 +67,8 @@ class EthereumStatusButton(QToolButton):
 
         self.setEnabled(False)
         self.app = QApplication.instance()
-        self.app.ethereum.ethConnected.connect(self.onEthStatus)
-        self.app.ethereum.ethNewBlock.connect(self.onNewBlock)
+        self.app.ethereum.ethConnected.connectTo(self.onEthStatus)
+        self.app.ethereum.ethNewBlock.connectTo(self.onNewBlock)
 
         self.view = DWebView(parent=None)
         self.view.show()
@@ -96,7 +96,7 @@ class EthereumStatusButton(QToolButton):
 
             self.statusTab = None
 
-    def onEthStatus(self, connected):
+    async def onEthStatus(self, connected):
         self.setEnabled(connected)
         if connected:
             self.updateToolTip()
@@ -108,7 +108,7 @@ class EthereumStatusButton(QToolButton):
             self.app.ethereum.params.rpcUrl,
             self.lBlockHash if self.lBlockHash else iUnknown()))
 
-    def onNewBlock(self, blockHash):
+    async def onNewBlock(self, blockHash):
         self.lBlockHash = blockHash
         self.updateToolTip()
         self.page1.handler.newBlock.emit(blockHash)

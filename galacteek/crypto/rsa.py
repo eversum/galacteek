@@ -99,7 +99,7 @@ class RSAExecutor(object):
             log.debug('Type error on decryption, check privkey')
             return None
 
-    async def pssSign(self, message, privRsaKey):
+    async def pssSign(self, message: bytes, privRsaKey):
         return await self._exec(self._pssSign, message, privRsaKey)
 
     def _pssSign(self, message, privRsaKey):
@@ -113,11 +113,16 @@ class RSAExecutor(object):
             out = BytesIO()
             out.write(signature)
             return out.getvalue()
-        except Exception:
-            log.debug('Exception on PSS sign')
+        except Exception as err:
+            log.debug('Exception on PSS sign: {}'.format(str(err)))
             return None
 
-    def _pssVerif(self, message, signature, rsaPubKey):
+    async def pssVerif(self, message: bytes, signature: bytes,
+                       rsaPubKey):
+        return await self._exec(self._pssVerif, message, signature,
+                                rsaPubKey)
+
+    def _pssVerif(self, message: bytes, signature, rsaPubKey):
         try:
             key = RSA.import_key(rsaPubKey)
             hashObj = SHA256.new(message)
@@ -129,6 +134,6 @@ class RSAExecutor(object):
                 log.debug('The PSS signature is not authentic')
                 return False
 
-        except Exception:
-            log.debug('Exception on PSS verification')
+        except Exception as err:
+            log.debug('Exception on PSS verification: {}'.format(str(err)))
             return None

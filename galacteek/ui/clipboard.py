@@ -2,6 +2,7 @@ import functools
 import os.path
 import aioipfs
 import time
+import shutil
 
 from PyQt5.QtWidgets import QStackedWidget
 from PyQt5.QtWidgets import QToolButton
@@ -444,7 +445,8 @@ class ClipboardManager(PopupToolButton):
             logUser.info('QR: encoding successfull!')
 
         if ipfsop.ctx.currentProfile:
-            ipfsop.ctx.currentProfile.qrImageEncoded.emit(encrypt, imgPath)
+            await ipfsop.ctx.currentProfile.qrImageEncoded.emit(
+                encrypt, imgPath)
 
 
 class ClipboardItemButton(PopupToolButton):
@@ -573,13 +575,16 @@ class ClipboardItemButton(PopupToolButton):
                                         self.item.ipfsPath.ipfsUrl)
 
     def onOpenWithProgram(self):
+        self.openWithProgram()
+
+    def openWithProgram(self, command=None):
         def onAccept(dlg):
             prgValue = dlg.textValue()
             if len(prgValue) in range(1, 512):
                 ensure(self.rscOpener.openWithExternal(
                     self.item.cid, prgValue))
 
-        runDialog(ChooseProgramDialog, accepted=onAccept)
+        runDialog(ChooseProgramDialog, cmd=command, accepted=onAccept)
 
     def onOpenWithDefaultApp(self):
         if self.item.cid:
@@ -763,9 +768,7 @@ class ClipboardItemButton(PopupToolButton):
             return
 
         try:
-            data = await ipfsop.waitFor(
-                ipfsop.client.cat(self.item.path), 12
-            )
+            data = await ipfsop.catObject(self.item.path)
 
             if data is None:
                 return
@@ -792,6 +795,15 @@ class ClipboardItemButton(PopupToolButton):
 
     def onOpen(self):
         if self.item:
+            if self.item.mimeType.isWasm and shutil.which('wasmer') and \
+                    self.app.system == 'Linux':
+                # Run with wasmer
+                log.debug('Opening WASM binary from object: {}'.format(
+                    self.item.ipfsPath))
+                return self.openWithProgram(
+                    'xterm -e "wasmer run %f --; '
+                    'echo WASM program exited with code $?; read e"')
+
             ensure(self.rscOpener.open(
                 self.item.ipfsPath,
                 mimeType=self.item.mimeType,

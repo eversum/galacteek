@@ -65,6 +65,8 @@ simplicity of the DAG API in IPFS.
 Just drag-and-drop images from the filemanager on the pyramid
 and they will be added to the image gallery.
 
+You can also drag-and-drop images from web pages.
+
 You can browse the gallery directly or through the IPNS address.
 
 From the pyramid's menu you can change the gallery's title,

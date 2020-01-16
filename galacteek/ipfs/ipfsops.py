@@ -1,3 +1,4 @@
+import time
 import io
 import os.path
 import os
@@ -5,16 +6,27 @@ import json
 import tempfile
 import uuid
 import aiofiles
+import pkg_resources
+
+from PyQt5.QtCore import QFile
 
 import async_timeout
 
 from galacteek.ipfs.cidhelpers import joinIpfs
+from galacteek.ipfs.cidhelpers import joinIpns
 from galacteek.ipfs.cidhelpers import stripIpfs
 from galacteek.ipfs.cidhelpers import cidConvertBase32
+from galacteek.ipfs.cidhelpers import IPFSPath
+from galacteek.ipfs.multi import multiAddrTcp4
 
 from galacteek.core.asynclib import async_enterable
+from galacteek.core import jsonSchemaValidate
+from galacteek.ld.ldloader import aioipfs_document_loader
+from galacteek.ld import asyncjsonld as jsonld
+
 from galacteek import log
 from galacteek import logUser
+from galacteek import AsyncSignal
 
 import aioipfs
 import asyncio
@@ -63,6 +75,75 @@ class IPFSOperatorOfflineContext(object):
         log.debug('IPFS Operator in online mode')
 
 
+class TunnelDialerContext(object):
+    def __init__(self, operator, peerId, proto, maddr):
+        self.operator = operator
+        self.peerId = peerId
+        self.protocol = proto
+        self.maddr = maddr
+
+    @property
+    def maddrPort(self):
+        if self.maddr:
+            return multiAddrTcp4(self.maddr)[1]
+
+    @property
+    def maddrHost(self):
+        if self.maddr:
+            return multiAddrTcp4(self.maddr)[0]
+
+    async def __aenter__(self):
+        self.operator.debug('Tunnel dialer: {0} {1} {2}: enter'.format(
+            self.protocol, self.maddrHost, self.maddrPort))
+        return self
+
+    async def __aexit__(self, *args):
+        self.operator.debug('Tunnel dialer: {0} {1} {2}: aexit'.format(
+            self.protocol, self.maddrHost, self.maddrPort))
+        manager = self.operator.ctx.p2p.tunnelsMgr
+
+        streams = await manager.streamsForListenAddr(self.maddr)
+        if streams:
+            self.operator.debug(streams)
+            for stream in streams:
+                self.operator.debug('Tunnel dialer: closing {!r}'.format(
+                    stream))
+                await self.operator.client.p2p.listener_close(
+                    self.protocol,
+                    listen_address=self.maddr
+                )
+
+
+class LDOpsContext(object):
+    def __init__(self, operator, ldDocLoader):
+        self.operator = operator
+        self.ldLoader = ldDocLoader
+
+    async def __aenter__(self):
+        return self
+
+    async def expandDocument(self, doc):
+        """
+        Perform a JSON-LD expansion on a JSON document
+        """
+
+        try:
+            expanded = await jsonld.expand(
+                await self.operator.ldInline(doc), {
+                    'documentLoader': self.ldLoader
+                }
+            )
+
+            if isinstance(expanded, list) and len(expanded) > 0:
+                return expanded[0]
+        except Exception as err:
+            self.operator.debug('Error expanding document: {}'.format(
+                str(err)))
+
+    async def __aexit__(self, *args):
+        pass
+
+
 class APIErrorDecoder:
     def __init__(self, exc):
         self.exc = exc
@@ -78,26 +159,63 @@ class APIErrorDecoder:
         return self.exc.message == 'unknown node type'
 
 
+ppRe = r"^(/ipns/[\w<>\:\;\,\?\!\*\%\&\=\@\$\~/\s\.\-_\\\'\(\)\+]{1,1024}$)"
+nsCacheSchema = {
+    "title": "NS cache",
+    "description": "NS cache schema",
+    "type": "object",
+    "patternProperties": {
+        ppRe: {
+            "properties": {
+                "resolved": {
+                    "type": "string"
+                },
+                "resolvedLast": {
+                    "type": "integer"
+                },
+                "cacheOrigin": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}
+
+
 class IPFSOperator(object):
     """
     IPFS operator, for your daily operations!
     """
 
     def __init__(self, client, ctx=None, rsaAgent=None, debug=False,
-                 offline=False):
+                 offline=False, nsCachePath=None):
+        self._lock = asyncio.Lock()
         self._id = uuid.uuid1()
         self._cache = {}
         self._offline = offline
         self._rsaAgent = rsaAgent
-
-        self.client = client
+        self._nsCache = {}
+        self._nsCachePath = nsCachePath
+        self._noPeers = True
+        self._ldDocLoader = None
         self.debugInfo = debug
+        self.client = client
+
         self.ctx = ctx
 
         self.filesChroot = None
         self._commands = None
 
         self.evReady = asyncio.Event()
+        self.gotNoPeers = AsyncSignal()
+        self.gotPeers = AsyncSignal(int)
+
+        if self._nsCachePath:
+            self.nsCacheLoad()
+
+    @property
+    def nsCache(self):
+        return self._nsCache
 
     @property
     def offline(self):
@@ -106,6 +224,14 @@ class IPFSOperator(object):
     @offline.setter
     def offline(self, v):
         self._offline = v
+
+    @property
+    def noPeers(self):
+        return self._noPeers
+
+    @noPeers.setter
+    def noPeers(self, v):
+        self._noPeers = v
 
     @property
     def uid(self):
@@ -281,10 +407,12 @@ class IPFSOperator(object):
         try:
             resp = await self.client.files.read(path)
         except aioipfs.APIError as err:
-            self.debug('filesReadJson error {}'.format(err.message))
+            self.debug('filesReadJson ({0}): error {1}'.format(
+                path, err.message))
             return None
         except Exception as err:
-            self.debug('filesReadJson unknown error {}'.format(str(err)))
+            self.debug('filesReadJson ({0}): unknown error {1}'.format(
+                path, str(err)))
             return None
         else:
             return json.loads(resp.decode())
@@ -347,9 +475,13 @@ class IPFSOperator(object):
             peers = await self.client.swarm.peers()
         except aioipfs.APIError:
             self.debug('Cannot fetch list of peers')
+            return []
+        except Exception:
+            return []
         else:
             if isDict(peers) and 'Peers' in peers:
-                return peers['Peers']
+                pList = peers['Peers']
+                return pList if isinstance(pList, list) else []
 
     async def nodeId(self):
         info = await self.client.core.id()
@@ -360,7 +492,12 @@ class IPFSOperator(object):
         keys = await self.keys()
         return [key['Name'] for key in keys]
 
-    async def keyGen(self, keyName, type='rsa', keySize=2048):
+    async def keyGen(self, keyName, type='rsa', keySize=2048,
+                     checkExisting=False):
+        if checkExisting is True:
+            if keyName in await self.keysNames():
+                return
+
         return await self.waitFor(
             self.client.key.gen(keyName,
                                 type=type, size=keySize), 30
@@ -392,22 +529,44 @@ class IPFSOperator(object):
             return False
         return True
 
-    async def publish(self, path, key='self', timeout=90,
-                      allow_offline=False, lifetime='24h',
-                      ttl=None):
+    async def publish(self, path, key='self', timeout=60 * 4,
+                      allow_offline=None, lifetime='24h',
+                      resolve=True,
+                      ttl=None, cache=None, cacheOrigin='unknown'):
+        usingCache = cache == 'always' or \
+            (cache == 'offline' and self.noPeers)
+        aOffline = allow_offline if isinstance(allow_offline, bool) else \
+            self.noPeers
         try:
-            return await self.waitFor(
+            if usingCache:
+                self.debug('Caching IPNS key: {key} (origin: {origin})'.format(
+                    key=key, origin=cacheOrigin))
+
+                await self.nsCacheSet(
+                    joinIpns(key), path, origin=cacheOrigin)
+
+            self.debug(
+                'Publishing {path} to {dst} '
+                '(cache: {cache}/{cacheOrigin}, allowoffline: {off})'.format(
+                    path=path, dst=key, off=aOffline,
+                    cache=cache, cacheOrigin=cacheOrigin)
+            )
+
+            result = await self.waitFor(
                 self.client.name.publish(
                     path, key=key,
-                    allow_offline=allow_offline,
+                    allow_offline=aOffline,
                     lifetime=lifetime,
-                    ttl=ttl
+                    ttl=ttl,
+                    resolve=resolve
                 ), timeout
             )
         except aioipfs.APIError as err:
             self.debug('Error publishing {path} to {key}: {msg}'.format(
                 path=path, key=key, msg=err.message))
             return None
+        else:
+            return result
 
     async def resolve(self, path, timeout=20, recursive=False):
         """
@@ -427,8 +586,78 @@ class IPFSOperator(object):
             if isDict(resolved):
                 return resolved.get('Path')
 
-    async def nameResolve(self, path, timeout=20, recursive=False):
+    async def noPeersFound(self):
+        self.noPeers = True
+        await self.gotNoPeers.emit()
+
+    async def peersCountStatus(self, peerCount):
+        self.debug('{c} peers found'.format(c=peerCount))
+        self.noPeers = False
+        await self.gotPeers.emit(peerCount)
+
+    def nsCacheLoad(self):
         try:
+            with open(self._nsCachePath, 'r') as fd:
+                cache = json.load(fd)
+
+            if not jsonSchemaValidate(cache, nsCacheSchema):
+                raise Exception('Invalid NS cache schema')
+        except Exception as e:
+            self.debug(str(e))
+        else:
+            self.debug('Loaded NS cache')
+            self._nsCache = cache
+
+    async def nsCacheSave(self):
+        if not self._nsCachePath:
+            return
+
+        with await self._lock:
+            async with aiofiles.open(self._nsCachePath, 'w+t') as fd:
+                await fd.write(json.dumps(self.nsCache))
+
+    def nsCacheGet(self, path, maxLifetime=60 * 10, knownOrigin=False):
+        entry = self.nsCache.get(path)
+
+        if isinstance(entry, dict):
+            rLast = entry['resolvedLast']
+
+            if knownOrigin is True and entry.get('cacheOrigin') == 'unknown':
+                return None
+
+            if not maxLifetime or (int(time.time()) - rLast) < maxLifetime:
+                return entry['resolved']
+
+    async def nsCacheSet(self, path, resolved, origin=None):
+        self._nsCache[path] = {
+            'resolved': resolved,
+            'resolvedLast': int(time.time()),
+            'cacheOrigin': origin
+        }
+        await self.nsCacheSave()
+
+    async def nameResolve(self, path, timeout=20, recursive=False,
+                          useCache='never',
+                          cache='never',
+                          maxCacheLifetime=60 * 10,
+                          cacheOrigin='unknown'):
+        usingCache = useCache == 'always' or \
+            (useCache == 'offline' and self.noPeers)
+        cache = cache == 'always' or (cache == 'offline' and self.noPeers)
+        try:
+            if usingCache:
+                # The NS cache is used only for IPIDs when offline
+
+                rPath = self.nsCacheGet(path, maxLifetime=maxCacheLifetime)
+
+                if rPath and IPFSPath(rPath).valid:
+                    self.debug(
+                        'nameResolve: Feeding entry from NS cache: {}'.format(
+                            rPath))
+                    return {
+                        'Path': rPath
+                    }
+
             resolved = await self.waitFor(
                 self.client.name.resolve(path, recursive=recursive),
                 timeout)
@@ -439,17 +668,49 @@ class IPFSOperator(object):
             self.debug('resolve error: {0}: {1}'.format(path, e.message))
             return None
         else:
+            if cache and resolved:
+                await self.nsCacheSet(
+                    path, resolved['Path'], origin=cacheOrigin)
+
             return resolved
 
-    async def nameResolveStream(self, path, count=3, timeout='20s'):
+    async def nameResolveStream(self, path, count=3,
+                                timeout=20,
+                                useCache='never',
+                                cache='never',
+                                recursive=True,
+                                maxCacheLifetime=60 * 10):
+        usingCache = useCache == 'always' or \
+            (useCache == 'offline' and self.noPeers)
+        cache = cache == 'always' or (cache == 'offline' and self.noPeers)
+        rTimeout = '{t}s'.format(t=timeout) if isinstance(timeout, int) else \
+            timeout
+
         try:
-            async for nentry in self.client.name.resolve_stream(
-                    name=path,
-                    recursive=True,
-                    stream=True,
-                    dht_record_count=count,
-                    dht_timeout=timeout):
-                yield nentry
+            gotFromCache = False
+            if usingCache:
+                # The NS cache is used only for IPIDs when offline
+
+                rPath = self.nsCacheGet(path, maxLifetime=maxCacheLifetime)
+
+                if rPath and IPFSPath(rPath).valid:
+                    self.debug(
+                        'nameResolve: Feeding entry from NS cache: {}'.format(
+                            rPath))
+                    yield {
+                        'Path': rPath
+                    }
+
+                    gotFromCache = True
+
+            if not gotFromCache:
+                async for nentry in self.client.name.resolve_stream(
+                        name=path,
+                        recursive=recursive,
+                        stream=True,
+                        dht_record_count=count,
+                        dht_timeout=rTimeout):
+                    yield nentry
         except asyncio.TimeoutError:
             self.debug('streamed resolve timeout for {0}'.format(path))
         except aioipfs.APIError as e:
@@ -500,17 +761,21 @@ class IPFSOperator(object):
 
     async def pin(self, path, recursive=False, timeout=3600):
         async def _pin(ppath, rec):
-            async for pinStatus in self.client.pin.add(
-                    ppath, recursive=rec):
-                self.debug('Pin status: {0} {1}'.format(
-                    ppath, pinStatus))
-                pins = pinStatus.get('Pins', None)
-                if pins is None:
-                    continue
-                if isinstance(pins, list) and ppath in pins:
-                    # Ya estamos
-                    return True
-            return False
+            try:
+                async for pinStatus in self.client.pin.add(
+                        ppath, recursive=rec):
+                    self.debug('Pin status: {0} {1}'.format(
+                        ppath, pinStatus))
+                    pins = pinStatus.get('Pins', None)
+                    if pins is None:
+                        continue
+                    if isinstance(pins, list) and ppath in pins:
+                        # Ya estamos
+                        return True
+                return False
+            except aioipfs.APIError as err:
+                self.debug('Pin error: {}'.format(err.message))
+                return False
         return await self.waitFor(_pin(path, recursive), timeout)
 
     async def unpin(self, obj):
@@ -564,6 +829,8 @@ class IPFSOperator(object):
                                       timeout)
         except Exception:
             return None
+        except aioipfs.APIError:
+            return None
         else:
             return stat
 
@@ -588,6 +855,9 @@ class IPFSOperator(object):
         """
 
         return await self.addPath(path, recursive=recursive, only_hash=True)
+
+    async def hashComputeString(self, s):
+        return await self.addString(s, only_hash=True)
 
     async def addPath(self, path, recursive=True, wrap=False,
                       callback=None, cidversion=1, offline=False,
@@ -676,6 +946,18 @@ class IPFSOperator(object):
             self.debug(err.message)
             return None
 
+    async def importQtResource(self, path):
+        rscFile = QFile(':{0}'.format(path))
+
+        try:
+            rscFile.open(QFile.ReadOnly)
+            data = rscFile.readAll().data()
+            entry = await self.addBytes(data)
+        except Exception as e:
+            self.debug('importQtResource: {}'.format(str(e)))
+        else:
+            return entry
+
     async def closestPeers(self):
         peers = []
         try:
@@ -698,17 +980,107 @@ class IPFSOperator(object):
             self.debug(err.message)
             return None
 
-    async def catObject(self, path, offset=None, length=None, timeout=30):
-        try:
-            data = await self.waitFor(
-                self.client.cat(path, offset=offset, length=length),
-                timeout
-            )
-        except aioipfs.APIError as err:
-            self.debug(err.message)
-            return None
-        else:
+    async def ldInline(self, dagData):
+        # In-line the JSON-LD contexts for JSON-LD usage
+
+        async def process(data):
+            if isinstance(data, dict):
+                for objKey, objValue in data.items():
+                    if objKey == '@context' and isinstance(objValue, dict):
+                        link = objValue.get('/')
+                        if not link:
+                            continue
+
+                        try:
+                            ctx = await self.client.cat(link)
+                            if ctx:
+                                data.update(json.loads(ctx.decode()))
+                        except Exception as err:
+                            self.debug('ldInline error: {}'.format(
+                                str(err)))
+                    else:
+                        await process(objValue)
+            elif isinstance(data, list):
+                for node in data:
+                    await process(node)
+
             return data
+
+        return await process(dagData)
+
+    def ldContextsRootPath(self):
+        return pkg_resources.resource_filename('galacteek.ld', 'contexts')
+
+    async def ldContext(self, cName: str, source=None,
+                        key=None):
+        specPath = os.path.join(
+            self.ldContextsRootPath(),
+            '{context}'.format(
+                context=cName
+            )
+        )
+
+        if not os.path.isfile(specPath):
+            return None
+
+        try:
+            with open(specPath, 'r') as fd:
+                data = fd.read()
+
+            entry = await self.addString(data)
+        except Exception as err:
+            self.debug(str(err))
+        else:
+            return self.ipld(entry)
+
+    async def ldContextJson(self, cName: str):
+        specPath = os.path.join(
+            self.ldContextsRootPath(),
+            '{context}'.format(
+                context=cName
+            )
+        )
+
+        if not os.path.isfile(specPath):
+            return None
+
+        try:
+            with open(specPath, 'r') as fd:
+                return json.load(fd)
+        except Exception as err:
+            self.debug(str(err))
+
+    def ipld(self, cid):
+        if isinstance(cid, str):
+            return {"/": cid}
+        elif isinstance(cid, dict) and 'Hash' in cid:
+            return {"/": cid['Hash']}
+
+    def objectPathMap(self, path):
+        ipfsPath = path if isinstance(path, IPFSPath) else \
+            IPFSPath(path, autoCidConv=True)
+
+        if ipfsPath.isIpns:
+            pSubPath = ipfsPath.subPath
+            cached = self.nsCacheGet(ipfsPath.root().objPath)
+
+            if cached:
+                if pSubPath:
+                    return IPFSPath(cached).child(pSubPath).objPath
+                else:
+                    return cached
+
+            return ipfsPath.objPath
+        else:
+            return ipfsPath.objPath
+
+    async def catObject(self, path, offset=None, length=None, timeout=30):
+        return await self.waitFor(
+            self.client.cat(
+                self.objectPathMap(path),
+                offset=offset, length=length
+            ), timeout
+        )
 
     async def dagPut(self, data, pin=False, offline=False):
         """
@@ -748,7 +1120,9 @@ class IPFSOperator(object):
         Get the DAG object referenced by the DAG path and returns a JSON object
         """
 
-        output = await self.waitFor(self.client.dag.get(dagPath), timeout)
+        output = await self.waitFor(
+            self.client.dag.get(self.objectPathMap(dagPath)), timeout)
+
         if output is not None:
             return json.loads(output)
         return None
@@ -779,6 +1153,8 @@ class IPFSOperator(object):
         :param int nproviders: max number of providers to look for
         """
         try:
+            self.debug('finding providers for: {}'.format(cid))
+
             async for prov in self.client.dht.findprovs(
                     cid, verbose=verbose,
                     numproviders=nproviders):
@@ -794,6 +1170,9 @@ class IPFSOperator(object):
         except aioipfs.APIError as err:
             self.debug('findProviders: {}'.format(str(err.message)))
             return False
+        except Exception as gerr:
+            self.debug('findProviders: unknown error: {}'.format(
+                str(gerr)))
 
     async def whoProvides(self, key, numproviders=20, timeout=20):
         """
@@ -878,12 +1257,17 @@ class IPFSOperator(object):
         """
 
         lowest = 0
-        async for time, success, text in self.pingWrapper(peer, count=count):
-            if lowest == 0 and time != 0 and success is True:
-                lowest = time
-            if time > 0 and time < lowest and success is True:
-                lowest = time
-        return lowest
+        try:
+            async for pTime, success, text in self.pingWrapper(
+                    peer, count=count):
+                if lowest == 0 and pTime != 0 and success is True:
+                    lowest = pTime
+                if pTime > 0 and pTime < lowest and success is True:
+                    lowest = pTime
+        except aioipfs.APIError:
+            return 0
+        else:
+            return lowest
 
     async def pingAvg(self, peer, count=3):
         """
@@ -895,9 +1279,14 @@ class IPFSOperator(object):
         """
 
         received = []
-        async for time, success, text in self.pingWrapper(peer, count=count):
-            if time != 0 and success is True:
-                received.append(time)
+
+        try:
+            async for pTime, success, text in self.pingWrapper(
+                    peer, count=count):
+                if pTime != 0 and success is True:
+                    received.append(pTime)
+        except aioipfs.APIError:
+            return 0
 
         if len(received) > 0:
             return float((sum(received) / len(received)) / 1000000)
@@ -942,6 +1331,54 @@ class IPFSOperator(object):
 
     async def hasP2PCommand(self):
         return await self.hasCommand('p2p')
+
+    @async_enterable
+    async def ldOps(self):
+        if not self._ldDocLoader:
+            self._ldDocLoader = await aioipfs_document_loader(self.client)
+
+        return LDOpsContext(
+            self,
+            self._ldDocLoader
+        )
+
+    @async_enterable
+    async def p2pDialer(self, peer, protocol, address=None, addressAuto=True):
+        from galacteek.core import unusedTcpPort
+        from galacteek.ipfs.tunnel import protocolFormat
+
+        if addressAuto is True and not address:
+            address = '/ip4/127.0.0.1/tcp/{}'.format(unusedTcpPort())
+
+        if await self.client.agent_version_post0418():
+            proto = protocolFormat(protocol)
+        else:
+            proto = protocol
+
+        log.debug('Stream dial {0} {1}'.format(peer, proto))
+        try:
+            peerAddr = joinIpfs(peer) if not peer.startswith('/ipfs/') else \
+                peer
+            resp = await self.client.p2p.dial(proto, address, peerAddr)
+        except aioipfs.APIError as err:
+            log.debug(err.message)
+            return TunnelDialerContext(self, peer, proto, None)
+        else:
+            log.debug('Stream dial {0} {1}: OK'.format(peer, proto))
+
+        if resp:
+            maddr = resp.get('Address', None)
+            if not maddr:
+                return TunnelDialerContext(self, peer, proto, None)
+
+            ipaddr, port = multiAddrTcp4(maddr)
+
+            if ipaddr is None or port == 0:
+                return TunnelDialerContext(self, peer, proto, None)
+
+            return TunnelDialerContext(self, peer, proto, maddr)
+        else:
+            return TunnelDialerContext(self, peer, proto, address)
 
 
 class IPFSOpRegistry:

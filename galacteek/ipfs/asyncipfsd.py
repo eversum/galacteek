@@ -8,6 +8,10 @@ import signal
 from galacteek import log
 
 
+def boolarg(arg):
+    return str(arg).lower()
+
+
 async def shell(arg):
     p = await asyncio.create_subprocess_shell((arg),
                                               stdin=asyncio.subprocess.PIPE,
@@ -128,7 +132,8 @@ class AsyncIPFSDaemon(object):
                  swarmLowWater=10, swarmHighWater=20, nice=20,
                  pubsubEnable=False, noBootstrap=False, corsEnable=True,
                  pubsubRouter='floodsub', namesysPubsub=False,
-                 p2pStreams=False, migrateRepo=False, routingMode='dht',
+                 pubsubSigning=False,
+                 p2pStreams=True, migrateRepo=False, routingMode='dht',
                  gwWritable=False, storageMax=20, debug=False, loop=None):
 
         self.loop = loop if loop else asyncio.get_event_loop()
@@ -146,6 +151,7 @@ class AsyncIPFSDaemon(object):
         self.namesysPubsub = namesysPubsub
         self.pubsubEnable = pubsubEnable
         self.pubsubRouter = pubsubRouter
+        self.pubsubSigning = pubsubSigning
         self.corsEnable = corsEnable
         self.p2pStreams = p2pStreams
         self.noBootstrap = noBootstrap
@@ -199,6 +205,9 @@ class AsyncIPFSDaemon(object):
         if self.pubsubRouter in ['floodsub', 'gossipsub']:
             await ipfsConfig(self.goIpfsPath, 'Pubsub.Router',
                              self.pubsubRouter)
+
+        await ipfsConfigJson(self.goIpfsPath, 'Pubsub.DisableSigning',
+                             boolarg(not self.pubsubSigning))
 
         await ipfsConfigJson(self.goIpfsPath,
                              'Swarm.DisableBandwidthMetrics', 'true')

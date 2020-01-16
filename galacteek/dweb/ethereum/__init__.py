@@ -10,15 +10,16 @@ from web3.auto import w3
 from ens import ENS
 
 from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import QObject
-from PyQt5.QtCore import pyqtSignal
 
 from galacteek import log
 from galacteek import logUser
 from galacteek import ensure
+from galacteek import AsyncSignal
 
 from .contract import ContractOperator
+from galacteek.smartcontracts import listContracts
 from galacteek.smartcontracts import getContractByName
+from galacteek.smartcontracts import getContractDeployments
 
 from requests.exceptions import ConnectionError
 
@@ -40,14 +41,12 @@ class DeployedContract:
         self.address = address
 
 
-class EthereumController(QObject):
-    ethConnected = pyqtSignal(bool)
-    ethNewBlock = pyqtSignal(str)
+class EthereumController:
+    ethConnected = AsyncSignal(bool)
+    ethNewBlock = AsyncSignal(str)
 
     def __init__(self, connParams, web3=None, loop=None,
                  executor=None, parent=None):
-        super().__init__(parent)
-
         self.app = QApplication.instance()
 
         self.loop = loop if loop else asyncio.get_event_loop()
@@ -68,6 +67,9 @@ class EthereumController(QObject):
     @property
     def params(self):
         return self._params
+
+    def changeParams(self, params):
+        self._params = params
 
     def getWeb3(self):
         try:
@@ -118,12 +120,13 @@ class EthereumController(QObject):
         if await self.connected():
             logUser.info('Ethereum: connected to {}'.format(
                 self.params.rpcUrl))
-            self.ethConnected.emit(True)
-            # self._watchTask = await self._e(self.watchTask)
+            await self.ethConnected.emit(True)
+
             self._watchTask = ensure(self._e(self.watchTask))
+            ensure(self.loadAutoDeploy())
             # await self.loadContracts()
         else:
-            self.ethConnected.emit(False)
+            await self.ethConnected.emit(False)
 
     async def latestBlock(self):
         return await self._e(self.web3.eth.getBlock, 'latest')
@@ -132,7 +135,7 @@ class EthereumController(QObject):
         return EthBlock(await self._e(self.web3.eth.getBlock, block))
 
     async def connected(self):
-        return await self._e(self.web3.isConnected)
+        return self.web3 and await self._e(self.web3.isConnected)
 
     async def ensAddress(self, name):
         return await self._e(self._ns.address, name)
@@ -153,9 +156,21 @@ class EthereumController(QObject):
     def eventLatestBlock(self, event):
         if isinstance(event, bytes):
             blockHex = w3.toHex(event)
-            self.ethNewBlock.emit(blockHex)
+            ensure(self.ethNewBlock.emit(blockHex))
 
-    async def loadContractFromAddress(self, address, abi):
+    async def loadAutoDeploy(self):
+        # Load contracts with autoload=True
+
+        for lContract in listContracts():
+            dList = getContractDeployments(lContract.name, autoload=True)
+
+            for depl in dList:
+                log.debug('Loading auto-deployment for contract {}'.format(
+                    lContract.name))
+                contract, cOperator = await self.loadLocalContractFromAddr(
+                    lContract.name, depl['address'])
+
+    async def loadContractFromAddress(self, address: str, abi):
         def load(addr, abi):
             contract = self.web3.eth.contract(
                 address=addr,
@@ -164,10 +179,32 @@ class EthereumController(QObject):
             return ContractOperator(self, contract)
         return await self._e(load, address, abi)
 
-    async def loadLocalContractFromAddr(self, contractName, address):
+    async def loadLocalContractFromDeployment(self, contractName: str):
+        if not await self.connected():
+            raise Exception('Not connected!')
+
         lContract = getContractByName(contractName)
         if not lContract:
             return
+
+        deployments = getContractDeployments(contractName)
+        if len(deployments) > 0:
+            depl = deployments.pop()
+            return await self.loadLocalContractFromAddr(
+                contractName,
+                depl['address']
+            )
+
+        return None, None
+
+    async def loadLocalContractFromAddr(self, contractName: str,
+                                        address: str):
+        if not await self.connected():
+            raise Exception('Not connected!')
+
+        lContract = getContractByName(contractName)
+        if not lContract:
+            return None, None
 
         def load(_lContract, address):
             # Blocking call
@@ -184,7 +221,14 @@ class EthereumController(QObject):
             if self._loadedContracts[contractName]['default'] is None:
                 self._loadedContracts[contractName]['default'] = operator
 
+            log.debug('Contract {0} loaded at {1}'.format(
+                contractName, address))
             return lContract, operator
         else:
             log.debug('Contract invalid: {}'.format(address))
             return None, None
+
+    def getDefaultLoadedOperator(self, contractName: str):
+        loaded = self._loadedContracts.get(contractName)
+        if loaded:
+            return loaded.get('default')

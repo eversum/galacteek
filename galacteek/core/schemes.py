@@ -453,17 +453,18 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
         else:
             return data.encode()
 
-    async def renderDirectory(self, request, client, path):
+    async def renderDirectory(self, request, ipfsop, path):
         ipfsPath = IPFSPath(path)
         indexPath = ipfsPath.child('index.html')
 
         try:
-            data = await client.cat(str(indexPath))
+            data = await ipfsop.catObject(str(indexPath))
         except aioipfs.APIError as exc:
             dec = APIErrorDecoder(exc)
 
             if dec.errNoSuchLink():
-                return await self.directoryListing(request, client, path)
+                return await self.directoryListing(
+                    request, ipfsop.client, path)
 
             return self.urlInvalid(request)
         else:
@@ -555,7 +556,7 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
 
     async def fetchFromPath(self, ipfsop, request, ipfsPath, uid, **kw):
         try:
-            data = await ipfsop.client.cat(ipfsPath.objPath)
+            data = await ipfsop.catObject(ipfsPath.objPath)
         except aioipfs.APIError as exc:
             await asyncio.sleep(0)
 
@@ -571,7 +572,7 @@ class NativeIPFSSchemeHandler(BaseURLSchemeHandler):
             if dec.errIsDirectory():
                 data = await self.renderDirectory(
                     request,
-                    ipfsop.client,
+                    ipfsop,
                     str(ipfsPath)
                 )
                 if data:
@@ -923,7 +924,7 @@ class MultiDAGProxySchemeHandler(NativeIPFSSchemeHandler):
 
         log.debug('Multi DAG proxy : Fetch-from-path {}'.format(ipfsPath))
         try:
-            data = await ipfsop.client.cat(ipfsPath.objPath)
+            data = await ipfsop.catObject(ipfsPath.objPath)
         except aioipfs.APIError as exc:
             await asyncio.sleep(0)
 
@@ -939,7 +940,7 @@ class MultiDAGProxySchemeHandler(NativeIPFSSchemeHandler):
             if dec.errIsDirectory():
                 data = await self.renderDirectory(
                     request,
-                    ipfsop.client,
+                    ipfsop,
                     str(ipfsPath)
                 )
                 if data:

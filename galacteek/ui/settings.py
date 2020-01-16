@@ -1,6 +1,9 @@
 from PyQt5.QtWidgets import QDialog
 
 from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QUrl
+
+from galacteek import ensure
 
 from . import ui_settings
 from ..appsettings import *
@@ -231,15 +234,31 @@ class SettingsDialog(QDialog):
         else:
             self.sManager.setFalse(section, CFG_KEY_ENABLED)
 
+        rpcUrl = QUrl(self.ui.ethRpcUrl.text())
+
+        if not rpcUrl.isValid() or not rpcUrl.scheme() in [
+                'http', 'https', 'wss'] or not rpcUrl.host():
+            return messageBox(
+                'Invalid Ethereum RPC URL (scheme should be http or wss)'
+            )
+
         self.setS(section, CFG_KEY_PROVIDERTYPE,
                   self.ui.ethProvType.currentText())
-        self.setS(section, CFG_KEY_RPCURL, self.ui.ethRpcUrl.text())
+        self.setS(section, CFG_KEY_RPCURL, rpcUrl.toString())
 
         self.app.urlHistory.historyConfigChanged.emit(
             self.sManager.urlHistoryEnabled)
 
         self.sManager.sync()
+        ensure(self.applySettings())
         self.done(1)
+
+    async def applySettings(self):
+        self.app.ethereum.changeParams(self.app.getEthParams())
+
+        if self.sManager.isTrue(CFG_SECTION_ETHEREUM, CFG_KEY_ENABLED):
+            if not await self.app.ethereum.connected():
+                await self.app.ethereum.start()
 
     def reject(self):
         self.done(0)

@@ -93,7 +93,7 @@ class ChatRoomWidget(GalacteekTab):
                 links.append(str(path))
 
         msg = ChatRoomMessage.make(
-            profile.userInfo.username,
+            profile.userInfo.spaceHandle.short,
             ChatRoomMessage.CHANNEL_GENERAL,
             msgText,
             links=links)

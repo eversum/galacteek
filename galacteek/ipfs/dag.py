@@ -14,6 +14,7 @@ from galacteek.ipfs.ipfsops import *  # noqa
 from galacteek.ipfs import pb
 from galacteek.core.asynclib import async_enterable
 from galacteek.core.jtraverse import traverseParser
+from galacteek.core import utcDatetimeIso
 
 
 class DAGObj:
@@ -99,8 +100,8 @@ class DAGOperations:
 
     @ipfsOp
     async def resolve(self, op, path=''):
-        return await op.dagResolve(
-            os.path.join(self.dagCid, path))
+        return await op.resolve(
+            os.path.join(self.dagCid, path), recursive=True)
 
     @async_generator
     async def walk(self, op, path='', maxObjSize=0, depth=1):
@@ -145,6 +146,20 @@ class DAGOperations:
                 )
         elif isinstance(data, str):
             await yield_((path, DAGObj(data)))
+
+    def mkLink(self, cid):
+        if isinstance(cid, str):
+            return {"/": cid}
+        elif isinstance(cid, dict) and 'Hash' in cid:
+            return {"/": cid['Hash']}
+
+    @ipfsOp
+    async def inline(self, ipfsop):
+        # In-line the JSON-LD contexts in the DAG for JSON-LD usage
+
+        return await ipfsop.ldInline(await self.get())
+
+    ipld = mkLink
 
 
 class DAGPortal(QObject, DAGOperations):
@@ -253,7 +268,8 @@ class EvolvingDAG(QObject, DAGOperations):
     keyCidLatest = 'cidlatest'
 
     def __init__(self, dagMetaMfsPath, dagMetaHistoryMax=12, offline=False,
-                 unpinOnUpdate=True, loop=None):
+                 unpinOnUpdate=True, autoPreviousNode=True,
+                 autoUpdateDates=False, loop=None):
         super().__init__()
 
         self.lock = asyncio.Lock()
@@ -268,6 +284,8 @@ class EvolvingDAG(QObject, DAGOperations):
         self._dagMetaMaxHistoryItems = dagMetaHistoryMax
         self._dagMetaMfsPath = dagMetaMfsPath
         self._unpinOnUpdate = unpinOnUpdate
+        self._autoPrevious = autoPreviousNode
+        self._autoUpdateDates = autoUpdateDates
         self.changed.connect(lambda: ensure(self.ipfsSave()))
 
     @property
@@ -319,12 +337,6 @@ class EvolvingDAG(QObject, DAGOperations):
     def updateDagSchema(self, dag):
         pass
 
-    def mkLink(self, cid):
-        if isinstance(cid, str):
-            return {"/": cid}
-        elif isinstance(cid, dict) and 'Hash' in cid:
-            return {"/": cid['Hash']}
-
     async def load(self):
         await self.loadDag()
 
@@ -374,6 +386,15 @@ class EvolvingDAG(QObject, DAGOperations):
             prevCid = self.dagCid
             history = self.dagMeta.setdefault('history', [])
             maxItems = self.dagMetaMaxHistoryItems
+
+            if prevCid and self._autoPrevious:
+                # Create a 'previous' IPLD link
+                self.dagRoot['previous'] = self.mkLink(prevCid)
+
+            if isinstance(self.dagRoot, dict) and self._autoUpdateDates:
+                # Update 'datemodified' if enabled
+                if 'datemodified' in self.dagRoot:
+                    self.dagRoot['datemodified'] = utcDatetimeIso()
 
             # We always PIN the latest DAG and do a pin update using the
             # previous item in the history
@@ -464,7 +485,7 @@ class EvolvingDAG(QObject, DAGOperations):
         Release the lock and save. The changed signal is emitted
         """
         self.lock.release()
-        self.loop.call_soon(self.changed.emit)
+        self.changed.emit()
 
     @async_enterable
     async def portal(self):

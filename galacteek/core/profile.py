@@ -1,10 +1,10 @@
 import os
 import os.path
-import uuid
 import asyncio
 import time
-from os import urandom
-from datetime import datetime
+import re
+import uuid
+import getpass
 
 import aiofiles
 
@@ -17,15 +17,21 @@ from PyQt5.QtWidgets import QAction
 from galacteek import log
 from galacteek import logUser
 from galacteek import ensure
+from galacteek import ensureLater
+from galacteek import AsyncSignal
 
-from galacteek.ipfs import ipfsOpFn
 from galacteek.ipfs.mutable import MutableIPFSJson, CipheredIPFSJson
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.encrypt import IpfsRSAAgent
 from galacteek.ipfs.pubsub import TOPIC_CHAT
 from galacteek.ipfs.pubsub.messages import ChatRoomMessage
+from galacteek.ipfs.dag import EvolvingDAG
 
-from galacteek.core import isoformat
+from galacteek.did import didIdentRe
+from galacteek.did.ipid import IPIdentifier
+
+from galacteek.core.iphandle import ipHandleGen
+from galacteek.core.iphandle import SpaceHandle
 from galacteek.core.asynclib import asyncReadFile
 from galacteek.core.orbitdb import OrbitConfigMap
 from galacteek.core.orbitdbcfg import defaultOrbitConfigMap
@@ -35,6 +41,13 @@ from galacteek.core.ipfsmarks import IPFSMarks
 
 from galacteek.core.userdag import UserDAG
 from galacteek.core.userdag import UserWebsite
+from galacteek.core import utcDatetimeIso
+
+from galacteek.crypto.qrcode import IPFSQrEncoder
+
+from galacteek.ipfs.cidhelpers import IPFSPath
+from galacteek.ipfs.cidhelpers import joinIpns
+from galacteek.ipfs.cidhelpers import joinIpfs
 
 from galacteek.dweb import render
 
@@ -57,172 +70,208 @@ class OrbitalProfileConfig(MutableIPFSJson):
         }
 
 
-class UserInfos(CipheredIPFSJson):
-    GENDER_MALE = 0
-    GENDER_FEMALE = 1
-    GENDER_UNSPECIFIED = -1
+class IPHandlesDAG(EvolvingDAG):
+    def initDag(self):
+        return {
+            'iphandles': []
+        }
 
-    usernameChanged = pyqtSignal()
-    changed = pyqtSignal()
+    async def register(self, ipHandle):
+        self.root['iphandles'].append(ipHandle)
+        self.changed.emit()
 
-    def initObj(self):
-        uid = str(uuid.uuid4())
+
+class UserProfileEDAG(EvolvingDAG):
+    IDENTFLAG_READONLY = 1 << 1
+
+    def initDag(self):
+        now = utcDatetimeIso()
 
         return {
-            'userinfo': {
-                'username': uid,
-                'firstname': '',
-                'lastname': '',
-                'altname': '',
-                'nickname': '',
-                'gender': -1,
-                'org': '',
-                'email': '',
-                'country': {
-                    'code': '',
-                    'name': '',
-                },
-                'city': '',
-                'birthdate': '',
-                'birthplace': '',
-                'occupation': '',
-                'telephone': '',
-                'langs': [],
-                'avatar': {
-                    'cid': '',
-                },
-                'bio': '',
-                'motto': '',
-                'crypto': {
-                    'rsa': {},
-                    'gpg': {},
-                },
-                'resources': [],
-                'peerid': '',
-                'date': {
-                    'created': isoformat(datetime.now()),
-                    'modified': isoformat(datetime.now()),
-                },
-                'uid': uid,
-                'locked': False,
-                'schemav': 1,
-            }
+            'identities': {},
+            'followingGlobal': {},
+            'currentIdentityUid': None,
+
+            'datecreated': now,
+            'datemodified': now
         }
 
     @property
-    def usernameSet(self):
-        return self.uid != self.username
-
-    @property
-    def uid(self):
-        return self.parser.traverse('userinfo.uid')
-
-    @property
-    def peerid(self):
-        return self.parser.traverse('userinfo.peerid')
-
-    @property
-    def avatarCid(self):
-        return self.parser.traverse('userinfo.avatar.cid')
-
-    @property
-    def bio(self):
-        return self.parser.traverse('userinfo.bio')
+    def curIdentity(self):
+        if self.root['currentIdentityUid']:
+            return self.root['identities'].get(
+                self.root['currentIdentityUid'])
 
     @property
     def username(self):
-        return self.parser.traverse('userinfo.username')
-
-    @property
-    def firstname(self):
-        return self.parser.traverse('userinfo.firstname')
-
-    @property
-    def lastname(self):
-        return self.parser.traverse('userinfo.lastname')
+        return self.identityAttr('username')
 
     @property
     def email(self):
-        return self.parser.traverse('userinfo.email')
+        return self.identityAttr('email')
 
     @property
-    def gender(self):
-        return self.parser.traverse('userinfo.gender')
+    def iphandle(self):
+        return self.identityAttr('iphandle')
 
     @property
-    def org(self):
-        return self.parser.traverse('userinfo.org')
+    def spaceHandle(self):
+        return SpaceHandle(self.iphandle)
 
     @property
-    def city(self):
-        return self.parser.traverse('userinfo.city')
+    def iphandleValid(self):
+        return SpaceHandle(self.iphandle).valid
 
     @property
-    def countryName(self):
-        return self.parser.traverse('userinfo.country.name')
+    def personDid(self):
+        return self.identityAttr('personDid')
 
     @property
-    def countryCode(self):
-        return self.parser.traverse('userinfo.country.code')
+    def vplanet(self):
+        return self.identityAttr('vplanet')
 
     @property
-    def locked(self):
-        return self.parser.traverse('userinfo.locked')
+    def avatar(self):
+        return self.identityAttr('avatar')
 
-    @property
-    def identToken(self):
-        return self.parser.traverse('userinfo.identtoken')
+    def identityAttr(self, attr):
+        if self.curIdentity:
+            return self.curIdentity.get(attr)
 
-    @property
-    def schemaVersion(self):
-        return self.parser.traverse('userinfo.schemav')
+    @ipfsOp
+    async def identityResolve(self, ipfsop, path):
+        if self.curIdentity:
+            return await self.resolve(os.path.join(
+                'identities',
+                self.root['currentIdentityUid'],
+                path)
+            )
 
-    @property
-    def objHash(self):
-        if self.curEntry:
-            return self.curEntry['Hash']
+    @ipfsOp
+    async def identityDagGet(self, ipfsop, path, identityUid=None):
+        return await self.get(os.path.join(
+            'identities',
+            identityUid if identityUid else self.root['currentIdentityUid'],
+            path)
+        )
 
-    def setAvatarCid(self, cid):
-        if self.locked:
-            return
-        self.root['userinfo']['avatar']['cid'] = cid
-        self.updateModifiedDate()
-        self.changed.emit()
+    @ipfsOp
+    async def getAvatar(self, ipfsop):
+        return await self.get('avatar')
 
-    def setCountryInfo(self, name, code):
-        if self.locked:
-            return
-        sec = self.root['userinfo']['country']
-        sec['name'] = name
-        sec['code'] = code
-        self.updateModifiedDate()
-        self.changed.emit()
+    async def follow(self, did, iphandle):
+        log.debug('Following {}'.format(did))
 
-    def setInfos(self, **kw):
-        if self.locked:
-            return
-        for key, val in kw.items():
-            if key not in self.root['userinfo'].keys():
-                continue
-            self.root['userinfo'][key] = val
-        self.updateModifiedDate()
-        self.changed.emit()
+        async with self as uInfo:
+            section = uInfo.root['followingGlobal'].setdefault('main', {})
+            section[did] = {
+                'iphandle': iphandle
+            }
 
-    def updateModifiedDate(self):
-        self.root['userinfo']['date']['modified'] = isoformat(datetime.now())
+    async def followingAll(self, section='main'):
+        section = self['followingGlobal'].setdefault(section, {})
 
-    def updateIdentToken(self):
-        token = self.root['userinfo'].get('identtoken', None)
-        if not token:
-            self.root['userinfo']['identtoken'] = urandom(128).hex()
-            self.changed.emit()
+        for did, info in section.items():
+            yield did, info
 
-    def setLock(self, lock=False):
-        self.root['userinfo']['locked'] = lock
-        self.changed.emit()
+    @ipfsOp
+    async def createIdentity(self, ipfsop, peered=False,
+                             personDid=None, setAsCurrent=True,
+                             iphandle=None,
+                             bio=None,
+                             flags=None):
+        # You never know ..
 
-    def valid(self):
-        return True
+        uid = str(uuid.uuid4())
+        while uid in self.root['identities'].keys():
+            uid = str(uuid.uuid4())
+
+        pFlags = flags if isinstance(flags, int) else 0
+
+        qr = await self.encodeIpHandleQr(
+            iphandle, personDid
+        )
+
+        bioEntry = await ipfsop.addString(
+            bio if bio else '# Bio')
+
+        identity = {
+            'email': None,
+            'flags': pFlags,
+
+            'iphandle': iphandle,
+            'iphandleqr': {
+                'png': self.mkLink(qr)
+            },
+
+            'vplanet': 'Earth',
+
+            # DIDS
+            'personDid': personDid,
+            'following': {},
+
+            'avatar': self.mkLink(
+                await ipfsop.importQtResource(
+                    '/share/icons/ipfs-cube-64.png'
+                )
+            ),
+
+            'bio': self.mkLink(bioEntry),
+
+            'crypto': {},
+            'datecreated': utcDatetimeIso(),
+            'datemodified': utcDatetimeIso()
+        }
+
+        async with self as dag:
+            dag.root['identities'][uid] = identity
+
+            if setAsCurrent:
+                dag.root['currentIdentityUid'] = uid
+
+        log.debug('Created identity', uid)
+        return uid, dag.root['identities'][uid]
+
+    @ipfsOp
+    async def createIdentityPeered(self, ipfsop, **kw):
+        return await self.createIdentity(
+            peered=True,
+            **kw
+        )
+
+    @ipfsOp
+    async def ipIdentifier(self, ipfsop):
+        if self.personDid:
+            return await ipfsop.ipidManager.load(
+                self.personDid,
+                timeout=5,
+                localIdentifier=True
+            )
+
+    @ipfsOp
+    async def encodeIpHandleQr(self, ipfsop,
+                               iphandle,
+                               did,
+                               format='png',
+                               filename=None):
+        encoder = IPFSQrEncoder()
+
+        try:
+            entry = await ipfsop.addString(iphandle, pin=True, only_hash=True)
+            if not entry:
+                return
+
+            await ipfsop.sleep()
+
+            encoder.add(joinIpfs(entry['Hash']))
+            encoder.add(joinIpns(ipfsop.ctx.node.id))
+
+            if didIdentRe.match(did):
+                encoder.add(did)
+
+            return await encoder.encodeAndStore(format=format)
+        except Exception:
+            pass
 
 
 class ProfileError(Exception):
@@ -308,15 +357,44 @@ class SharedHashmarksManager(QObject):
         await asyncio.sleep(1)
 
 
+class DIDRsaKeyStore:
+    def __init__(self, profile, _storeRoot):
+        self.__root = _storeRoot
+        self.__profile = profile
+
+    def _privateKeyForDid(self, did):
+        from Crypto.PublicKey import RSA
+
+        match = didIdentRe.match(did)
+        if not match:
+            return None
+
+        privKeyPath = os.path.join(
+            self.__root,
+            'rsa_{0}_ipid_{1}_priv.key'.format(
+                self.__profile, match.group('id')
+            )
+        )
+
+        if os.path.isfile(privKeyPath):
+            try:
+                with open(privKeyPath, 'rb') as fd:
+                    privKey = RSA.import_key(fd.read())
+            except Exception:
+                return None
+            else:
+                return privKey
+
+
 class UserProfile(QObject):
     """
     User profile object
     """
 
-    P_FILES = 'files'
+    qrImageEncoded = AsyncSignal(bool, str)
+    webPageSaved = AsyncSignal(dict, str)
 
-    qrImageEncoded = pyqtSignal(bool, str)
-    webPageSaved = pyqtSignal(dict, str)
+    identityChanged = AsyncSignal(str, str)
 
     def __init__(self, ctx, name, rootDir):
         super(UserProfile, self).__init__()
@@ -328,6 +406,12 @@ class UserProfile(QObject):
 
         self.keyRoot = 'galacteek.{}.root'.format(self.name)
         self.keyRootId = None
+        self.keyMainDid = self.ipIdentifierKeyName(idx=0)
+
+        self._didKeyStore = DIDRsaKeyStore(
+            self._name,
+            self.ctx.app.cryptoDataLocation
+        )
 
         self._rsaPrivKeyPath = os.path.join(
             self.ctx.app.cryptoDataLocation,
@@ -340,15 +424,20 @@ class UserProfile(QObject):
         self._filesModel = None
 
         self._dagUser = None
+
         self.userInfo = None
+        self.ipHandles = IPHandlesDAG(
+            self.edagMetadataPath('iphandles'), offline=True)
+
         self.orbitalConfigMfs = None
         self.orbitalCfgMap = None
 
         self.rsaAgent = None
         self.sharedHManager = SharedHashmarksManager(self)
 
-        self.qrImageEncoded.connect(self.onQrImageEncoded)
-        self.webPageSaved.connect(self.onWebPageSaved)
+        self.qrImageEncoded.connectTo(self.onQrImageEncoded)
+        self.webPageSaved.connectTo(self.onWebPageSaved)
+        self.identityChanged.connectTo(self.onIdentitySwitch)
 
     def debug(self, msg):
         log.debug('Profile {0}: {1}'.format(self.name, msg))
@@ -431,7 +520,7 @@ class UserProfile(QObject):
 
     @property
     def pathFiles(self):
-        return os.path.join(self.root, self.P_FILES)
+        return os.path.join(self.root, 'files')
 
     @property
     def pathHome(self):
@@ -530,6 +619,10 @@ class UserProfile(QObject):
         return os.path.join(self.pathData, 'userinfo.json.enc')
 
     @property
+    def pathProfileEDag(self):
+        return self.edagMetadataPath('profile')
+
+    @property
     def pathUserDagMeta(self):
         return os.path.join(self.pathData, 'dag.main')
 
@@ -552,12 +645,6 @@ class UserProfile(QObject):
         self.filesModel = createMFSModel()
         self.filesModel.setupItemsFromProfile(self)
 
-        self.userLogInfo('Initializing crypto')
-
-        if not await self.cryptoInit():
-            self.userLogInfo('Error while initializing crypto')
-            raise ProfileError('Crypto init failed')
-
         key = await ipfsop.keyFind(self.keyRoot)
         if key is not None:
             self.keyRootId = key.get('Id', None)
@@ -568,55 +655,53 @@ class UserProfile(QObject):
 
         self.debug('IPNS key({0}): {1}'.format(self.keyRoot, self.keyRootId))
 
-        if self.userInfo.avatarCid == '' and self.ctx.hasRsc('ipfs-logo-ice'):
-            self.userInfo.setAvatarCid(
-                self.ctx.resources['ipfs-logo-ice']['Hash'])
+        self.userLogInfo('Initializing crypto')
 
-        if self.userInfo.peerid == '':
-            self.userInfo.root['userinfo']['peerid'] = self.ctx.node.id
-            self.userInfo.changed.emit()
+        if not await self.cryptoInit():
+            self.userLogInfo('Error while initializing crypto')
+            raise ProfileError('Crypto init failed')
 
-        if await ipfsop.hasDagCommand():
-            self.userLogInfo('Loading DAG ..')
-            self._dagUser = UserDAG(self.pathUserDagMeta, loop=self.ctx.loop)
+        if not await ipfsop.hasDagCommand():
+            self.userLogInfo('No DAG API! ..')
+            return
 
-            ensure(self.dagUser.load())
-            await self.dagUser.loaded
+        self.userLogInfo('Loading DAG ..')
+        self._dagUser = UserDAG(self.pathUserDagMeta, loop=self.ctx.loop)
 
-            self.dagUser.dagCidChanged.connect(self.onDagChange)
-            ensure(self.publishDag())
+        ensure(self.dagUser.load())
+        await self.dagUser.loaded
 
-            self.userWebsite = UserWebsite(
-                self.dagUser,
-                self,
-                self.keyRootId,
-                self.ctx.app.jinjaEnv,
-                parent=self
-            )
+        await self.ipHandles.load()
 
-            await self.userWebsite.init()
+        self.dagUser.dagCidChanged.connect(self.onDagChange)
+        ensure(self.publishDag(allowOffline=True, reschedule=True))
 
-            ensure(self.update())
-            self.userLogInfo('Loaded')
-        else:
-            self.debug('DAG api not available !')
+        self.userWebsite = UserWebsite(
+            self.dagUser,
+            self,
+            self.keyRootId,
+            self.ctx.app.jinjaEnv,
+            parent=self
+        )
 
-        ensure(self.sendChatLogin())
+        await self.userWebsite.init()
+
+        ensure(self.update())
 
         self._initialized = True
         self.userLogInfo('Initialization complete')
-        self.userInfo.changed.connect(self.onUserInfoChanged)
-        self.userInfo.usernameChanged.connect(self.onUserNameChanged)
 
+        ensure(self.sendChatLogin())
         ensure(self.sharedHManager.scanningTask())
         ensure(self.ctx.app.manuals.importManuals(self))
 
     async def sendChatLogin(self):
-        msg = ChatRoomMessage.make(
-            self.userInfo.username,
-            ChatRoomMessage.CHANNEL_GENERAL,
-            'logged in')
-        await self.ctx.pubsub.send(TOPIC_CHAT, msg)
+        if self.userInfo.iphandleValid:
+            msg = ChatRoomMessage.make(
+                self.userInfo.iphandle,
+                ChatRoomMessage.CHANNEL_GENERAL,
+                'logged in')
+            await self.ctx.pubsub.send(TOPIC_CHAT, msg)
 
     @ipfsOp
     async def cryptoInit(self, op):
@@ -640,6 +725,7 @@ class UserProfile(QObject):
                 self.userLogInfo('Error while saving RSA keys!')
                 return False
             else:
+                os.chmod(self.rsaPrivKeyPath, 0o400)
                 self.userLogInfo('Successfully created RSA keypair')
 
         if not await self.cryptoRegisterKeys():
@@ -661,35 +747,144 @@ class UserProfile(QObject):
             self.debug('RSA: error while importing keys {}'.format(str(e)))
             return False
         else:
-            #
-            # Tough decision here .. first mechanism tried for publishing the
-            # peer's public key payload was to import the PEM key in the
-            # repository and transmit the CID, which is neat and handy (other
-            # peers just pin/fetch the key..) ATM embedding the key's payload
-            # in the userinfo offers some advantages and we can always use
-            # another system later on
-            #
             self.rsaAgent = IpfsRSAAgent(self.rsaExec,
                                          self.rsaPubKey,
                                          self.rsaPrivKeyPath)
             op.setRsaAgent(self.rsaAgent)
 
-            self.userLogInfo('Loading user information')
-            self.userInfo = UserInfos(self.pathUserInfo, self.rsaAgent)
+            self.userInfo = UserProfileEDAG(
+                self.pathProfileEDag, dagMetaHistoryMax=32,
+                offline=True
+            )
+            await self.userInfo.load()
 
-            ensure(self.userInfo.load())
-            await self.userInfo.evLoaded.wait()
-            self.userInfo.updateIdentToken()
+            if not self.userInfo.curIdentity:
+                await self.createIpIdentifier(
+                    iphandle=ipHandleGen(
+                        getpass.getuser(),
+                        'Earth',
+                        peerId=op.ctx.node.id
+                    )
+                )
 
-            rsaSection = self.userInfo.root['userinfo']['crypto'].setdefault(
-                'rsa', {})
-            prevPem = rsaSection.get('pubkeypem', None)
-            rsaSection['pubkeypem'] = self.rsaPubKey.decode()
-
-            if rsaSection['pubkeypem'] != prevPem:
-                self.userInfo.changed.emit()
+            if self.userInfo.curIdentity:
+                # Load our IPID with low resolve timeout
+                await self.ctx.app.ipidManager.load(
+                    self.userInfo.personDid,
+                    timeout=5,
+                    localIdentifier=True
+                )
 
             return True
+
+    def ipIdentifierKeyName(self, idx: int):
+        return 'galacteek.{0}.dids.{1}'.format(self.name, idx)
+
+    async def onIdentitySwitch(self, identityUid, did):
+        self.debug('Identity switched to DID {}'.format(did))
+
+        if self.userInfo.curIdentity:
+            # Load our IPID with low resolve timeout
+            await self.ctx.app.ipidManager.load(
+                did,
+                timeout=5,
+                localIdentifier=True
+            )
+
+    @ipfsOp
+    async def createIpIdentifier(self, ipfsop,
+                                 ipnsKey=None,
+                                 peered=False,
+                                 iphandle=None,
+                                 updateProfile=False):
+        if not iphandle:
+            iphandle = ipHandleGen(
+                'auto',
+                'Earth',
+                peerId=ipfsop.ctx.node.id
+            )
+
+        try:
+            keysNames = await ipfsop.keysNames()
+            useKeyIdx = 0
+            for key in keysNames:
+                ma = re.match(
+                    r'galacteek.{0}.dids.([\d]+)$'.format(self.name),
+                    key
+                )
+                if not ma:
+                    continue
+
+                num = int(ma.group(1))
+                if num > useKeyIdx:
+                    useKeyIdx = num + 1
+
+            privKey, pubKey = await self.rsaExec.genKeys()
+
+            ipid = await self.ctx.app.ipidManager.create(
+                ipnsKey if ipnsKey else self.ipIdentifierKeyName(useKeyIdx),
+                pubKeyPem=pubKey.decode()
+            )
+        except Exception as e:
+            self.debug(str(e))
+        else:
+            didPrivKeyPath = os.path.join(
+                self.ctx.app.cryptoDataLocation,
+                'rsa_{0}_ipid_{1}_priv.key'.format(
+                    self.name, ipid.ipnsKey))
+
+            async with aiofiles.open(didPrivKeyPath, 'w+b') as fd:
+                await fd.write(privKey)
+
+            os.chmod(didPrivKeyPath, 0o400)
+
+            self.userLogInfo('Generated IPID with DID: {did}'.format(
+                did=ipid.did))
+
+            if peered:
+                uid, identity = await self.userInfo.createIdentityPeered(
+                    iphandle=iphandle,
+                    personDid=ipid.did
+                )
+            else:
+                uid, identity = await self.userInfo.createIdentity(
+                    iphandle=iphandle,
+                    personDid=ipid.did,
+                    setAsCurrent=True,
+                )
+
+            await self.ipIdentifierInit(ipid)
+
+            ensure(ipid.publish())
+
+            if updateProfile is True:
+                await self.identityChanged.emit(
+                    self.userInfo.root['currentIdentityUid'],
+                    self.userInfo.curIdentity['personDid']
+                )
+
+            return ipid
+
+    @ipfsOp
+    async def ipIdentifierInit(self, ipfsop, ipid: IPIdentifier):
+        # Register the blog as an IP service on the DID
+        blogPath = IPFSPath(joinIpns(self.keyRootId)).child('blog')
+        await ipid.addServiceRaw({
+            'id': ipid.didUrl(path='/blog'),
+            'type': 'DwebBlogService',
+            'serviceEndpoint': blogPath.ipfsUrl
+        }, publish=False)
+
+        # Register the Atom feed as an IP service on the DID
+        feedPath = IPFSPath(joinIpns(self.keyRootId)).child('dfeed.atom')
+        await ipid.addServiceRaw({
+            'id': ipid.didUrl(path='/feed'),
+            'type': 'DwebAtomFeedService',
+            'serviceEndpoint': feedPath.ipfsUrl,
+            'description': 'Dweb Atom feed'
+        }, publish=False)
+
+        await ipid.addServiceCollection('default')
 
     @ipfsOp
     async def rsaEncryptSelf(self, op, data, offline=False):
@@ -773,20 +968,32 @@ class UserProfile(QObject):
         ensure(self.publishDag())
 
     @ipfsOp
-    async def publishDag(self, op):
+    async def publishDag(self, op, allowOffline=False, reschedule=False):
         if not self.dagUser.dagCid:
             self.debug('DAG CID not set yet ?')
             return
 
-        self.debug('Publishing DAG CID {}'.format(self.dagUser.dagCid))
+        self.debug('Publishing profile DAG with CID {}'.format(
+            self.dagUser.dagCid))
 
-        result = await op.publish(self.dagUser.dagCid, key=self.keyRoot,
-                                  allow_offline=True, lifetime='48h')
+        result = await op.publish(self.dagUser.dagCid,
+                                  key=self.keyRootId,
+                                  allow_offline=allowOffline,
+                                  cache='always',
+                                  cacheOrigin='profile',
+                                  resolve=True,
+                                  lifetime='48h')
 
         if result is None:
-            self.debug('DAG publish failed: {}'.format(result))
+            self.debug('DAG publish failed')
         else:
             self.debug('DAG publish success: {}'.format(result))
+
+        if reschedule is True:
+            self.debug('Rescheduling user DAG publish')
+            ensureLater(60 * 5,
+                        self.publishDag, reschedule=reschedule,
+                        allowOffline=allowOffline)
 
     async def tmplRender(self, tmpl, **kw):
         """
@@ -830,38 +1037,34 @@ class UserProfile(QObject):
     async def storeHashmarks(self, ipfsop, senderPeerId, ipfsMarks):
         await self.sharedHManager.store(ipfsop, senderPeerId, ipfsMarks.root)
 
-    def onQrImageEncoded(self, encrypt, imgPath):
-        @ipfsOpFn
-        async def storeQrImage(ipfsop, encrypt, path):
-            basename = os.path.basename(path)
-            file = QFile(path)
+    @ipfsOp
+    async def onQrImageEncoded(self, ipfsop,
+                               encrypt: bool,
+                               imgPath: str):
+        basename = os.path.basename(imgPath)
+        file = QFile(imgPath)
 
-            if encrypt:
-                if not file.open(QIODevice.ReadOnly):
-                    return
-                data = file.readAll().data()
-                entry = await self.rsaEncryptSelf(data)
-            else:
-                entry = await ipfsop.addPath(path, offline=True)
+        if encrypt:
+            if not file.open(QIODevice.ReadOnly):
+                return
+            data = file.readAll().data()
+            entry = await self.rsaEncryptSelf(data)
+        else:
+            entry = await ipfsop.addPath(imgPath, offline=True)
 
-            if entry:
-                # Link it, open it
-                dst = self.pathQrCodesEncrypted if encrypt is True else \
-                    self.pathQrCodes
-                await ipfsop.filesLink(entry, dst, name=basename)
-                ensure(self.ctx.app.resourceOpener.open(entry['Hash']))
+        if entry:
+            # Link it, open it
+            dst = self.pathQrCodesEncrypted if encrypt is True else \
+                self.pathQrCodes
+            await ipfsop.filesLink(entry, dst, name=basename)
+            await self.ctx.app.resourceOpener.open(entry['Hash'])
 
-        ensure(storeQrImage(encrypt, imgPath))
+    @ipfsOp
+    async def onWebPageSaved(self, ipfsop, entry, pageTitle):
+        if not pageTitle:
+            pageTitle = 'Unknown.{}'.format(int(time.time()))
 
-    def onWebPageSaved(self, entry, title):
-        @ipfsOpFn
-        async def linkWebPage(ipfsop, wEntry, pageTitle):
-            if not pageTitle:
-                pageTitle = 'Unknown.{}'.format(int(time.time()))
-
-            await ipfsop.filesLink(wEntry, self.pathWebPages, name=pageTitle)
-
-        ensure(linkWebPage(entry, title))
+        await ipfsop.filesLink(entry, self.pathWebPages, name=pageTitle)
 
     def createMfsMenu(self, title='MFS', parent=None):
         mfsMenu = QMenu(title, parent)

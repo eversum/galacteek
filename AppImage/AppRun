@@ -2,6 +2,7 @@
 
 HERE=$(dirname $(readlink -f "${0}"))
 export PATH=$PATH:${HERE}/usr/bin
+export LD_LIBRARY_PATH=${HERE}/usr/lib
 
 if [ ! -z "${container}" ] && [ x"${container}" == x"firejail" ]; then
 	# Disable qtwebengine sandboxing if running inside firejail

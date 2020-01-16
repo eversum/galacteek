@@ -1,7 +1,3 @@
-
-from PyQt5.QtCore import QObject
-from PyQt5.QtCore import pyqtSignal
-
 from galacteek import log
 
 
@@ -26,11 +22,8 @@ def contractDeploy(w3, contract_interface):
         return None
 
 
-class ContractOperator(QObject):
-    contractLoaded = pyqtSignal(str)
-
+class ContractOperator:
     def __init__(self, ctrl, contract, address, parent=None):
-        super(ContractOperator, self).__init__(parent)
         self.ctrl = ctrl
         self.contract = contract
         self.address = address

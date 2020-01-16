@@ -36,6 +36,9 @@ from galacteek.core.models.mfs import MFSItem
 from galacteek.core.models.mfs import MFSNameItem
 from galacteek.core.models.mfs import MFSRootItem
 
+from galacteek.did.ipid import IPService
+
+from .dids import buildPublishingMenu
 from . import ui_files
 from . import dag
 from .i18n import *  # noqa
@@ -525,6 +528,7 @@ class FileManager(QWidget):
                     self.ui.refreshButton,
                     self.ui.localFileManagerSwitch,
                     self.ui.fileManagerButton,
+                    self.ui.fsOptionsButton,
                     self.ui.pathSelector,
                     self.ui.offlineButton,
                     self.ui.searchFiles]:
@@ -690,6 +694,11 @@ class FileManager(QWidget):
         menu.exec(self.ui.treeFiles.mapToGlobal(point))
 
     def onContextMenu(self, point):
+        ensure(self.spawnContextMenu(point))
+
+    @ipfsOp
+    async def spawnContextMenu(self, ipfsop, point):
+        profile = ipfsop.ctx.currentProfile
         idx = self.ui.treeFiles.indexAt(point)
         if not idx.isValid():
             return self.onContextMenuVoid(point)
@@ -794,9 +803,33 @@ class FileManager(QWidget):
 
         publishMenu.triggered.connect(publishToKey)
 
+        didPublishMenu = await buildPublishingMenu(
+            await profile.userInfo.ipIdentifier(),
+            parent=menu
+        )
+        didPublishMenu.triggered.connect(
+            functools.partial(self.onDidPublish, ipfsPath)
+        )
+
+        menu.addMenu(didPublishMenu)
+
         menu.addSeparator()
         menu.addMenu(publishMenu)
         menu.exec(self.ui.treeFiles.mapToGlobal(point))
+
+    def onDidPublish(self, objPath, action):
+        data = action.data()
+        service = data['service']
+
+        ipfsPath = IPFSPath(objPath, autoCidConv=True)
+        if not ipfsPath.valid:
+            return
+
+        ensure(self.publishObjectOnDidService(service, ipfsPath))
+
+    async def publishObjectOnDidService(self, service, ipfsPath):
+        if service.type == IPService.SRV_TYPE_COLLECTION:
+            await service.add(str(ipfsPath))
 
     def browse(self, path):
         self.gWindow.addBrowserTab().browseFsPath(

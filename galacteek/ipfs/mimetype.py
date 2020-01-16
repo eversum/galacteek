@@ -2,9 +2,12 @@ import asyncio
 import shutil
 import functools
 import re
+import binascii
+import struct
 
 import aioipfs
 
+from galacteek import log
 from galacteek.ipfs import ipfsOpFn
 from galacteek.ipfs.ipfsops import APIErrorDecoder
 
@@ -144,6 +147,10 @@ class MIMEType(object):
         return self.type == 'application/pdf'
 
     @property
+    def isWasm(self):
+        return self.type == 'application/wasm'
+
+    @property
     def isAtomFeed(self):
         return self.type == 'application/atom+xml'
 
@@ -159,9 +166,10 @@ class MIMEType(object):
 
 mimeTypeDagPb = MIMEType('ipfs/dag-pb')
 mimeTypeDagUnknown = MIMEType('ipfs/dag-unknown')
+mimeTypeWasm = MIMEType('application/wasm')
 
 
-def mimeTypeProcess(mTypeText, buff):
+def mimeTypeProcess(mTypeText, buff, info=None):
     if mTypeText == 'text/xml':
         # If it's an XML, check if it's an Atom feed from the buffer
         # Can't call feedparser here cause we only got a partial buffer
@@ -169,6 +177,14 @@ def mimeTypeProcess(mTypeText, buff):
                              buff.decode())
         if atomized:
             return MIMEType('application/atom+xml')
+    elif mTypeText == 'application/octet-stream':
+        # Check for WASM magic number
+        wasmMagic = binascii.unhexlify(b'0061736d')
+
+        if buff[0:4] == wasmMagic:
+            version = struct.unpack('<I', buff[4:8])[0]
+            log.info('Detected WASM binary, version {}'.format(version))
+            return mimeTypeWasm
 
     return MIMEType(mTypeText)
 
@@ -182,6 +198,8 @@ async def detectMimeTypeFromBuffer(buff):
     :param bytes buff: buffer data
     :rtype: MIMEType
     """
+
+    infoString = None
     if haveMagic:
         # Use libmagic
         # Run it in an asyncio executor
@@ -193,7 +211,7 @@ async def detectMimeTypeFromBuffer(buff):
             return None
         else:
             if isinstance(mime, str):
-                return mimeTypeProcess(mime, buff)
+                return mimeTypeProcess(mime, buff, info=infoString)
     elif shutil.which('file'):
         # Libmagic not available, go with good'ol file
 
@@ -217,7 +235,7 @@ async def detectMimeTypeFromBuffer(buff):
 
 
 @ipfsOpFn
-async def detectMimeType(ipfsop, rscPath, bufferSize=512, timeout=12):
+async def detectMimeType(ipfsop, rscPath, bufferSize=131070, timeout=12):
     """
     Returns the MIME type of a given IPFS resource
     Uses either python-magic if available, or runs the 'file' command
@@ -237,9 +255,8 @@ async def detectMimeType(ipfsop, rscPath, bufferSize=512, timeout=12):
     :rtype: MIMEType
     """
     try:
-        buff = await ipfsop.waitFor(
-            ipfsop.client.cat(rscPath, length=bufferSize), timeout
-        )
+        buff = await ipfsop.catObject(
+            rscPath, length=bufferSize, timeout=timeout)
     except aioipfs.APIError as err:
         dec = APIErrorDecoder(err)
 
