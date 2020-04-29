@@ -15,7 +15,7 @@ import shutil
 
 @async_generator
 async def distIpfsExtract(dstdir='.', software='go-ipfs', executable='ipfs',
-                          site='dist.ipfs.io', version='0.4.23', loop=None,
+                          site='dist.ipfs.io', version='0.5.0', loop=None,
                           sslverify=True):
 
     """ Fetch a distribution archive from dist.ipfs.io and extracts the
@@ -79,14 +79,21 @@ async def distIpfsExtract(dstdir='.', software='go-ipfs', executable='ipfs',
                     return False
                 else:
                     await yield_(statusMessage(0, 'File found!'))
+
+                csize = 524288
+                ccount = 0
                 while True:
-                    data = await resp.content.read(262144)
+                    data = await resp.content.read(csize)
                     if not data:
                         break
+
+                    ccount += 1
                     await fd.write(data)
                     bytesRead += len(data)
-                    await yield_(statusMessage(
-                        0, 'received {} bytes'.format(bytesRead)))
+
+                    if divmod(ccount, 32)[1] == 0:
+                        await yield_(statusMessage(
+                            0, 'received {} bytes'.format(bytesRead)))
                     await asyncio.sleep(0)
 
     def extract(path, dest):

@@ -121,7 +121,8 @@ class Hashmark(Model):
             iPath = IPFSPath(self.path, autoCidConv=True)
             if self.schemepreferred == 'dweb':
                 return iPath.dwebUrl
-            elif not self.schemepreferred or self.schemepreferred == 'ipfs':
+            elif not self.schemepreferred or self.schemepreferred in \
+                    ['ipfs', 'ipns']:
                 return iPath.ipfsUrl
         else:
             return self.url

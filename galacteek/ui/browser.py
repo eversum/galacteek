@@ -1342,6 +1342,10 @@ class BrowserTab(GalacteekTab):
     def currentIpfsObject(self):
         return self._currentIpfsObject
 
+    def fromGateway(self, authority):
+        return authority.endswith(self.gatewayAuthority) or \
+            authority.endswith('ipfs.' + self.gatewayAuthority)
+
     def createPageOpsButton(self):
         icon = getMimeIcon('text/html')
         iconPrinter = getIcon('printer.png')
@@ -1383,7 +1387,7 @@ class BrowserTab(GalacteekTab):
 
         cTitle = self.currentPageTitle if self.currentPageTitle else ''
 
-        ensure(runDialogASync(
+        ensure(runDialogAsync(
             TitleInputDialog, cTitle,
             accepted=functools.partial(
                 self.onMoveToMfsWithTitle,
@@ -1866,6 +1870,8 @@ class BrowserTab(GalacteekTab):
         sHandler = self.webEngineView.webProfile.urlSchemeHandler(
             url.scheme().encode())
 
+        urlAuthority = url.authority()
+
         if url.scheme() in [SCHEME_IPFS, SCHEME_IPNS, SCHEME_DWEB]:
             self.urlZone.setStyleSheet('''
                 QLineEdit {
@@ -1883,20 +1889,22 @@ class BrowserTab(GalacteekTab):
             self.followIpnsAction.setEnabled(
                 self.currentIpfsObject.isIpns)
             self.curObjectCtrl.show()
-        elif url.authority() == self.gatewayAuthority:
+        elif self.fromGateway(urlAuthority):
             # dweb:/ with IPFS gateway's authority
             # Content loaded from IPFS gateway, this is IPFS content
 
-            urlString = url.toDisplayString(
-                QUrl.RemoveAuthority | QUrl.RemoveScheme)
+            if 0:
+                urlString = url.toDisplayString(
+                    QUrl.RemoveAuthority | QUrl.RemoveScheme)
 
-            self._currentIpfsObject = IPFSPath(urlString)
+            self._currentIpfsObject = IPFSPath(
+                url.toString(), autoCidConv=True)
 
             if self.currentIpfsObject.valid:
                 log.debug('Current IPFS object: {0}'.format(
                     repr(self.currentIpfsObject)))
 
-                url = QUrl(self.currentIpfsObject.dwebGwUrl)
+                url = QUrl(self.currentIpfsObject.dwebUrl)
                 self.urlZone.clear()
                 self.urlZone.insert(url.toString())
 
@@ -1996,7 +2004,7 @@ class BrowserTab(GalacteekTab):
     def browseFsPath(self, path, schemePreferred='ipfs'):
         def _handle(iPath):
             if iPath.valid and not schemePreferred or \
-                    schemePreferred == 'ipfs':
+                    schemePreferred in [SCHEME_IPFS, SCHEME_IPNS]:
                 self.enterUrl(QUrl(iPath.ipfsUrl))
             elif iPath.valid and schemePreferred == 'dweb':
                 self.enterUrl(QUrl(iPath.dwebUrl))

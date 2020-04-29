@@ -106,8 +106,8 @@ class MFSNameItem(MFSItem):
         return IPFSPath(self.fullPath)
 
     @property
-    def dwebUrl(self):
-        return QUrl('dweb:{}'.format(self.fullPath))
+    def qIpfsUrl(self):
+        return QUrl(self.ipfsPath.ipfsUrl)
 
     @property
     def mimeType(self):
@@ -279,7 +279,7 @@ class MFSItemModel(QStandardItemModel):
             nameItem = self.getNameItemFromIdx(idx)
 
             if nameItem:
-                mimedata.setUrls([nameItem.dwebUrl])
+                mimedata.setUrls([nameItem.qIpfsUrl])
                 break
 
         return mimedata

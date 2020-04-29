@@ -658,7 +658,7 @@ class PeersManager(GalacteekTab):
         ipfsPath = IPFSPath(path)
 
         try:
-            await self.app.sqliteDb.feeds.follow(ipfsPath.dwebUrl)
+            await self.app.sqliteDb.feeds.follow(ipfsPath.ipfsUrl)
         except Exception:
             # TODO
             pass

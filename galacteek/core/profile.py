@@ -156,6 +156,14 @@ class UserProfileEDAG(EvolvingDAG):
         )
 
     @ipfsOp
+    async def identityGetRaw(self, ipfsop, path, identityUid=None):
+        return await self.cat(os.path.join(
+            'identities',
+            identityUid if identityUid else self.root['currentIdentityUid'],
+            path)
+        )
+
+    @ipfsOp
     async def getAvatar(self, ipfsop):
         return await self.get('avatar')
 

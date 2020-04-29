@@ -17,8 +17,8 @@ if [ "$TRAVIS_OS_NAME" = "linux" ]; then
 	wget https://dist.ipfs.io/go-ipfs/v${GO_IPFS_VERSION}/go-ipfs_v${GO_IPFS_VERSION}_linux-amd64.tar.gz
 	tar -C $HOME -xzvf go-ipfs_v${GO_IPFS_VERSION}_linux-amd64.tar.gz
 
-	#wget https://dist.ipfs.io/fs-repo-migrations/v${FS_MIGRATE_VERSION}/fs-repo-migrations_v${FS_MIGRATE_VERSION}_linux-amd64.tar.gz
-	#tar -C $HOME -xzvf fs-repo-migrations_v${FS_MIGRATE_VERSION}_linux-amd64.tar.gz
+	wget https://dist.ipfs.io/fs-repo-migrations/v${FS_MIGRATE_VERSION}/fs-repo-migrations_v${FS_MIGRATE_VERSION}_linux-amd64.tar.gz
+	tar -C $HOME -xzvf fs-repo-migrations_v${FS_MIGRATE_VERSION}_linux-amd64.tar.gz
 
 	wget https://github.com/wasmerio/wasmer/releases/download/0.12.0/wasmer-linux-amd64.tar.gz
 	tar -C $HOME -xzvf wasmer-linux-amd64.tar.gz
@@ -34,11 +34,13 @@ if [ "$TRAVIS_OS_NAME" = "osx" ]; then
 	wget https://dist.ipfs.io/go-ipfs/v${GO_IPFS_VERSION}/go-ipfs_v${GO_IPFS_VERSION}_darwin-amd64.tar.gz
 	tar -C $HOME -xzvf go-ipfs_v${GO_IPFS_VERSION}_darwin-amd64.tar.gz
 
-	#wget https://dist.ipfs.io/fs-repo-migrations/v${FS_MIGRATE_VERSION}/fs-repo-migrations_v${FS_MIGRATE_VERSION}_darwin-amd64.tar.gz
-	#tar -C $HOME -xzvf fs-repo-migrations_v${FS_MIGRATE_VERSION}_darwin-amd64.tar.gz
+	wget https://dist.ipfs.io/fs-repo-migrations/v${FS_MIGRATE_VERSION}/fs-repo-migrations_v${FS_MIGRATE_VERSION}_darwin-amd64.tar.gz
+	tar -C $HOME -xzvf fs-repo-migrations_v${FS_MIGRATE_VERSION}_darwin-amd64.tar.gz
 fi
 
 mv $HOME/go-ipfs/ipfs $HOME/bin
+mv $HOME/fs-repo-migrations/fs-repo-migrations $HOME/bin
+
 $HOME/bin/ipfs init
 
 export PYTHONPATH=$PYTHONPATH:/usr/local/lib/python3.7/dist-packages

@@ -16,7 +16,6 @@ from PyQt5.QtWidgets import QToolTip
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtGui import QImage
 
-from galacteek import asyncify
 from galacteek import ensure
 from galacteek import log
 from galacteek.ipfs.wrappers import ipfsOp
@@ -252,18 +251,17 @@ class ProfileEditDialog(QDialog):
 
         self.ui.vPlanet.setEnabled(False)
 
-    @asyncify
     async def loadIcon(self):
-        avatar = await self.profile.userInfo.identityDagGet('avatar')
+        avatar = await self.profile.userInfo.identityGetRaw('avatar')
 
         if isinstance(avatar, bytes):
             try:
                 img1 = QImage()
                 img1.loadFromData(avatar)
-                img = img1.scaledToWidth(256)
+                img = img1.scaledToWidth(128)
                 self.ui.iconPixmap.setPixmap(QPixmap.fromImage(img))
-            except Exception:
-                pass
+            except Exception as err:
+                log.debug(str(err))
 
     def changeIcon(self):
         fps = filesSelectImages()

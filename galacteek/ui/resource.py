@@ -144,8 +144,6 @@ class IPFSResourceOpener(QObject):
             indexPath = ipfsPath.child('index.html')
             stat = await ipfsop.objStat(indexPath.objPath, timeout=8)
 
-            schemePreferred = 'dweb' if indexPath.isIpns else None
-
             if stat:
                 # Browse the index
                 return self.app.mainWindow.addBrowserTab(

@@ -54,7 +54,7 @@ hashmarks:
     description: Hardbin is an encrypted pastebin for IPFS
     category: ipfs/apps
     icon: /ipfs/QmQZ1PLTZKekXbcLErY2bSnHiqB9vXxkLtPtbqhEPbDHgg
-    schemepreferred: dwebgw
+    schemepreferred: dweb
     tags:
       - '#pastebin'
       - '#dapp'
@@ -75,7 +75,7 @@ hashmarks:
     date: "2019-07-04T12:00:00-00:00"
     category: ipfs/apps
     icon: /ipfs/bafybeihbmylhr5aplden7ijet4m6izxn6svq27eykqyiq5tik6mjxsoxjy/mstile-144x144.png
-    schemepreferred: dwebgw
+    schemepreferred: dweb
     tags:
       - '#ipfs'
       - '#essays'

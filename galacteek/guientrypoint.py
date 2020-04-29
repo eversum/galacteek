@@ -131,6 +131,7 @@ def start():
         '--migrate',
         action='store_true',
         dest='migrate',
+        default=True,
         help='Activate automatic repository migration')
     parser.add_argument(
         '--no-release-check',

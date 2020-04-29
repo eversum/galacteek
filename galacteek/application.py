@@ -59,7 +59,6 @@ from galacteek.core.signaltowers import DIDTower
 from galacteek.core.analyzer import ResourceAnalyzer
 
 from galacteek.core.schemes import SCHEME_MANUAL
-from galacteek.core.schemes import DWebSchemeHandlerNative
 from galacteek.core.schemes import DWebSchemeHandlerGateway
 from galacteek.core.schemes import EthDNSSchemeHandler
 from galacteek.core.schemes import EthDNSProxySchemeHandler
@@ -155,7 +154,7 @@ def ipfsVersion():
 async def fetchGoIpfsWrapper(app, timeout=60 * 10):
     try:
         await asyncio.wait_for(fetchIpfsSoft(
-            app, 'go-ipfs', 'ipfs', '0.4.23'), timeout)
+            app, 'go-ipfs', 'ipfs', '0.5.0'), timeout)
     except asyncio.TimeoutError:
         app.mainWindow.statusMessage(iGoIpfsFetchTimeout())
         return None
@@ -787,7 +786,7 @@ class GalacteekApplication(QApplication):
         ipfsPath = self.which('ipfs')
         fsMigratePath = self.which('fs-repo-migrations')
 
-        if fsMigratePath is None and self.cmdArgs.forcegoipfsdl:
+        if fsMigratePath is None or self.cmdArgs.forcegoipfsdl:
             await fetchFsMigrateWrapper(self)
 
         if ipfsPath is None or self.cmdArgs.forcegoipfsdl:
@@ -1050,8 +1049,7 @@ class GalacteekApplication(QApplication):
         self.dappsRegistry = DappsRegistry(self.ethereum, parent=self)
 
     def setupSchemeHandlers(self):
-        self.dwebGwSchemeHandler = DWebSchemeHandlerGateway(self)
-        self.dwebSchemeHandler = DWebSchemeHandlerNative(self)
+        self.dwebSchemeHandler = DWebSchemeHandlerGateway(self)
         self.ensSchemeHandler = EthDNSSchemeHandler(self)
         self.ensProxySchemeHandler = EthDNSProxySchemeHandler(self)
         self.nativeIpfsSchemeHandler = NativeIPFSSchemeHandler(

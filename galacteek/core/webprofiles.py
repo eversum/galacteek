@@ -8,7 +8,6 @@ from galacteek import log
 from galacteek.dweb.webscripts import ethereumClientScripts
 
 from galacteek.core.schemes import SCHEME_DWEB
-from galacteek.core.schemes import SCHEME_DWEBGW
 from galacteek.core.schemes import SCHEME_ENS
 from galacteek.core.schemes import SCHEME_ENSR
 from galacteek.core.schemes import SCHEME_FS
@@ -63,8 +62,6 @@ class BaseProfile(QWebEngineProfile):
         # XXX Remove fs: soon
         for scheme in [SCHEME_DWEB, SCHEME_FS]:
             self.installHandler(scheme, self.app.dwebSchemeHandler)
-
-        self.installHandler(SCHEME_DWEBGW, self.app.dwebGwSchemeHandler)
 
         for scheme in [SCHEME_IPFS, SCHEME_IPNS]:
             self.installHandler(scheme, self.app.nativeIpfsSchemeHandler)

@@ -188,11 +188,13 @@ class IPFSOperator(object):
     """
 
     def __init__(self, client, ctx=None, rsaAgent=None, debug=False,
-                 offline=False, nsCachePath=None):
+                 offline=False, nsCachePath=None,
+                 objectMapping=False):
         self._lock = asyncio.Lock()
         self._id = uuid.uuid1()
         self._cache = {}
         self._offline = offline
+        self._objectMapping = objectMapping
         self._rsaAgent = rsaAgent
         self._nsCache = {}
         self._nsCachePath = nsCachePath
@@ -529,7 +531,7 @@ class IPFSOperator(object):
             return False
         return True
 
-    async def publish(self, path, key='self', timeout=60 * 4,
+    async def publish(self, path, key='self', timeout=60 * 6,
                       allow_offline=None, lifetime='24h',
                       resolve=True,
                       ttl=None, cache=None, cacheOrigin='unknown'):
@@ -1067,6 +1069,10 @@ class IPFSOperator(object):
             return {"/": cid['Hash']}
 
     def objectPathMap(self, path):
+        if self._objectMapping is False and 0:
+            # No object mapping (don't use any cache)
+            return path
+
         ipfsPath = path if isinstance(path, IPFSPath) else \
             IPFSPath(path, autoCidConv=True)
 

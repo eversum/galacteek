@@ -89,8 +89,9 @@ cp ../share/icons/galacteek.png $APPDIR/usr/share/icons/hicolor/512x512/apps
 find /usr/lib -iname 'libzbar.so*' -exec cp -av {} $APPDIR/usr/lib \;
 find /usr/lib -iname 'libjpeg.so*' -exec cp -av {} $APPDIR/usr/lib \;
 
-# Copy go-ipfs
+# Copy go-ipfs and fs-repo-migrations
 cp /tmp/go-ipfs/ipfs $APPDIR/usr/bin
+cp $HOME/bin/fs-repo-migrations $APPDIR/usr/bin
 
 # Remove unnecessary stuff
 pushd "$APPDIR"/usr

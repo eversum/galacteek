@@ -6,6 +6,7 @@ import aioipfs
 from PyQt5.QtCore import QUrl
 
 from galacteek import log
+from galacteek.ipfs.cid import CIDv1
 from galacteek.ipfs.cid import make_cid
 from galacteek.ipfs.cid import BaseCID
 from galacteek.ipfs.stat import StatInfo
@@ -167,6 +168,21 @@ def cidConvertBase32(cid):
     return cid.encode('base32').decode()
 
 
+def ipnsKeyCidV1(ipnsKey):
+    """
+    Converts a base58 IPNS key to a CIDv1 with the
+    'libp2p-key' multicodec.
+    """
+
+    cid = getCID(ipnsKey)
+    if not cid:
+        return None
+
+    # Need to use the libp2p-key multicodec
+    cidV1 = CIDv1('libp2p-key', cid.multihash)
+    return cidV1.encode('base32').decode()
+
+
 def cidValid(cid):
     """
     Check if the passed argument is a valid IPFS CID
@@ -207,6 +223,10 @@ def domainValid(domain):
 
 ipfsPathRe = re.compile(
         r'^(\s*)?(?:fs:|dweb:|dwebgw:|https?://[\w:.-]+)?(?P<fullpath>(/ipfs/)?(?P<rootcid>[a-zA-Z0-9]{46,113})/?(?P<subpath>[\w<>":;,?!\*%&=@\$~/\s\.\-_\\\'()\+]{1,1024})?)#?(?P<fragment>[\w_\.\-\+,=/]{1,256})?$',  # noqa
+    flags=re.UNICODE)
+
+ipfsDomainPathRe = re.compile(
+        r'^(\s*)?(?:http)://(?P<rootcid>[a-z2-7]{59,113})\.ipfs\.(?:[\w]+):(?:[\d]+)/(?P<subpath>[\w<>"\/:;,?!\*%&=@\$~/\s\.\-_\\\'()\+]{0,1024})#?(?P<fragment>[\w_\.\-\+,=/]{1,256})?$',  # noqa
     flags=re.UNICODE)
 
 # For ipfs://<cid-base32>
@@ -393,7 +413,10 @@ class IPFSPath:
                     path=stripIpns(self.fullPath)
                 )
             else:
-                return self.dwebUrl
+                return '{scheme}://{path}'.format(
+                    scheme=self.scheme,
+                    path=stripIpns(self.fullPath)
+                )
         else:
             return self.dwebUrl
 
@@ -415,6 +438,28 @@ class IPFSPath:
 
         if len(self.input) > self.maxLength:
             return False
+
+        ma = ipfsRegSearchDomainPath(self.input)
+        if ma:
+            gdict = ma.groupdict()
+            cidStr = gdict.get('rootcid')
+            subpath = gdict.get('subpath')
+
+            if not self.parseCid(cidStr):
+                return False
+
+            if subpath:
+                self._rscPath = os.path.join(
+                    joinIpfs(cidStr),
+                    subpath
+                )
+            else:
+                self._rscPath = joinIpfs(self.rootCidRepr) + '/'
+
+            self._subPath = subpath
+            self._scheme = 'ipfs'
+            self._fragment = gdict.get('fragment')
+            return True
 
         ma = ipfsDedSearchPath(self.input)
         if ma:
@@ -472,15 +517,18 @@ class IPFSPath:
             gdict = ma.groupdict()
 
             subpath = gdict.get('subpath')
+            ipnsId32 = ipnsKeyCidV1(gdict.get('fqdn'))
+            _id = ipnsId32 if ipnsId32 else gdict.get('fqdn')
+
             if subpath:
                 self._rscPath = os.path.join(
-                    joinIpns(gdict.get('fqdn')),
+                    joinIpns(_id),
                     subpath
                 )
             else:
-                self._rscPath = joinIpns(gdict.get('fqdn'))
+                self._rscPath = joinIpns(_id)
 
-            self._ipnsId = gdict.get('fqdn')
+            self._ipnsId = _id
             self._fragment = gdict.get('fragment')
             self._subPath = gdict.get('subpath')
             self._scheme = 'ipns'
@@ -622,6 +670,10 @@ def ipfsRegSearchPath(text):
 def ipfsDedSearchPath(text):
     # search for the dedicated ipfs:// scheme
     return ipfsPathDedRe.match(text)
+
+
+def ipfsRegSearchDomainPath(text):
+    return ipfsDomainPathRe.match(text)
 
 
 def ipfsDedSearchPath58(text):

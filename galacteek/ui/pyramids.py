@@ -26,6 +26,7 @@ from galacteek import AsyncSignal
 
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.cidhelpers import joinIpns
+from galacteek.ipfs.cidhelpers import ipnsKeyCidV1
 from galacteek.ipfs import ipfsOp
 from galacteek.ipfs.stat import StatInfo
 from galacteek.ipfs.dag import EvolvingDAG
@@ -55,6 +56,7 @@ from .hashmarks import addHashmarkAsync
 from .i18n import iRemove
 from .i18n import iHelp
 from .i18n import iHashmark
+from .i18n import iOpen
 
 
 def iCreateRawPyramid():
@@ -368,6 +370,10 @@ class MultihashPyramidToolButton(PopupToolButton):
                                         self,
                                         triggered=self.onOpenLatest)
         self.openLatestAction.setEnabled(False)
+        self.openAction = QAction(getIcon('pyramid-aqua.png'),
+                                  iOpen(),
+                                  self,
+                                  triggered=self.onOpen)
 
         self.publishCurrentClipAction = QAction(
             getIcon('clipboard.png'),
@@ -496,6 +502,8 @@ class MultihashPyramidToolButton(PopupToolButton):
         pass
 
     def buildMenu(self):
+        self.menu.addAction(self.openAction)
+        self.menu.addSeparator()
         self.menu.addAction(self.openLatestAction)
         self.menu.addSeparator()
         self.menu.addAction(self.publishCurrentClipAction)
@@ -557,6 +565,7 @@ class MultihashPyramidToolButton(PopupToolButton):
             </p>
             <p>Description: {descr}</p>
             <p>IPNS key: <b>{ipns}</b></p>
+            <p>IPNS key (CIDv1): <b>{ipnsv1}</b></p>
 
             <p>
                 <img width='16' height='16'
@@ -567,6 +576,7 @@ class MultihashPyramidToolButton(PopupToolButton):
             path=self.pyramid.path,
             descr=self.pyramid.description,
             ipns=self.pyramid.ipnsKey,
+            ipnsv1=ipnsKeyCidV1(self.pyramid.ipnsKey),
             itemscount=self.pyramid.marksCount,
             latest=self.pyramid.latest if self.pyramid.latest else
             iEmptyPyramid()
@@ -619,6 +629,10 @@ class MultihashPyramidToolButton(PopupToolButton):
 
             if self.pyramid.empty:
                 self.sysTray('Pyramid is empty now!')
+
+    def onOpen(self):
+        ensure(self.app.resourceOpener.open(
+            self.ipnsKeyPath, minWebProfile='ipfs'))
 
     def onOpenLatest(self):
         """ Open latest object """
@@ -678,7 +692,6 @@ class MultihashPyramidToolButton(PopupToolButton):
             objPath,
             key=self.pyramid.ipnsKey,
             lifetime=self.pyramid.ipnsLifetime,
-            cache='always',
             cacheOrigin='pyramids',
             timeout=self.app.settingsMgr.defaultIpnsTimeout
         )
@@ -1043,7 +1056,7 @@ class GalleryPyramidController(EDAGBuildingPyramidController):
     def onBrowseGalleryIpns(self):
         objPath = self.ipnsKeyPath.child('index.html')
         ensure(self.app.resourceOpener.open(
-            objPath, minWebProfile='ipfs', schemePreferred='dweb'))
+            objPath, minWebProfile='ipfs'))
 
     def onBrowseGallery(self):
         if self.pyramid.latest:
@@ -1141,6 +1154,7 @@ class GalleryPyramidController(EDAGBuildingPyramidController):
 
             <p>Description: {descr}</p>
             <p>IPNS key: <b>{ipns}</b></p>
+            <p>IPNS key (CIDv1): <b>{ipnsv1}</b></p>
 
             <p>
                 <img width='16' height='16'
@@ -1151,6 +1165,7 @@ class GalleryPyramidController(EDAGBuildingPyramidController):
             path=self.pyramid.path,
             descr=self.pyramid.description,
             ipns=self.pyramid.ipnsKey,
+            ipnsv1=ipnsKeyCidV1(self.pyramid.ipnsKey),
             itemscount=self.pyramid.marksCount,
             latest=self.pyramid.latest if self.pyramid.latest else
             iEmptyPyramid()

@@ -108,7 +108,7 @@ class UserWebsite:
 
     @property
     def siteUrl(self):
-        return self.sitePath.dwebUrl
+        return self.sitePath.ipfsUrl
 
     @property
     def sitePath(self):
@@ -274,7 +274,7 @@ class UserWebsite:
         feed.author({
             'name': self.profile.userInfo.iphandle
         })
-        feed.link(href=self.atomFeedPath.dwebUrl, rel='self')
+        feed.link(href=self.atomFeedPath.ipfsUrl, rel='self')
         feed.language('en')
         return feed
 
@@ -409,8 +409,8 @@ class UserWebsite:
 
             fEntry = feed.add_entry()
             fEntry.title('Pin request: {}'.format(req['title']))
-            fEntry.id(rpath.dwebUrl)
-            fEntry.link(href=rpath.dwebUrl, rel='alternate')
+            fEntry.id(rpath.ipfsUrl)
+            fEntry.link(href=rpath.ipfsUrl, rel='alternate')
             fEntry.published(req['date_published'])
             fEntry.author({'name': self.profile.userInfo.iphandle})
 
@@ -421,8 +421,8 @@ class UserWebsite:
 
             fEntry = feed.add_entry()
             fEntry.title(post['title'])
-            fEntry.id(ppath.dwebUrl)
-            fEntry.link(href=ppath.dwebUrl, rel='alternate')
+            fEntry.id(ppath.ipfsUrl)
+            fEntry.link(href=ppath.ipfsUrl, rel='alternate')
             fEntry.updated(post['date_modified'])
             fEntry.published(post['date_published'])
             fEntry.author({'name': self.profile.userInfo.iphandle})
@@ -439,7 +439,7 @@ class UserWebsite:
                           profile=self.profile,
                           dag=self.edag.dagRoot,
                           siteIpns=self.ipnsKey,
-                          atomFeedrUrl=self.atomFeedPath.dwebUrl,
+                          atomFeedrUrl=self.atomFeedPath.ipfsUrl,
                           **kw)
 
     async def renderLink(self, tmpl, contained=False, **kw):
