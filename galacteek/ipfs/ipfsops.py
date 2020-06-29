@@ -813,13 +813,13 @@ class IPFSOperator(object):
                                      timeout=8,
                                      cache='never',
                                      cacheOrigin='unknown',
-                                     *args, **kw):
+                                     useCache='never'):
         matches = []
         async for entry in self.nameResolveStream(
                 path,
                 timeout=timeout,
                 cache=cache, cacheOrigin=cacheOrigin,
-                *args, **kw):
+                useCache=useCache):
             found = entry.get('Path')
             if found:
                 matches.append(found)
@@ -1285,32 +1285,6 @@ class IPFSOperator(object):
                         o=path))
 
         return path
-
-    def objectPathMap(self, path):
-        if self._objectMapping is False and 0:
-            # No object mapping (don't use any cache)
-            return path
-
-        ipfsPath = path if isinstance(path, IPFSPath) else \
-            IPFSPath(path, autoCidConv=True)
-
-        if ipfsPath.isIpns:
-            pSubPath = ipfsPath.subPath
-            cached = self.nsCacheGet(
-                ipfsPath.root().objPath, knownOrigin=True)
-
-            if cached:
-                if pSubPath:
-                    subp = IPFSPath(cached).child(pSubPath).objPath
-                    self.debug('objectPathMap: {0}: returning: {1}'.format(
-                        str(ipfsPath), subp))
-                    return subp
-                else:
-                    return cached
-
-            return ipfsPath.objPath
-        else:
-            return ipfsPath.objPath
 
     async def catObject(self, path, offset=None, length=None, timeout=30):
         return await self.waitFor(

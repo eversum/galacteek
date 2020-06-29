@@ -642,6 +642,14 @@ class UserProfile(QObject):
     def pathChatChannelsDagMeta(self):
         return os.path.join(self.pathEDags, 'chatchannels.edag')
 
+    @property
+    def pathEdagShares(self):
+        return os.path.join(self.pathEDags, 'shares.edag')
+
+    @property
+    def pathMDagShares(self):
+        return os.path.join(self.pathEDags, 'mdag.shares.edag')
+
     def setFilesModel(self, model):
         self.filesModel = model
 

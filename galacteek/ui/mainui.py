@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtWidgets import QTextEdit
 from PyQt5.QtWidgets import QLineEdit
+from PyQt5.QtWidgets import QStackedWidget
 
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import Qt
@@ -379,6 +380,28 @@ class CentralWidget(QWidget):
         self.setObjectName('centralWidget')
         self.wLayout = QVBoxLayout()
         self.setLayout(self.wLayout)
+
+
+class BackgroundWidget(QWidget):
+    def __init__(self, parent):
+        super(BackgroundWidget, self).__init__(parent)
+
+        self.setObjectName('homeWidget')
+        self.wLayout = QVBoxLayout()
+        self.setLayout(self.wLayout)
+
+
+class MainTabWidget(QTabWidget):
+    onTabInserted = pyqtSignal(int)
+    onTabRemoved = pyqtSignal(int)
+
+    def tabInserted(self, index):
+        self.onTabInserted.emit(index)
+        super().tabInserted(index)
+
+    def tabRemoved(self, index):
+        self.onTabRemoved.emit(index)
+        super().tabRemoved(index)
 
 
 class BrowseButton(PopupToolButton):
@@ -781,7 +804,13 @@ class MainWindow(QMainWindow):
         self.addToolBar(Qt.TopToolBarArea, self.toolbarMain)
         self.addToolBar(Qt.RightToolBarArea, self.toolbarPyramids)
 
-        self.tabWidget = QTabWidget(self)
+        self.stack = QStackedWidget(self)
+
+        self.bgWidget = BackgroundWidget(self.stack)
+
+        self.tabWidget = MainTabWidget(self.stack)
+        self.tabWidget.onTabInserted.connect(self.onNewTab)
+        self.tabWidget.onTabRemoved.connect(self.onTabRemoved)
         self.tabWidget.setObjectName('tabWidget')
         self.tabWidget.setTabsClosable(True)
         self.tabWidget.tabCloseRequested.connect(
@@ -790,7 +819,10 @@ class MainWindow(QMainWindow):
         self.tabWidget.setUsesScrollButtons(True)
         self.tabWidget.currentChanged.connect(self.onTabChanged)
 
-        self.centralWidget.wLayout.addWidget(self.tabWidget)
+        self.stack.addWidget(self.bgWidget)
+        self.stack.addWidget(self.tabWidget)
+
+        self.centralWidget.wLayout.addWidget(self.stack)
 
         if self.app.system != 'Darwin':
             self.tabWidget.setDocumentMode(True)
@@ -908,6 +940,15 @@ class MainWindow(QMainWindow):
     @property
     def searchBar(self):
         return self.centralWidget.searchBar
+
+    def onNewTab(self, idx):
+        self.stack.setCurrentIndex(1)
+
+    def onTabRemoved(self, idx):
+        if self.tabWidget.count() == 0:
+            self.stack.setCurrentIndex(0)
+        else:
+            self.stack.setCurrentIndex(1)
 
     def cycleTabs(self):
         curIndex = self.tabWidget.currentIndex()
@@ -1295,10 +1336,10 @@ class MainWindow(QMainWindow):
         else:
             messageBox(mediaplayer.iPlayerUnavailable())
 
-    def mediaPlayerQueue(self, path, mediaName=None):
+    def mediaPlayerQueue(self, path, playLast=False, mediaName=None):
         tab = self.addMediaPlayerTab()
         if tab:
-            tab.queueFromPath(path, mediaName=mediaName)
+            tab.queueFromPath(path, mediaName=mediaName, playLast=playLast)
 
     def mediaPlayerPlay(self, path, mediaName=None):
         tab = self.addMediaPlayerTab()

@@ -181,6 +181,13 @@
       <a href="#" onclick='event.preventDefault(); window.ipfssearch.clipboardInput("${hit.path}")'><img src="qrc:///share/icons/clipboard.png" width="16" height="16"/></a>
       `;
 
+        if (hit['mimetype'].startsWith('audio') || hit['mimetype'].startsWith('video')) {
+          markup += `
+        <a href="#" onclick='event.preventDefault(); window.ipfssearch.mplayerQueue("${hit.path}")'>
+        <img src="qrc:/share/icons/multimedia.png" width="16" />
+        </a>`;
+        }
+
         if (engine == 'cyber') {
           markup += `
           <img src="qrc:///share/icons/${ engine }.png"

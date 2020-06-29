@@ -26,7 +26,7 @@ class ResourceAnalyzer(QObject):
         self.qrDecoder = IPFSQrDecoder()
 
     @ipfsOp
-    async def __call__(self, ipfsop, pathRef):
+    async def __call__(self, ipfsop, pathRef, fetchExtraMetadata=False):
         """
         :param IPFSPath ipfsPath
         """
@@ -68,7 +68,9 @@ class ResourceAnalyzer(QObject):
             )
 
             # Fetch additional metadata in another task
-            ensure(self.fetchMetadata(path, statInfo))
+
+            if fetchExtraMetadata:
+                ensure(self.fetchMetadata(path, statInfo))
 
         if mimetype and mimetype.valid:
             return mimetype, statInfo

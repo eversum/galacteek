@@ -34,8 +34,26 @@ settings.
 You'll need to have *git* installed to sync hashmarks repositories.
 See the releases_ page for all releases.
 
-.. image:: https://raw.githubusercontent.com/pinnaculum/galacteek/master/share/icons/donate.png
+Sponsor this project
+====================
+
+.. image:: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
     :target: https://github.com/sponsors/pinnaculum
+    :alt: Sponsor with Github Sponsors
+    :width: 140
+    :height: 140
+
+.. image:: https://liberapay.com/assets/liberapay/icon-v2_white-on-yellow.200.png
+    :target: https://liberapay.com/galacteek/donate
+    :alt: Sponsor with Liberapay
+    :width: 100
+    :height: 100
+
+.. figure:: https://github.githubassets.com/images/modules/site/icons/funding_platforms/patreon.svg
+    :target: https://patreon.com/galacteek
+    :alt: Sponsor with Patreon
+    :width: 90
+    :height: 90
 
 Screencasts
 ===========
@@ -77,7 +95,9 @@ Features
 connect to an existing IPFS daemon. By default it will try to run a daemon. You
 can change the IPFS connection settings by clicking on the settings icon in the
 toolbar and restart the application afterwards. If using a custom daemon, you
-should enable pubsub and p2p streams, or some features won't be available.
+should enable pubsub and p2p streams, or some features won't be available
+(`Check this page <https://github.com/pinnaculum/galacteek/wiki/Setup-your-daemon>`_
+for more information).
 
 - Decentralized Identifiers (DID) support with IPID_
 - Browser-to-browser DID authentication over libp2p streams

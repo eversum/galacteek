@@ -524,9 +524,15 @@ class IPIdentifier(DAGOperations):
 
     @ipfsOp
     async def resolve(self, ipfsop, resolveTimeout=30):
+        useCache = 'always' if self.local else 'never'
+
+        self.message('DID resolve: {did} (using cache: {usecache})'.format(
+            did=self.ipnsKey, usecache=useCache))
+
         return await ipfsop.nameResolveStreamFirst(
             joinIpns(self.ipnsKey),
-            timeout=resolveTimeout
+            timeout=resolveTimeout,
+            useCache=useCache
         )
 
     async def refresh(self):
@@ -916,13 +922,14 @@ class IPIDManager:
             'nonce': nonce()
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                    'http://{host}:{port}/auth'.format(
-                        host=streamCtx.maddrHost,
-                        port=streamCtx.maddrPort),
-                    json=req) as resp:
-                try:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                        'http://{host}:{port}/auth'.format(
+                            host=streamCtx.maddrHost,
+                            port=streamCtx.maddrPort),
+                        json=req) as resp:
+
                     if resp.status != HTTPOk.status_code:
                         raise Exception('DID Auth error')
 
@@ -938,10 +945,9 @@ class IPIDManager:
                     return await self.vcLdValidate(
                         ipid, req, expanded
                     )
-
-                except Exception as err:
-                    log.debug('didAuthPerform: {}'.format(str(err)))
-                    return False
+        except Exception as err:
+            log.debug('didAuthPerform: {}'.format(str(err)))
+            return False
 
     @ipfsOp
     async def vcLdValidate(self, ipfsop, ipid, req, document):

@@ -38,6 +38,8 @@ from PyQt5.QtCore import QTemporaryDir
 from PyQt5.QtCore import QDir
 from PyQt5.QtCore import QMimeDatabase
 
+from PyQt5.QtGui import QCursor
+
 from galacteek import log
 from galacteek import logUser
 from galacteek import ensure
@@ -1046,6 +1048,11 @@ class GalacteekApplication(QApplication):
                 ensure(self.ethereum.start())
         except ImportError:
             self.ethereum = MockEthereumController()
+
+    def normalCursor(self):
+        cursor = QCursor(Qt.ArrowCursor)
+        QApplication.setOverrideCursor(cursor)
+        QApplication.changeOverrideCursor(cursor)
 
     def setupClipboard(self):
         self.appClipboard = self.clipboard()

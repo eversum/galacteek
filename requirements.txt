@@ -26,7 +26,7 @@ protobuf==3.6.1
 py-multibase==1.0.1
 py-multicodec==0.2.1
 py-multihash>=0.2.3
-pycryptodomex>=3.9.7
+pycryptodomex==3.9.7
 pygments>=2.3.1
 pyld>=2.0.2
 pypika>=0.36.5
@@ -37,9 +37,9 @@ python-magic>=0.4.15
 python3-crdt>=1.0.3
 pyyaml>=5.3.1
 pyzbar>=0.1.8
-qrcode>=6.1
+qrcode==6.1
 qtawesome>=0.7.2
-quamash>=0.6.1
+quamash==0.6.1
 strict-rfc3339>=0.7
-tortoise-orm>=0.16.12
+tortoise-orm==0.16.13
 filelock>=3.0.1

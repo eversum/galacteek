@@ -67,6 +67,7 @@ from .hashmarks import *  # noqa
 from .clipboard import iCopyCIDToClipboard
 from .clipboard import iCopyPathToClipboard
 from .clipboard import iCopyPubGwUrlToClipboard
+from .dialogs import MFSImportOptionsDialog
 
 import aioipfs
 
@@ -582,6 +583,15 @@ class FileManager(QWidget):
             self.status = self.statusReady
 
         self.mfsTree.setEnabled(not busy)
+        self.ui.addFileButton.setEnabled(not busy)
+        self.ui.addDirectoryButton.setEnabled(not busy)
+        self.ui.refreshButton.setEnabled(not busy)
+        self.ui.searchFiles.setEnabled(not busy)
+        self.ui.fileManagerButton.setEnabled(not busy)
+        self.ui.localFileManagerSwitch.setEnabled(not busy)
+        self.ui.fsOptionsButton.setEnabled(not busy)
+        self.ui.pathSelector.setEnabled(not busy)
+        self.ui.datesPickButton.setEnabled(not busy)
 
         if busy and showClip:
             self.busyCube.setVisible(busy)
@@ -903,10 +913,24 @@ class FileManager(QWidget):
             not self.ui.localFileManagerSwitch.isChecked())
 
     def onDropFile(self, path):
-        self.scheduleAddFiles([path])
+        async def _handle():
+            mfsDlg = self._createMfsOptionsDialog()
+
+            options = await self.runMfsDialog(mfsDlg)
+            if options:
+                await self.scheduleAddFiles([path], options)
+
+        ensure(_handle())
 
     def onDropDirectory(self, path):
-        ensure(self.scheduleAddDirectory(path, False, False))
+        async def _handle():
+            mfsDlg = self._createMfsOptionsDialog(type='dir')
+
+            options = await self.runMfsDialog(mfsDlg)
+            if options:
+                await self.scheduleAddDirectory(path, options)
+
+        ensure(_handle())
 
     def onCopyItemHash(self):
         currentItem = self.currentItem()
@@ -1355,26 +1379,52 @@ class FileManager(QWidget):
 
         return dialog.exec_()
 
+    async def runMfsDialog(self, dlg):
+        self.busy(True)
+
+        await runDialogAsync(dlg)
+        if dlg.result() == 0:
+            self.busy(False)
+            return None
+
+        self.busy(False)
+        return dlg.options()
+
+    def _createMfsOptionsDialog(self, type='file'):
+        mfsDlg = MFSImportOptionsDialog()
+        mfsDlg.ui.filestore.setChecked(self.useFileStore)
+        mfsDlg.ui.tsMetadata.setChecked(
+            self.timeFrameSelector.useTimeMetadata)
+        mfsDlg.ui.rawLeaves.setChecked(self.useRawLeaves)
+
+        if type == 'file':
+            mfsDlg.ui.hiddenFiles.setEnabled(False)
+            mfsDlg.ui.gitignore.setEnabled(False)
+            mfsDlg.ui.wrap.setChecked(
+                self.app.settingsMgr.isTrue(
+                    CFG_SECTION_UI, CFG_KEY_WRAPSINGLEFILES)
+            )
+        elif type == 'dir':
+            mfsDlg.ui.wrap.setChecked(
+                self.app.settingsMgr.isTrue(
+                    CFG_SECTION_UI, CFG_KEY_WRAPDIRECTORIES)
+            )
+        return mfsDlg
+
     async def onDirsSelected(self, dialog, dirs):
         self.dialogLastDirSelected = dialog.directory()
 
         if isinstance(dirs, list):
             dir = Path(dirs.pop())
             gitign = dir.joinpath('.gitignore')
-            useGitIgn = False
 
-            hidden = await questionBoxAsync(
-                iImportHiddenFiles(),
-                iImportHiddenFiles()
-            )
+            mfsDlg = self._createMfsOptionsDialog(type='dir')
+            mfsDlg.ui.gitignore.setChecked(gitign.exists())
 
-            if gitign.exists():
-                useGitIgn = await questionBoxAsync(
-                    iUseGitIgnoreRules(),
-                    iUseGitIgnoreRules()
-                )
+            options = await self.runMfsDialog(mfsDlg)
 
-            ensure(self.scheduleAddDirectory(str(dir), hidden, useGitIgn))
+            if options:
+                await self.scheduleAddDirectory(str(dir), options)
 
     def statusAdded(self, name):
         self.statusSet(iAddedFile(name))
@@ -1393,14 +1443,20 @@ class FileManager(QWidget):
         dialog.setFileMode(QFileDialog.ExistingFiles)
 
         dialog.filesSelected.connect(
-            lambda files: self.onFilesSelected(dialog, files))
+            lambda files: ensure(self.onFilesSelected(dialog, files)))
         dialog.exec_()
 
-    def onFilesSelected(self, dialog, files):
+    async def onFilesSelected(self, dialog, files):
         self.dialogLastDirSelected = dialog.directory()
-        self.scheduleAddFiles(files, parent=self.displayPath)
 
-    def scheduleAddFiles(self, path, parent=None):
+        mfsDlg = self._createMfsOptionsDialog()
+        options = await self.runMfsDialog(mfsDlg)
+
+        if options:
+            await self.scheduleAddFiles(
+                files, options, parent=self.displayPath)
+
+    async def scheduleAddFiles(self, path, options, parent=None):
         if self.isBusy:
             return
 
@@ -1408,15 +1464,15 @@ class FileManager(QWidget):
             parent = self.displayPath
 
         self._importTask = self.app.task(
-            self.addFiles, path, parent)
+            self.addFiles, path, options, parent)
         self.ui.cancelButton.show()
 
-    async def scheduleAddDirectory(self, path, hidden, useGitIgn):
+    async def scheduleAddDirectory(self, path, options):
         if self.isBusy or self.inEncryptedFolder:
             return
 
         self._importTask = self.app.task(
-            self.addDirectory, path, hidden, useGitIgn)
+            self.addDirectory, path, options)
         self.ui.cancelButton.show()
 
     async def scheduleUnlink(self, item, cid):
@@ -1743,14 +1799,13 @@ class FileManager(QWidget):
         return await op.daemonConfigGet('Experimental.FilestoreEnabled')
 
     @ipfsOp
-    async def addFiles(self, op, files, parent):
+    async def addFiles(self, op, files, options, parent):
         """ Add every file with an optional wrapper directory """
 
         if self.displayedItem is self.model.itemEncrypted and op.rsaAgent:
             return await self.addFilesSelfEncrypt(files, parent)
 
-        wrapEnabled = self.app.settingsMgr.isTrue(
-            CFG_SECTION_UI, CFG_KEY_WRAPSINGLEFILES)
+        wrapEnabled = options['wrap']
 
         self.enableButtons(flag=False)
         self.busy(showClip=True)
@@ -1762,13 +1817,15 @@ class FileManager(QWidget):
         for file in files:
             await op.sleep()
 
-            root = await op.addPath(file, wrap=wrapEnabled,
-                                    dagformat=self.dagGenerationFormat,
-                                    rawleaves=self.useRawLeaves,
-                                    chunker=self.chunkingAlg,
-                                    hashfunc=self.hashFunction,
-                                    useFileStore=self.useFileStore,
-                                    callback=onEntry)
+            root = await op.addPath(
+                file,
+                wrap=wrapEnabled,
+                dagformat=self.dagGenerationFormat,
+                rawleaves=options['rawLeaves'],
+                chunker=self.chunkingAlg,
+                hashfunc=self.hashFunction,
+                useFileStore=options['useFilestore'],
+                callback=onEntry)
 
             if root is None:
                 self.statusSet(iFileImportError())
@@ -1779,7 +1836,11 @@ class FileManager(QWidget):
             if wrapEnabled is True:
                 base += '.dirw'
 
-            await self.linkEntry(file, root, parent, base)
+            await self.linkEntry(
+                file, root, parent,
+                basename=base,
+                tsMetadata=options['tsMetadata']
+            )
             count += 1
 
         self.statusEmpty()
@@ -1795,9 +1856,8 @@ class FileManager(QWidget):
             self.statusSet(iFileImportCancelled())
 
     @ipfsOp
-    async def addDirectory(self, op, path, hidden, useGitIgn):
-        wrapEnabled = self.app.settingsMgr.isTrue(
-            CFG_SECTION_UI, CFG_KEY_WRAPDIRECTORIES)
+    async def addDirectory(self, op, path, options):
+        wrapEnabled = options['wrap']
 
         self.enableButtons(flag=False)
         self.busy(showClip=True)
@@ -1808,15 +1868,18 @@ class FileManager(QWidget):
         async def onEntry(entry):
             self.statusAdded(entry['Name'])
 
+        useGitIgn = options['useGitIgnore']
+
         dirEntry = await op.addPath(
             path,
             callback=onEntry,
-            hidden=hidden, recursive=True,
+            hidden=options['hiddenFiles'],
+            recursive=True,
             dagformat=self.dagGenerationFormat,
-            rawleaves=self.useRawLeaves,
+            rawleaves=options['rawLeaves'],
             chunker=self.chunkingAlg,
             hashfunc=self.hashFunction,
-            useFileStore=self.useFileStore,
+            useFileStore=options['useFilestore'],
             ignRulesPath='.gitignore' if useGitIgn else None,
             wrap=wrapEnabled
         )
@@ -1831,7 +1894,11 @@ class FileManager(QWidget):
         if wrapEnabled is True:
             basename += '.dirw'
 
-        await self.linkEntry(path, dirEntry, self.displayPath, basename)
+        await self.linkEntry(
+            path, dirEntry, self.displayPath,
+            basename=basename,
+            tsMetadata=options['tsMetadata']
+        )
 
         self.enableButtons()
         self.busy(False)
@@ -1841,10 +1908,11 @@ class FileManager(QWidget):
 
         return True
 
-    async def linkEntry(self, fpath, entry, dest, basename=None):
+    async def linkEntry(self, fpath, entry, dest, tsMetadata=False,
+                        basename=None):
         path = Path(fpath)
 
-        if self.timeFrameSelector.useTimeMetadata:
+        if tsMetadata:
             return await self.linkEntryWithMetadata(
                 fpath, entry, dest,
                 basename=basename if basename else path.name)

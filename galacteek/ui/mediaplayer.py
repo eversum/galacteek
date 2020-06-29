@@ -621,9 +621,17 @@ class MediaPlayerTab(GalacteekTab):
         mediaUrl = self.app.subUrl(path)
         self.playFromUrl(mediaUrl)
 
-    def queueFromPath(self, path, mediaName=None):
+    def queueFromPath(self, path, playLast=False, mediaName=None):
         mediaUrl = self.app.subUrl(path)
         self.playlist.addMedia(QMediaContent(mediaUrl))
+
+        if playLast:
+            count = self.playlist.mediaCount()
+
+            if count > 0:
+                self.player.stop()
+                self.playlist.setCurrentIndex(count - 1)
+                self.player.play()
 
     def clearPlaylist(self):
         self.playlist.clear()

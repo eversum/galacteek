@@ -326,6 +326,10 @@ class IPFSSearchHandler(QObject):
             pin=pinSingle, pinRecursive=pinRecursive))
 
     @pyqtSlot(str)
+    def mplayerQueue(self, path):
+        self.app.mainWindow.mediaPlayerQueue(path, playLast=True)
+
+    @pyqtSlot(str)
     def explore(self, path):
         hashV = stripIpfs(path)
         if hashV:
@@ -390,7 +394,11 @@ class IPFSSearchHandler(QObject):
         if not ipfsPath.valid:
             return
 
-        mType, stat = await self.app.rscAnalyzer(ipfsPath)
+        mType, stat = await self.app.rscAnalyzer(
+            ipfsPath,
+            fetchExtraMetadata=True
+        )
+
         if not mType or not stat:
             return
 
@@ -417,7 +425,8 @@ class IPFSSearchHandler(QObject):
         path = joinIpfs(cid)
 
         try:
-            mType, stat = await self.app.rscAnalyzer(path)
+            mType, stat = await self.app.rscAnalyzer(
+                path, fetchExtraMetadata=True)
             if stat:
                 self.objectStatAvailable.emit(cid, stat)
         except Exception:

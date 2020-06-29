@@ -49,6 +49,7 @@ from . import ui_ipfscidinputdialog, ui_ipfsmultiplecidinputdialog
 from . import ui_donatedialog
 from . import ui_qschemecreatemapping
 from . import ui_iptagsmanager
+from . import ui_mfsoptionsdialog
 
 from .helpers import *
 from .widgets import ImageWidget
@@ -1030,6 +1031,32 @@ class DownloadOpenObjectDialog(QDialog):
 
     def choice(self):
         return self.choiceCombo.currentIndex()
+
+    def accept(self):
+        self.done(1)
+
+    def reject(self):
+        self.done(0)
+
+
+class MFSImportOptionsDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.ui = ui_mfsoptionsdialog.Ui_MFSImportOptionsDialog()
+        self.ui.setupUi(self)
+        self.ui.buttonBox.accepted.connect(self.accept)
+        self.ui.buttonBox.rejected.connect(self.reject)
+
+    def options(self):
+        return {
+            'hiddenFiles': self.ui.hiddenFiles.isChecked(),
+            'useGitIgnore': self.ui.gitignore.isChecked(),
+            'useFilestore': self.ui.filestore.isChecked(),
+            'tsMetadata': self.ui.tsMetadata.isChecked(),
+            'rawLeaves': self.ui.rawLeaves.isChecked(),
+            'wrap': self.ui.wrap.isChecked()
+        }
 
     def accept(self):
         self.done(1)
