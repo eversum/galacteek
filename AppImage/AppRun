@@ -5,17 +5,28 @@ HERE=$(dirname $(readlink -f "${0}"))
 export PATH=$PATH:${HERE}/usr/bin
 export LD_LIBRARY_PATH=${HERE}/usr/lib:$LD_LIBRARY_PATH
 export PYTHONPATH=$PYTHONPATH:${HERE}/usr/lib/python3.7/site-packages
+export QT_QPA_PLATFORM_PLUGIN_PATH=${HERE}/usr/lib/python3.7/site-packages/PyQt5/Qt/plugins/platforms
+APPIQT_LIBPATH=${HERE}/usr/lib/python3.7/site-packages/PyQt5/Qt/lib
 
 if [ ! -z "${container}" ] && [ x"${container}" == x"firejail" ]; then
 	# Disable qtwebengine sandboxing if running inside firejail
 	export QTWEBENGINE_DISABLE_SANDBOX=1
 fi
 
-if [ ! -z $APPIMAGE ] ; then
-	BINARY_PATH=$APPIMAGE
-	BINARY_NAME=$(basename "$APPIMAGE")
-	"${HERE}"/usr/bin/python "${HERE}"/usr/bin/galacteek \
-		--from-appimage \
-		--binary-name="${BINARY_NAME}" --binary-path="${BINARY_PATH}" \
-		--no-ssl-verify --no-release-check "$@"
+if [ ! -z ${APPIMAGE_LIBCHECK} ]; then
+	_LIBS="$QT_QPA_PLATFORM_PLUGIN_PATH/libqxcb.so \
+		$APPIQT_LIBPATH/libQt5*"
+
+	for lib in $_LIBS; do
+		echo "ldd check: $lib"
+		ldd $lib
+	done
+	exit 1
 fi
+
+BINARY_PATH=$APPIMAGE
+BINARY_NAME=$(basename "$APPIMAGE")
+"${HERE}"/usr/bin/python "${HERE}"/usr/bin/galacteek \
+	--from-appimage \
+	--binary-name="${BINARY_NAME}" --binary-path="${BINARY_PATH}" \
+	--no-ssl-verify --no-release-check "$@"
