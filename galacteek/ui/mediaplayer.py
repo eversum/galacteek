@@ -199,8 +199,8 @@ class MediaPlayerTab(GalacteekTab):
     statePaused = QMediaPlayer.PausedState
     stateStopped = QMediaPlayer.StoppedState
 
-    def __init__(self, *args, **kw):
-        super(MediaPlayerTab, self).__init__(*args, **kw)
+    def __init__(self, gWindow):
+        super(MediaPlayerTab, self).__init__(gWindow, sticky=True)
 
         self.playlistIpfsPath = None
         self.playlist = QMediaPlaylist()

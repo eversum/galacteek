@@ -55,6 +55,7 @@ from .helpers import getIconFromImageData
 from .helpers import runDialog
 from .helpers import disconnectSig
 from .helpers import sizeFormat
+from .helpers import playSound
 from .widgets import PopupToolButton
 from .widgets import DownloadProgressButton
 from .dialogs import ChooseProgramDialog
@@ -624,6 +625,9 @@ class ClipboardItemButton(PopupToolButton):
     def mimeDetected(self, mType):
         if self.loadingClip.state() == QMovie.Running:
             self.loadingClip.stop()
+
+        playSound('mime-detected.wav')
+
         ensure(self.updateButton())
 
     def tooltipMessage(self):
@@ -1009,3 +1013,10 @@ class ClipboardItemsStack(QStackedWidget):
 
         if itemIdx > 0:
             return self.widget(itemIdx)
+
+    def items(self, count=None):
+        for idx in reversed(range(
+                max(0, self.count() - count) if count else 0, self.count())):
+            clipItemButton = self.widget(idx)
+            if clipItemButton and clipItemButton.item:
+                yield idx, clipItemButton.item

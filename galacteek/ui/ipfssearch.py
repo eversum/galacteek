@@ -517,8 +517,8 @@ class IPFSSearchView(QWidget):
 
 
 class IPFSSearchTab(GalacteekTab):
-    def __init__(self, gWindow, query=None):
-        super(IPFSSearchTab, self).__init__(gWindow)
+    def __init__(self, gWindow, query=None, sticky=False):
+        super(IPFSSearchTab, self).__init__(gWindow, sticky=sticky)
 
         self.view = IPFSSearchView(query, parent=self)
         self.view.titleNeedUpdate.connect(

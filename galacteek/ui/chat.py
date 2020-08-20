@@ -37,6 +37,7 @@ from galacteek import log
 from galacteek import partialEnsure
 from galacteek.core.modelhelpers import UneditableStringListModel
 
+from .dwebspace import WS_PEERS
 from .helpers import getIcon
 from .helpers import inputTextCustom
 from .helpers import questionBoxAsync
@@ -139,7 +140,8 @@ class JoinChannelDialog(QDialog):
         self.app.mainWindow.registerTab(
             widget, name=channel,
             icon=getIcon('qta:mdi.chat-outline'),
-            current=True
+            current=True,
+            workspace=WS_PEERS
         )
 
 
@@ -366,6 +368,7 @@ class ChatRoomWidget(GalacteekTab):
         if message.chatMessageType == ChatRoomMessage.CHATMSG_TYPE_MESSAGE:
             if not self.isVisible():
                 self.setTabIcon(getIcon('chat-active.png'))
+                self.tabActiveNotify()
             else:
                 self.setTabIcon(getIcon('qta:mdi.chat-outline'))
 

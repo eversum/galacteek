@@ -9,6 +9,7 @@ galacteek's manual (english)
 
     Settings <settings>
     Toolbars <toolbars>
+    Workspaces <workspaces>
     Using the clipboard <clipboard>
     Decentralized Identity <did>
     Connection status <status>
@@ -16,6 +17,7 @@ galacteek's manual (english)
     Hashmarks <hashmarks>
     File manager <filemanager>
     Browsing <browsing>
+    Editing <editing> 
     Pinning <pinning>
     Pyramids <pyramids>
     Atom feeds <atom>

@@ -303,16 +303,6 @@
           </widget>
          </item>
          <item>
-          <widget class="QLineEdit" name="searchFiles">
-           <property name="maximumSize">
-            <size>
-             <width>180</width>
-             <height>16777215</height>
-            </size>
-           </property>
-          </widget>
-         </item>
-         <item>
           <widget class="QComboBox" name="comboSearchCase">
            <item>
             <property name="text">
@@ -324,6 +314,16 @@
              <string>Case-insensitive</string>
             </property>
            </item>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLineEdit" name="searchFiles">
+           <property name="maximumSize">
+            <size>
+             <width>180</width>
+             <height>16777215</height>
+            </size>
+           </property>
           </widget>
          </item>
         </layout>

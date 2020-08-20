@@ -575,11 +575,12 @@ class PSChatService(JSONPubsubService):
         while True:
             await asyncio.sleep(90)
 
-            profile = ipfsop.ctx.currentProfile
-            channelsDag = profile.dagChatChannels
+            if ipfsop.ctx.currentProfile:
+                channelsDag = ipfsop.ctx.currentProfile.dagChatChannels
 
-            msg = ChatChannelsListMessage.make(channelsDag.channelsSorted)
-            await self.send(msg)
+                await self.send(
+                    ChatChannelsListMessage.make(channelsDag.channelsSorted)
+                )
 
 
 def chatChannelTopic(channel):

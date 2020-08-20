@@ -34,6 +34,7 @@ from galacteek.ipfs.cidhelpers import IPFSPath
 
 from galacteek.core.schemes import isEnsUrl
 
+from .dwebspace import *
 from .dag import DAGViewer
 from .textedit import TextEditorTab
 from .dialogs import ResourceOpenConfirmDialog
@@ -218,13 +219,15 @@ class IPFSResourceOpener(QObject):
                 rscShortName,
                 icon=getMimeIcon('text/x-generic'),
                 tooltip=rscPath,
-                current=True
+                current=True,
+                workspace=WS_EDIT
             )
 
         if mimeType.isImage or mimeType.isAnimation:
             tab = ImageViewerTab(self.app.mainWindow)
             ensure(tab.view.showImage(rscPath))
             self.objectOpened.emit(ipfsPath)
+
             return self.app.mainWindow.registerTab(
                 tab,
                 rscShortName,
@@ -234,7 +237,7 @@ class IPFSResourceOpener(QObject):
             )
 
         if mimeType.isVideo or mimeType.isAudio:
-            tab = self.app.mainWindow.addMediaPlayerTab()
+            tab = self.app.mainWindow.getMediaPlayer()
             if tab:
                 tab.playFromPath(rscPath)
             return
@@ -253,12 +256,25 @@ class IPFSResourceOpener(QObject):
                 current=True
             )
 
-        if mimeType.isDir or mimeType.isHtml:
+        if mimeType.isHtml:
             self.objectOpened.emit(ipfsPath)
             return self.app.mainWindow.addBrowserTab(
                 minProfile=minWebProfile,
                 pinBrowsed=pin).browseFsPath(
                     ipfsPath, schemePreferred=schemePreferred)
+
+        if mimeType.isDir:
+            indexPath = ipfsPath.child('index.html')
+            stat = await ipfsop.objStat(indexPath.objPath, timeout=8)
+
+            if stat:
+                self.objectOpened.emit(ipfsPath)
+                return self.app.mainWindow.addBrowserTab(
+                    minProfile=minWebProfile,
+                    pinBrowsed=pin).browseFsPath(
+                        ipfsPath, schemePreferred=schemePreferred)
+            else:
+                return await self.app.mainWindow.exploreIpfsPath(ipfsPath)
 
         if openingFrom in ['filemanager', 'qa', 'didlocal']:
             await self.needUserConfirm.emit(ipfsPath, mimeType, True)

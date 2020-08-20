@@ -41,6 +41,7 @@ from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import cidValid
 from galacteek.ipfs.cidhelpers import cidConvertBase32
 from galacteek import ensure
+from galacteek import partialEnsure
 
 from .i18n import *
 from .helpers import *
@@ -148,8 +149,13 @@ class IPFSNameItem(IPFSItem):
         if self.mimeType:
             return self.mimeType.split('/')[0]
 
+    @property
     def cid(self):
-        return cidhelpers.getCID(cidConvertBase32(self.entry['Hash']))
+        return self.entry['Hash']
+
+    @property
+    def cidObject(self):
+        return cidhelpers.getCID(self.cid)
 
     def getFullPath(self):
         """
@@ -220,8 +226,9 @@ class IPFSHashItemModel(QStandardItemModel):
         return True
 
     def getHashFromIdx(self, idx):
-        idxHash = self.index(idx.row(), self.COL_HASH, idx.parent())
-        return self.data(idxHash)
+        nameItem = self.getNameItemFromIdx(idx)
+        if nameItem:
+            return nameItem.cid
 
     def getNameFromIdx(self, idx):
         idxName = self.index(idx.row(), self.COL_NAME, idx.parent())
@@ -331,7 +338,7 @@ class IPFSHashExplorerStack(GalacteekTab):
                                       parent=self, addClose=addClose,
                                       showCidLabel=True,
                                       autoOpenFolders=autoOpenFolders)
-        view.closeRequest.connect(functools.partial(
+        view.closeRequest.connect(partialEnsure(
             self.remove, view))
         view.directoryOpenRequest.connect(
             lambda cid: self.viewHash(cid, addClose=True))
@@ -341,11 +348,19 @@ class IPFSHashExplorerStack(GalacteekTab):
         view.reFocus()
         return True
 
-    def remove(self, view):
+    async def remove(self, view):
         try:
+            view.cancelTasks()
             self.stack.removeWidget(view)
         except:
             pass
+
+    async def onClose(self):
+        for idx in range(self.stack.count()):
+            widget = self.stack.widget(idx)
+            await widget.cleanup()
+
+        return True
 
 
 class TreeEventFilter(QObject):
@@ -398,9 +413,12 @@ class IPFSHashExplorerWidget(QWidget):
         self.gitEnabled = showGit
         self.hideHashes = hideHashes
 
+        self.listTask = None
+
         self.parentMultihash = None
         self.parentButton = None
         self.rootHash = None
+        self.rootPath = None
         self.changeMultihash(hashRef)
 
         self.mainLayout = QVBoxLayout(self)
@@ -494,7 +512,7 @@ class IPFSHashExplorerWidget(QWidget):
     def initModel(self):
         self.model.clearModel()
         self.model.setHorizontalHeaderLabels(
-            [iFileName(), iFileSize(), iMimeType(), iCID()])
+            [iFileName(), iFileSize(), iMimeType()])
         self.itemRoot = self.model.invisibleRootItem()
         self.itemRootIdx = self.model.indexFromItem(self.itemRoot)
 
@@ -525,6 +543,13 @@ class IPFSHashExplorerWidget(QWidget):
 
     def reFocus(self):
         self.tree.setFocus(Qt.OtherFocusReason)
+
+    async def cleanup(self):
+        self.cancelTasks()
+
+    def cancelTasks(self):
+        if self.listTask:
+            self.listTask.cancel()
 
     @ipfsOp
     async def gitClone(self, ipfsop, entry, dest):
@@ -648,8 +673,10 @@ class IPFSHashExplorerWidget(QWidget):
 
     def updateTree(self):
         if self.rootPath and self.rootPath.valid:
-            self.app.task(self.listMultihash, self.rootPath.objPath,
-                          parentItem=self.itemRoot)
+            self.listTask = self.app.task(
+                self.listMultihash,
+                self.rootPath.objPath,
+                parentItem=self.itemRoot)
 
     def onContextMenu(self, point):
         selModel = self.tree.selectionModel()
@@ -692,34 +719,33 @@ class IPFSHashExplorerWidget(QWidget):
             timeout do the same call but without resolving nodes types
         """
 
+        self.tree.setModel(self.model)
+        self.tree.header().setSectionResizeMode(self.model.COL_NAME,
+                                                QHeaderView.ResizeToContents)
+        self.tree.header().setSectionResizeMode(self.model.COL_MIME,
+                                                QHeaderView.ResizeToContents)
+
         try:
             self.setInfo(iLoading())
             await self.timedList(ipfsop, objPath, parentItem,
-                                 autoexpand, 25, True)
+                                 autoexpand, 300, True)
         except asyncio.TimeoutError:
             self.setInfo(iTimeoutTryNoResolve())
 
             try:
                 await self.timedList(ipfsop, objPath, parentItem,
-                                     autoexpand, 15, False)
+                                     autoexpand, 300, False)
             except asyncio.TimeoutError:
                 # That's a dead end .. bury that hash please ..
                 self.setInfo(iTimeoutInvalidHash())
                 return
 
         except aioipfs.APIError:
+            # TODO
             self.setInfo(iErrNoCx())
             return
 
-        self.tree.setModel(self.model)
-        self.tree.header().setSectionResizeMode(self.model.COL_NAME,
-                                                QHeaderView.ResizeToContents)
-        self.tree.header().setSectionResizeMode(self.model.COL_MIME,
-                                                QHeaderView.ResizeToContents)
         self.tree.sortByColumn(self.model.COL_NAME, Qt.AscendingOrder)
-
-        if self.app.settingsMgr.hideHashes or self.hideHashes:
-            self.tree.hideColumn(self.model.COL_HASH)
 
         rStat = await ipfsop.objStat(objPath)
         statInfo = StatInfo(rStat)
@@ -731,6 +757,10 @@ class IPFSHashExplorerWidget(QWidget):
 
     async def list(self, op, path, parentItem=None,
                    autoexpand=False, resolve_type=True):
+        """
+        Does the actual directory listing with
+        a streamed ls call
+        """
 
         parentItemSibling = self.model.sibling(parentItem.row(),
                                                self.model.COL_HASH,
@@ -739,11 +769,9 @@ class IPFSHashExplorerWidget(QWidget):
         if parentItemHash is None:
             parentItemHash = self.rootHash
 
-        async for obj in op.list(path, resolve_type):
+        async for obj in op.listStreamed(path, resolve_type):
             for entry in obj['Links']:
-                await op.sleep()
-
-                cid = cidConvertBase32(entry['Hash'])
+                cid = entry['Hash']
                 if cid in self.model.entryCache:
                     continue
 
@@ -765,8 +793,6 @@ class IPFSHashExplorerWidget(QWidget):
                 nItemSize = IPFSItem(sizeFormat(entry['Size']))
                 nItemSize.setToolTip(str(entry['Size']))
                 nItemMime = IPFSItem(nItemName.mimeType or iUnknown())
-                nItemHash = IPFSItem(cid)
-                nItemHash.setToolTip(cidInfosMarkup(cid))
                 nItemName.setToolTip(entry['Name'])
 
                 if nItemName.isDir():
@@ -783,7 +809,7 @@ class IPFSHashExplorerWidget(QWidget):
                 elif nItemName.isUnknown():
                     nItemName.setIcon(self.iconUnknown)
 
-                nItem = [nItemName, nItemSize, nItemMime, nItemHash]
+                nItem = [nItemName, nItemSize, nItemMime]
                 parentItem.appendRow(nItem)
 
                 if nItemName.isDir() and self.autoOpenFolders:

@@ -516,6 +516,8 @@ class GalacteekApplication(QApplication):
 
     def createMainWindow(self, show=True):
         self.mainWindow = mainui.MainWindow(self)
+        self.mainWindow.setupWorkspaces()
+
         if show is True:
             self.mainWindow.show()
 

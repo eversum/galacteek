@@ -42,10 +42,12 @@ class EventLogWidget(GalacteekTab):
         self.checkPubsub = QCheckBox('Pubsub events')
         self.checkDht = QCheckBox('DHT events')
         self.checkBitswap = QCheckBox('Bitswap events')
+        self.checkSwarm = QCheckBox('Swarm events')
         self.checkAll = QCheckBox('All events')
         self.checkAll.stateChanged.connect(self.onCheckAll)
 
         hLayout.addWidget(self.checkCore)
+        hLayout.addWidget(self.checkSwarm)
         hLayout.addWidget(self.checkDht)
         hLayout.addWidget(self.checkPubsub)
         hLayout.addWidget(self.checkBitswap)
@@ -64,6 +66,7 @@ class EventLogWidget(GalacteekTab):
         self.checkDht.setEnabled(not state)
         self.checkBitswap.setEnabled(not state)
         self.checkPubsub.setEnabled(not state)
+        self.checkSwarm.setEnabled(not state)
 
     def onSave(self):
         fPath = saveFileSelect()
@@ -93,6 +96,9 @@ class EventLogWidget(GalacteekTab):
 
                 if ('core' in systems or 'addrutil' in systems) and \
                         self.checkCore.isChecked():
+                    display = True
+                elif ('swarm' in systems or 'swarm2' in systems) and \
+                        self.checkSwarm.isChecked():
                     display = True
                 elif 'dht' in systems and self.checkDht.isChecked():
                     display = True

@@ -64,8 +64,8 @@ class PinStatusWidget(GalacteekTab):
     COL_PROGRESS = 4
     COL_CTRL = 5
 
-    def __init__(self, gWindow):
-        super(PinStatusWidget, self).__init__(gWindow)
+    def __init__(self, gWindow, **kw):
+        super(PinStatusWidget, self).__init__(gWindow, **kw)
 
         self.tree = QTreeView()
         self.tree.setObjectName('pinStatusWidget')

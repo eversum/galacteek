@@ -1391,6 +1391,9 @@ class BrowserTab(GalacteekTab):
 
     @ipfsOp
     async def createPageOpsMfsMenu(self, ipfsop):
+        if not ipfsop.ctx.currentProfile:
+            return
+
         self.mfsMenu = ipfsop.ctx.currentProfile.createMfsMenu(
             title=iLinkToMfsFolder(), parent=self
         )

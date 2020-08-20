@@ -266,6 +266,7 @@ setup(
         'galacteek.smartcontracts',
         'galacteek.space',
         'galacteek.ui',
+        'galacteek.ui.dwebspace',
         'galacteek.ui.orbital'
     ],
     install_requires=install_reqs,

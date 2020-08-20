@@ -823,7 +823,7 @@ class FileManager(QWidget):
                     self.ui.searchFiles]:
             btn.setEnabled(flag)
 
-        if self.displayedItem is self.model.itemEncrypted:
+        if self.model and self.displayedItem is self.model.itemEncrypted:
             self.ui.addDirectoryButton.setEnabled(False)
 
     def showCancel(self, show=True):
@@ -1955,7 +1955,7 @@ class FileManager(QWidget):
 
 class FileManagerTab(GalacteekTab):
     def __init__(self, gWindow, fileManager=None):
-        super(FileManagerTab, self).__init__(gWindow)
+        super(FileManagerTab, self).__init__(gWindow, sticky=True)
 
         self.fileManager = fileManager if fileManager else \
             FileManager(parent=self)

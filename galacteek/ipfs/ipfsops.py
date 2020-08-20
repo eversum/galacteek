@@ -1025,6 +1025,27 @@ class IPFSOperator(object):
         except BaseException:
             pass
 
+    async def listStreamed(self, path, resolve_type=True):
+        """
+        Lists objects in a given path and yields them (streamed)
+        """
+        try:
+            async for listing in self.client.core.ls_streamed(
+                    await self.objectPathMapper(path),
+                    headers=True,
+                    resolve_type=resolve_type):
+
+                objects = listing.get('Objects', [])
+
+                for obj in objects:
+                    await self.sleep()
+                    yield obj
+        except aioipfs.APIError as e:
+            raise e
+        except BaseException as err:
+            self.debug(str(err))
+            raise err
+
     async def objStat(self, path, timeout=30):
         try:
             stat = await self.waitFor(

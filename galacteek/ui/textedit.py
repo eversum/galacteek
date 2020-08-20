@@ -78,6 +78,7 @@ from .widgets import IPFSUrlLabel
 from .widgets import GalacteekTab
 from .widgets import CheckableToolButton
 from .widgets import HashmarkThisButton
+from .widgets import MarkdownTextEdit
 from .clips import RotatingCubeRedFlash140d
 from .i18n import *
 
@@ -269,7 +270,7 @@ def filenameIsHtml(filename):
     ]
 
 
-class Editor(QPlainTextEdit):
+class Editor(MarkdownTextEdit):
     def __init__(self, parent, lineWrap=80, tabReplace=False):
         super(Editor, self).__init__(parent)
 

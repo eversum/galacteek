@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QAbstractItemView
 from PyQt5.QtWidgets import QHBoxLayout
+from PyQt5.QtWidgets import QApplication
 
 from PyQt5.QtCore import QAbstractItemModel
 from PyQt5.QtCore import QModelIndex
@@ -601,7 +602,7 @@ class PeersServiceSearchDock(QDockWidget):
 
 class PeersManager(GalacteekTab):
     def __init__(self, gWindow, peersTracker, **kw):
-        super().__init__(gWindow, **kw)
+        super().__init__(gWindow, sticky=True)
 
         self.lock = asyncio.Lock()
         self.peersTracker = peersTracker
@@ -635,7 +636,7 @@ class PeersManager(GalacteekTab):
         pass
 
     async def onPeerAdded(self, peerId):
-        pass
+        self.tabActiveNotify()
 
     def onContextMenu(self, point):
         idx = self.ui.peersMgrView.indexAt(point)

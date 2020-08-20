@@ -31,6 +31,8 @@ from PyQt5.QtWidgets import QDialog
 from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtWidgets import QDialogButtonBox
 
+from PyQt5.QtMultimedia import QSound
+
 from galacteek import ensure
 from galacteek import partialEnsure
 from galacteek import threadExec
@@ -439,6 +441,10 @@ def qrcFileData(path):
         return qrcFile.readAll().data()
     except BaseException:
         pass
+
+
+def playSound(filename):
+    QSound.play(f':/share/static/sounds/{filename}')
 
 
 class IPFSTreeKeyFilter(QObject):
