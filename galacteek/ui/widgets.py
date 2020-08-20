@@ -1,5 +1,4 @@
 import asyncio
-import mimetypes
 from datetime import datetime
 
 from PyQt5.QtWidgets import QFrame
@@ -55,6 +54,7 @@ from pygments.lexers import get_lexer_by_name
 from galacteek.ipfs.stat import StatInfo
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.cidhelpers import IPFSPath
+from galacteek.ipfs.mimetype import detectMimeType
 from galacteek import log
 from galacteek import ensure
 from galacteek import partialEnsure
@@ -67,6 +67,7 @@ from galacteek.database.models.core import Hashmark
 
 from .helpers import getIcon
 from .helpers import getIconFromIpfs
+from .helpers import getImageFromIpfs
 from .helpers import sizeFormat
 from .helpers import messageBox
 from .helpers import messageBoxAsync
@@ -87,29 +88,45 @@ from .i18n import iHashmarkSourceAlreadyRegistered
 
 
 class GalacteekTab(QWidget):
-    def __init__(self, gWindow, **kw):
-        super(GalacteekTab, self).__init__(gWindow)
+    def __init__(self, gWindow, parent=None, sticky=False):
+        super(GalacteekTab, self).__init__(parent)
+
+        self.app = QApplication.instance()
         self.vLayout = QVBoxLayout(self)
         self.setLayout(self.vLayout)
 
         self.gWindow = gWindow
+        self._workspace = None
+        self.sticky = sticky
         self.setAttribute(Qt.WA_DeleteOnClose)
 
+    @property
+    def workspace(self):
+        return self._workspace
+
+    def workspaceAttach(self, ws):
+        self._workspace = ws
+
     def tabIndex(self, w=None):
-        return self.gWindow.tabWidget.indexOf(w if w else self)
+        return self.workspace.tabWidget.indexOf(w if w else self)
+
+    def tabRemove(self):
+        idx = self.tabIndex()
+        if idx:
+            self.workspace.tabWidget.removeTab(idx)
 
     def setTabName(self, name, widget=None):
         idx = self.tabIndex(w=widget)
         if idx >= 0:
-            self.gWindow.tabWidget.setTabText(idx, name)
+            self.workspace.tabWidget.setTabText(idx, name)
 
     def setTabIcon(self, icon, widget=None):
         idx = self.tabIndex(w=widget)
         if idx >= 0:
-            self.gWindow.tabWidget.setTabIcon(idx, icon)
+            self.workspace.tabWidget.setTabIcon(idx, icon)
 
     def tabBar(self):
-        return self.gWindow.tabWidget.tabBar()
+        return self.workspace.tabWidget.tabBar()
 
     def addToLayout(self, widget):
         self.vLayout.addWidget(widget)
@@ -123,10 +140,6 @@ class GalacteekTab(QWidget):
     @ipfsOp
     async def initialize(self, op):
         pass
-
-    @property
-    def app(self):
-        return self.gWindow.app
 
     @property
     def loop(self):
@@ -1162,26 +1175,39 @@ class MarkdownTextEdit(QTextEdit):
     def dragEnterEvent(self, event):
         event.accept()
 
-    def handleObjectDrop(self, path):
+    async def handleObjectDrop(self, path):
         path = IPFSPath(path, autoCidConv=True)
+
         if path.valid:
-            name, mtype = path.basename, None
+            name = path.basename
 
-            if name:
-                mtype, enc = mimetypes.guess_type(name)
+            mType = await detectMimeType(path.objPath)
 
-            if mtype and mtype.startswith('image'):
-                # Image link
-                self.insertPlainText(
-                    '[![{name}]({url})]({url})'.format(
-                        name=name,
-                        url=path.ipfsUrl
+            if mType and mType.isImage:
+                # Fetch the image, and set width/height style
+                # using attr_list (markdown extension)
+
+                image = await getImageFromIpfs(path.objPath)
+
+                if image:
+                    style = '{: ' + \
+                        'style="width:{width}px; height:{height}px"'.format(
+                            width=image.width(),
+                            height=image.height()
+                        ) + ' }'
+
+                    # Image link
+                    self.insertPlainText(
+                        "[![{name}]({url}){istyle}]({url})\n".format(
+                            name=name,
+                            url=path.ipfsUrl,
+                            istyle=style
+                        )
                     )
-                )
             else:
                 # Standard link
                 self.insertPlainText(
-                    '[{name}]({url})'.format(
+                    "[{name}]({url})\n".format(
                         name=name,
                         url=path.ipfsUrl
                     )
@@ -1213,6 +1239,16 @@ class MarkdownTextEdit(QTextEdit):
                 self.redrawPreview.emit()
         else:
             event.accept()
+
+    def insertFromMimeData(self, mimeData):
+        ensure(self._fromMimeData(mimeData))
+
+    async def _fromMimeData(self, mimeData):
+        if mimeData.hasText():
+            if await self.handleObjectDrop(mimeData.text()):
+                self.redrawPreview.emit()
+            else:
+                self.insertPlainText(mimeData.text())
 
 
 class MarkdownInputWidget(QWidget):

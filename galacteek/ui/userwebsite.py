@@ -7,11 +7,12 @@ from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QHBoxLayout
 from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtWidgets import QLineEdit
+from PyQt5.QtWidgets import QSpacerItem
+from PyQt5.QtWidgets import QSizePolicy
 
 from PyQt5.QtCore import QRegExp
 from PyQt5.QtCore import QObject
 from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import Qt
 
 from PyQt5.QtGui import QRegExpValidator
@@ -21,16 +22,15 @@ from galacteek import partialEnsure
 from galacteek.ipfs import ipfsOp
 
 from .widgets import MarkdownInputWidget
+from .widgets import GalacteekTab
 from .helpers import runDialogAsync
 from .helpers import getMimeIcon
 from .helpers import getIcon
 from .helpers import messageBox
+from .helpers import questionBoxAsync
 
 from .dialogs import IPTagsSelectDialog
-
-
-def iNewBlogPost():
-    return QCoreApplication.translate('GalacteekWindow', 'New blog post')
+from .i18n import iNewBlogPost
 
 
 class UserWebsiteManager(QObject):
@@ -120,3 +120,83 @@ class WebsiteAddPostDialog(QDialog):
             self.setEnabled(True)
         else:
             self.done(1)
+
+
+class WebsiteAddPostTab(GalacteekTab):
+    def __init__(self, gWindow):
+        super().__init__(gWindow)
+
+        self.app = QApplication.instance()
+
+        buttonBox = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
+
+        self.title = QLineEdit()
+        self.title.setMaximumWidth(600)
+        self.title.setAlignment(Qt.AlignCenter)
+        regexp = QRegExp(r"[\w_-\s]+")
+        self.title.setValidator(QRegExpValidator(regexp))
+        self.title.setMaxLength(92)
+
+        titleLayout = QHBoxLayout()
+        titleLayout.setSpacing(64)
+        titleLayout.addItem(
+            QSpacerItem(60, 10, QSizePolicy.Minimum, QSizePolicy.Minimum))
+        titleLayout.addWidget(QLabel('Title'))
+        titleLayout.addWidget(self.title)
+        titleLayout.addItem(
+            QSpacerItem(10, 10, QSizePolicy.Expanding, QSizePolicy.Minimum))
+
+        self.markdownInput = MarkdownInputWidget()
+        self.vLayout.addLayout(titleLayout)
+
+        self.vLayout.addWidget(self.markdownInput)
+        self.vLayout.addWidget(buttonBox, 0, Qt.AlignCenter)
+
+        buttonBox.accepted.connect(partialEnsure(self.process))
+        buttonBox.rejected.connect(partialEnsure(self.postCancelled))
+
+        self.title.setFocus(Qt.OtherFocusReason)
+
+    async def process(self):
+        contents = self.markdownInput.markdownText()
+        title = self.title.text()
+
+        if len(title) == 0 or len(contents) == 0:
+            return messageBox('Please provide a title and post body')
+
+        self.setEnabled(False)
+        tagsDialog = await runDialogAsync(IPTagsSelectDialog)
+
+        await self.blogPost(title, contents, tagsDialog.destTags)
+
+    @ipfsOp
+    async def blogPost(self, ipfsop, title, body, tags):
+        profile = ipfsop.ctx.currentProfile
+
+        try:
+            await profile.userWebsite.blogPost(
+                title, body, tags=tags)
+        except Exception as err:
+            messageBox(str(err))
+            self.setEnabled(True)
+        else:
+            self.tabRemove()
+
+    async def onClose(self):
+        contents = self.markdownInput.markdownText()
+
+        if len(contents) > 0:
+            return await self.cancelCheck()
+
+        return True
+
+    async def cancelCheck(self):
+        return await questionBoxAsync(
+            'Blog post',
+            'Cancel ?')
+
+    async def postCancelled(self):
+        if len(self.markdownInput.markdownText()) == 0 or \
+                await self.cancelCheck():
+            self.tabRemove()

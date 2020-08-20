@@ -196,6 +196,8 @@
     <file>../../share/icons/add-folder.png</file>
     <file>../../share/icons/add-file.png</file>
     <file>../../share/icons/ipfs-favicon.ico</file>
+    <file>../../share/static/sounds/sonar.wav</file>
+    <file>../../share/static/sounds/mime-detected.wav</file>
   </qresource>
   <qresource>
     <file>../../share/icons/planets/pluto.png</file>

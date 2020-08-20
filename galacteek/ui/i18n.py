@@ -440,6 +440,10 @@ def iOpen():
     return QCoreApplication.translate('GalacteekWindow', 'Open')
 
 
+def iNewBlogPost():
+    return QCoreApplication.translate('GalacteekWindow', 'New blog post')
+
+
 def iExploreDirectory():
     return QCoreApplication.translate('GalacteekWindow', 'Explore directory')
 

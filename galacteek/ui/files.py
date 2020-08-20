@@ -1955,7 +1955,7 @@ class FileManager(QWidget):
 
 class FileManagerTab(GalacteekTab):
     def __init__(self, gWindow, fileManager=None):
-        super(FileManagerTab, self).__init__(gWindow)
+        super(FileManagerTab, self).__init__(gWindow, sticky=True)
 
         self.fileManager = fileManager if fileManager else \
             FileManager(parent=self)

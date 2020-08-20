@@ -3,7 +3,6 @@ import functools
 from logbook import Handler
 from logbook import StringFormatterHandlerMixin
 
-from PyQt5.QtWidgets import QTabWidget
 from PyQt5.QtWidgets import QMainWindow
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QToolBar
@@ -13,7 +12,6 @@ from PyQt5.QtWidgets import QActionGroup
 from PyQt5.QtWidgets import QToolButton
 from PyQt5.QtWidgets import QPushButton
 from PyQt5.QtWidgets import QLabel
-from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtWidgets import QTextEdit
 from PyQt5.QtWidgets import QLineEdit
 from PyQt5.QtWidgets import QStackedWidget
@@ -43,7 +41,6 @@ from galacteek.core.glogger import loggerMain
 from galacteek.core.glogger import loggerUser
 from galacteek.core.glogger import easyFormatString
 from galacteek.core.asynclib import asyncify
-from galacteek.ui import mediaplayer
 from galacteek.ipfs.wrappers import *
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.cidhelpers import IPFSPath
@@ -64,15 +61,12 @@ from . import ipfsview
 from . import ipfssearch
 from . import peers
 from . import eventlog
-from . import pin
 from . import chat
 
 from .dids import DIDExplorer
 from .clips import RotatingCubeClipSimple
 from .clips import RotatingCubeRedFlash140d
 from .eth import EthereumStatusButton
-from .feeds import AtomFeedsViewTab
-from .feeds import AtomFeedsView
 from .textedit import TextEditorTab
 from .iprofile import ProfileEditDialog
 from .iprofile import ProfileButton
@@ -84,14 +78,16 @@ from .daemonstats import BandwidthGraphView
 from .daemonstats import PeersCountGraphView
 from .camera import CameraController
 from .helpers import *
+from .widgets import AtomFeedsToolbarButton
 from .widgets import PopupToolButton
 from .widgets import HashmarkMgrButton
 from .widgets import HashmarksSearcher
-from .widgets import AtomFeedsToolbarButton
 from .widgets import AnimatedLabel
 from .dialogs import *
 from ..appsettings import *
 from .i18n import *
+
+from .dwebspace import *
 
 from .clipboard import ClipboardManager
 from .clipboard import ClipboardItemsStack
@@ -362,50 +358,148 @@ class MainToolBar(QToolBar):
         pass
 
 
-class TabWidgetKeyFilter(QObject):
-    nextPressed = pyqtSignal()
+class WorkspacesToolBar(QToolBar):
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
-    def eventFilter(self, obj, event):
-        if event.type() == QEvent.KeyPress:
-            modifiers = event.modifiers()
+        self.wsButtons = {}
 
-            key = event.key()
-            if modifiers & Qt.ControlModifier:
-                if key == Qt.Key_J:
-                    self.nextPressed.emit()
-                    return True
-        return False
+    def add(self, btn):
+        self.wsButtons[btn] = self.addWidget(btn)
 
+    def wsSwitched(self, workspace):
+        # Current workspace has changed, update the buttons
 
-class CentralWidget(QWidget):
-    def __init__(self, parent):
-        super(CentralWidget, self).__init__(parent)
-
-        self.setObjectName('centralWidget')
-        self.wLayout = QVBoxLayout()
-        self.setLayout(self.wLayout)
+        for wsButton in self.wsButtons.keys():
+            if wsButton.workspace is workspace:
+                wsButton.setChecked(True)
+            else:
+                # Repaint when unchecking an inactive workspace, in
+                # rare cases it seems to still appear checked
+                wsButton.setChecked(False)
+                wsButton.repaint()
 
 
-class BackgroundWidget(QWidget):
-    def __init__(self, parent):
-        super(BackgroundWidget, self).__init__(parent)
+class WorkspaceSwitchButton(QToolButton):
+    def __init__(self, workspace, parent=None):
+        super().__init__(parent)
+        self.setCheckable(True)
+        self.workspace = workspace
+        self.setIcon(workspace.wsIcon)
+        self.setObjectName('wsSwitchButton')
 
-        self.setObjectName('homeWidget')
-        self.wLayout = QVBoxLayout()
-        self.setLayout(self.wLayout)
+        if workspace.wsDescription:
+            self.setToolTip(workspace.wsDescription)
+
+    def checkStateSet(self):
+        super(WorkspaceSwitchButton, self).checkStateSet()
+
+    def nextCheckState(self):
+        if self.workspace.stack.currentWorkspace() is not self.workspace:
+            self.switch()
+            self.setChecked(True)
+        else:
+            self.setChecked(False)
+
+    def switch(self, soundNotify=False):
+        self.workspace.wsSwitch(soundNotify=soundNotify)
 
 
-class MainTabWidget(QTabWidget):
-    onTabInserted = pyqtSignal(int)
-    onTabRemoved = pyqtSignal(int)
+class CentralStack(QStackedWidget):
+    """
+    Stacked widget holding the workspaces
+    """
 
-    def tabInserted(self, index):
-        self.onTabInserted.emit(index)
-        super().tabInserted(index)
+    def __init__(self, parent, wsToolBar):
+        super().__init__(parent=parent)
 
-    def tabRemoved(self, index):
-        self.onTabRemoved.emit(index)
-        super().tabRemoved(index)
+        self.currentChanged.connect(
+            partialEnsure(self.onWorkspaceChanged))
+        self.toolBarWs = wsToolBar
+
+    @property
+    def mainWindow(self):
+        return self.parent()
+
+    def workspaces(self):
+        for idx in range(0, self.count()):
+            yield idx, self.workspaceFromIndex(idx)
+
+    def workspacesBeforeIndex(self, widx):
+        for idx in range(widx, self.count()):
+            yield idx, self.workspaceFromIndex(idx)
+
+    def workspaceFromIndex(self, idx):
+        return self.widget(idx)
+
+    def currentWorkspace(self):
+        return self.currentIndex(), self.workspaceFromIndex(
+            self.currentIndex())
+
+    def previousWorkspace(self, w):
+        idx = self.indexOf(w)
+
+        if idx > 0:
+            return idx - 1, self.widget(idx - 1)
+
+        return -1, None
+
+    def nextWorkspace(self, w):
+        idx = self.indexOf(w)
+
+        if idx < self.count():
+            return idx + 1, self.widget(idx + 1)
+
+        return -1, None
+
+    def activateWorkspaces(self, flag=True):
+        for idx, workspace in self.workspaces():
+            workspace.setEnabled(flag)
+
+    async def onWorkspaceChanged(self, idx):
+        wspace = self.workspaceFromIndex(idx)
+        if wspace:
+            await wspace.workspaceSwitched()
+
+        self.toolBarWs.wsSwitched(wspace)
+
+    def addWorkspace(self, workspace):
+        self.addWidget(workspace)
+        self.toolBarWs.add(self.wsSwitchButton(workspace))
+        workspace.setupWorkspace()
+
+    def addWorkspaces(self, *wspaces):
+        [self.addWorkspace(w) for w in wspaces]
+
+    def workspaceByName(self, name):
+        for idx in range(self.count()):
+            w = self.widget(idx)
+            if w.wsName == name:
+                return idx, w
+
+        return None, None
+
+    def workspaceCtx(self, name, show=True):
+        idx, wspace = self.workspaceByName(name)
+        if wspace:
+            if show and self.currentWorkspace() is not wspace:
+                wspace.wsSwitch()
+
+            return wspace
+
+    def createSwitchButton(self, wspace, pwspace, nwspace):
+        return SwitchButton(pwspace, nwspace, self)
+
+    def wsSwitchButton(self, wspace):
+        return WorkspaceSwitchButton(wspace)
+
+    def wsAddGlobalCustomAction(self, *args, **kw):
+        for widx, ws in self.workspaces():
+            ws.wsAddCustomAction(*args, **kw)
+
+    def wsAddGlobalAction(self, action: QAction):
+        for widx, ws in self.workspaces():
+            ws.wsAddAction(action)
 
 
 class BrowseButton(PopupToolButton):
@@ -477,7 +571,6 @@ class MainWindow(QMainWindow):
         self._allTabs = []
         self._lastFeedMark = None
 
-        self.centralWidget = CentralWidget(self)
         self.menuBar().hide()
 
         # Seems reasonable
@@ -530,6 +623,7 @@ class MainWindow(QMainWindow):
 
         self.toolbarMain = MainToolBar(self)
         self.toolbarPyramids = MultihashPyramidsToolBar(self)
+        self.toolbarWs = WorkspacesToolBar()
 
         self.toolbarMain.orientationChanged.connect(self.onMainToolbarMoved)
         self.toolbarTools = QToolBar()
@@ -617,8 +711,6 @@ class MainWindow(QMainWindow):
         self.browseButton.menu.addSeparator()
         self.browseButton.menu.addAction(self.editorOpenAction)
         self.browseButton.menu.addSeparator()
-        self.browseButton.menu.addAction(self.mPlayerOpenAction)
-        self.browseButton.menu.addSeparator()
 
         if not self.app.cmdArgs.seed and self.app.cmdArgs.appimage:
             # Add the possibility to import the image from the menu
@@ -634,26 +726,15 @@ class MainWindow(QMainWindow):
         ]
         self.browseButton.rotateCube()
 
-        # File manager button
-        self.fileManagerButton = QToolButton(self)
-        self.fileManagerButton.setToolTip(iFileManager())
-        self.fileManagerButton.setIcon(getIcon('folder-open.png'))
-        self.fileManagerButton.clicked.connect(self.onFileManagerClicked)
-        self.fileManagerButton.setShortcut(QKeySequence('Ctrl+Alt+f'))
-
         # File manager
         self.fileManagerWidget = files.FileManager(parent=self)
 
-        # Text editor button
-        self.textEditorButton = QToolButton(self)
-        self.textEditorButton.setToolTip(iTextEditor())
-        self.textEditorButton.setIcon(getIcon('text-editor.png'))
-        self.textEditorButton.clicked.connect(self.addEditorTab)
-
-        # Atom Feeds
-        self.atomButton = AtomFeedsToolbarButton(self)
-        self.atomButton.clicked.connect(self.onShowAtomFeeds)
-        self.atomFeedsViewWidget = AtomFeedsView(self.app.modelAtomFeeds)
+        if 0:
+            # Text editor button
+            self.textEditorButton = QToolButton(self)
+            self.textEditorButton.setToolTip(iTextEditor())
+            self.textEditorButton.setIcon(getIcon('text-editor.png'))
+            self.textEditorButton.clicked.connect(self.addEditorTab)
 
         # Camera controller
         self.cameraController = CameraController(parent=self)
@@ -672,15 +753,12 @@ class MainWindow(QMainWindow):
 
         self.userWebsiteManager = userwebsite.UserWebsiteManager(
             parent=self.profileMenu)
-        self.profileMenu.addMenu(self.userWebsiteManager.blogMenu)
 
         self.profileButton = ProfileButton(
             menu=self.profileMenu,
             icon=iconProfile
         )
         self.profileButton.setEnabled(False)
-
-        # Hashmarks mgr button
 
         # Hashmarks searcher
         self.hashmarksSearcher = HashmarksSearcher(parent=self)
@@ -692,12 +770,6 @@ class MainWindow(QMainWindow):
         self.hashmarkMgrButton.menu.addMenu(self.hashmarksSearcher.menu)
 
         self.hashmarkMgrButton.menu.addSeparator()
-
-        # Peers button
-        self.peersButton = QToolButton(self)
-        self.peersButton.setToolTip('Peers')
-        self.peersButton.setIcon(getIcon('peers.png'))
-        self.peersButton.clicked.connect(self.onPeersMgrClicked)
 
         self.clipboardItemsStack = ClipboardItemsStack(parent=self.toolbarMain)
 
@@ -712,6 +784,9 @@ class MainWindow(QMainWindow):
 
         # Chat center button
         self.chatCenterButton = chat.ChatCenterButton(parent=self.toolbarMain)
+
+        # Atom
+        self.atomButton = AtomFeedsToolbarButton()
 
         # Settings button
         settingsIcon = getIcon('settings.png')
@@ -767,23 +842,23 @@ class MainWindow(QMainWindow):
         self.toolbarMain.addWidget(self.hashmarkMgrButton)
         self.toolbarMain.addWidget(self.hashmarksSearcher)
         self.toolbarMain.addWidget(self.profileButton)
-        self.toolbarMain.addSeparator()
-        self.toolbarMain.addWidget(self.chatCenterButton)
-        self.toolbarMain.addWidget(self.peersButton)
-        self.toolbarMain.addWidget(self.atomButton)
+
+        # self.toolbarMain.addWidget(self.chatCenterButton)
+        # self.toolbarMain.addWidget(self.peersButton)
+        # self.toolbarMain.addWidget(self.atomButton)
+
+        # self.toolbarMain.addSeparator()
+        # self.toolbarMain.addWidget(self.fileManagerButton)
+        # self.toolbarMain.addWidget(self.textEditorButton)
+        # self.toolbarMain.addWidget(self.cameraController)
 
         self.toolbarMain.addSeparator()
-        self.toolbarMain.addWidget(self.fileManagerButton)
-        self.toolbarMain.addWidget(self.textEditorButton)
-        self.toolbarMain.addWidget(self.cameraController)
+        self.toolbarMain.addWidget(self.toolbarWs)
+        self.toolbarMain.addSeparator()
 
         self.hashmarkMgrButton.hashmarkClicked.connect(self.onHashmarkClicked)
         self.hashmarksSearcher.hashmarkClicked.connect(self.onHashmarkClicked)
 
-        self.toolbarMain.addSeparator()
-
-        self.toolbarMain.addWidget(self.toolbarTools)
-        self.toolbarMain.addSeparator()
         self.toolbarMain.addWidget(self.qaToolbar)
 
         self.toolbarMain.actionStatuses = self.toolbarMain.addAction(
@@ -791,8 +866,6 @@ class MainWindow(QMainWindow):
         self.toolbarMain.actionStatuses.setVisible(False)
 
         self.toolbarMain.addWidget(self.toolbarMain.emptySpace)
-        self.toolbarMain.addSeparator()
-        self.toolbarMain.addWidget(self.ipfsSearchButton)
         self.toolbarMain.addSeparator()
         self.toolbarMain.addWidget(self.clipboardItemsStack)
         self.toolbarMain.addWidget(self.clipboardManager)
@@ -808,32 +881,15 @@ class MainWindow(QMainWindow):
         self.addToolBar(Qt.TopToolBarArea, self.toolbarMain)
         self.addToolBar(Qt.RightToolBarArea, self.toolbarPyramids)
 
-        self.stack = QStackedWidget(self)
+        self.stack = CentralStack(self, self.toolbarWs)
 
-        self.bgWidget = BackgroundWidget(self.stack)
-
-        self.tabWidget = MainTabWidget(self.stack)
-        self.tabWidget.onTabInserted.connect(self.onNewTab)
-        self.tabWidget.onTabRemoved.connect(self.onTabRemoved)
-        self.tabWidget.setObjectName('tabWidget')
-        self.tabWidget.setTabsClosable(True)
-        self.tabWidget.tabCloseRequested.connect(
-            partialEnsure(self.onTabCloseRequest))
-        self.tabWidget.setElideMode(Qt.ElideMiddle)
-        self.tabWidget.setUsesScrollButtons(True)
-        self.tabWidget.currentChanged.connect(self.onTabChanged)
-
-        self.stack.addWidget(self.bgWidget)
-        self.stack.addWidget(self.tabWidget)
-
-        self.centralWidget.wLayout.addWidget(self.stack)
-
-        if self.app.system != 'Darwin':
-            self.tabWidget.setDocumentMode(True)
-
-        tabKeyFilter = TabWidgetKeyFilter(self)
-        tabKeyFilter.nextPressed.connect(self.cycleTabs)
-        self.tabWidget.installEventFilter(tabKeyFilter)
+        self.wspacePeers = WorkspacePeers(self.stack)
+        self.wspaceCore = WorkspaceCore(self.stack)
+        self.wspaceFs = WorkspaceFiles(self.stack)
+        self.wspaceSearch = WorkspaceSearch(self.stack)
+        self.wspaceMultimedia = WorkspaceMultimedia(self.stack)
+        self.wspaceEdit = WorkspaceEdition(self.stack)
+        self.wspaceMisc = WorkspaceMisc(self.stack)
 
         self.webProfile = QtWebEngineWidgets.QWebEngineProfile.defaultProfile()
 
@@ -916,7 +972,7 @@ class MainWindow(QMainWindow):
         # Application signals
         self.app.manualAvailable.connect(self.onManualAvailable)
 
-        self.tabWidget.removeTab(0)
+        # self.tabWidget.removeTab(0)
 
         previousGeo = self.app.settingsMgr.mainWindowGeometry
         if previousGeo:
@@ -926,12 +982,17 @@ class MainWindow(QMainWindow):
             self.restoreState(previousState)
 
         self.hashmarksPage = None
-        self.pinStatusTab = pin.PinStatusWidget(self)
 
         self.pinIconLoading = getIcon('pin-blue-loading.png')
         self.pinIconNormal = getIcon('pin-black.png')
 
-        self.setCentralWidget(self.centralWidget)
+        self.setCentralWidget(self.stack)
+
+    @property
+    def tabWidget(self):
+        cur = self.stack.currentWidget()
+        if cur:
+            return cur.tabWidget
 
     @property
     def app(self):
@@ -941,27 +1002,30 @@ class MainWindow(QMainWindow):
     def allTabs(self):
         return self._allTabs
 
-    @property
-    def searchBar(self):
-        return self.centralWidget.searchBar
+    def keyPressEvent(self, event):
+        modifiers = event.modifiers()
 
-    def onNewTab(self, idx):
-        if self.stack.currentIndex() != 1:
-            self.stack.setCurrentIndex(1)
+        widx, curWorkspace = self.stack.currentWorkspace()
 
-    def onTabRemoved(self, idx):
-        if self.tabWidget.count() == 0:
-            self.stack.setCurrentIndex(0)
-        else:
-            if self.stack.currentIndex() != 1:
-                self.stack.setCurrentIndex(1)
+        if modifiers & Qt.ControlModifier:
+            if event.key() == Qt.Key_W and curWorkspace:
+                idx = curWorkspace.tabWidget.currentIndex()
+                ensure(curWorkspace.onTabCloseRequest(idx))
 
-    def cycleTabs(self):
-        curIndex = self.tabWidget.currentIndex()
-        if curIndex + 1 < self.tabWidget.count():
-            self.tabWidget.setCurrentIndex(curIndex + 1)
-        else:
-            self.tabWidget.setCurrentIndex(0)
+        super(MainWindow, self).keyPressEvent(event)
+
+    def setupWorkspaces(self):
+        self.stack.addWorkspaces(
+            self.wspacePeers,
+            self.wspaceCore,
+            self.wspaceFs,
+            self.wspaceSearch,
+            self.wspaceEdit,
+            self.wspaceMultimedia,
+            self.wspaceMisc
+        )
+        self.stack.wsAddGlobalAction(self.browseAction)
+        self.stack.activateWorkspaces(False)
 
     def onSeedAppImage(self):
         ensure(self.app.seedAppImage())
@@ -1048,7 +1112,7 @@ class MainWindow(QMainWindow):
             if action.data() == pName:
                 action.setChecked(True)
                 # Refresh the file manager
-                tab = self.findTabFileManager()
+                wspace, tab = self.findTabFileManager()
 
                 if tab:
                     tab.fileManager.setupModel()
@@ -1071,6 +1135,7 @@ class MainWindow(QMainWindow):
 
     async def onRepoReady(self):
         self.browseButton.normalIcon()
+        self.stack.activateWorkspaces(True)
 
         self.fileManagerWidget.setupModel()
 
@@ -1120,13 +1185,13 @@ class MainWindow(QMainWindow):
         if hovered is False:
             return
 
-        statusCubePos = self.ipfsStatusCube.mapToGlobal(self.pos())
+        statusCubePos = self.ipfsStatusCube.mapToGlobal(QPoint(0, 0))
 
         popupPoint = QPoint(
             statusCubePos.x() - self.ipfsDaemonStatusWidget.width() -
             self.ipfsStatusCube.width(),
             statusCubePos.y() - self.ipfsDaemonStatusWidget.height() -
-            (2 * self.ipfsStatusCube.height())
+            self.ipfsStatusCube.height()
         )
 
         self.ipfsDaemonStatusWidget.move(popupPoint)
@@ -1146,8 +1211,14 @@ class MainWindow(QMainWindow):
         pass
 
     def showPinningStatusWidget(self):
+        with self.stack.workspaceCtx(WS_MISC) as ws:
+            return ws.tabWidget.setCurrentWidget(
+                ws.pinStatusTab)
+
+        return
+
         name = self.tabnPinning
-        ft = self.findTabWithName(name)
+        wspace, ft = self.findTabWithName(name)
         if ft:
             return self.tabWidget.setCurrentWidget(ft)
 
@@ -1186,14 +1257,10 @@ class MainWindow(QMainWindow):
         for btn in [
                 self.clipboardManager,
                 self.browseButton,
-                self.fileManagerButton,
-                self.peersButton,
-                self.textEditorButton,
-                self.atomButton,
-                self.chatCenterButton,
                 self.cameraController,
                 self.hashmarkMgrButton,
                 self.hashmarksSearcher,
+                self.toolbarWs,
                 self.profileButton]:
             btn.setEnabled(flag)
 
@@ -1201,22 +1268,22 @@ class MainWindow(QMainWindow):
         self.lastLogLabel.setText(msg)
         self.lastLogLabel.setToolTip(msg)
 
-    def registerTab(self, tab, name, icon=None, current=False,
-                    tooltip=None):
-        idx = None
-        if icon:
-            idx = self.tabWidget.addTab(tab, icon, name)
-        else:
-            idx = self.tabWidget.addTab(tab, name)
+    def registerTab(self, tab, name, icon=None, current=True,
+                    tooltip=None, workspace='current'):
+        if isinstance(workspace, str):
+            if workspace == 'current':
+                sidx, wspace = self.stack.currentWorkspace()
+            else:
+                sidx, wspace = self.stack.workspaceByName(workspace)
+                if wspace is None:
+                    # XXX
+                    return
 
-        self._allTabs.append(tab)
+        wspace.wsRegisterTab(tab, name, icon=icon, current=current,
+                             tooltip=tooltip)
 
-        if current is True:
-            self.tabWidget.setCurrentWidget(tab)
-            tab.setFocus(Qt.OtherFocusReason)
-
-        if tooltip and idx:
-            self.tabWidget.setTabToolTip(idx, tooltip)
+        if self.stack.currentWorkspace() is not wspace:
+            wspace.wsSwitch()
 
     def findTabFileManager(self):
         return self.findTabWithName(self.tabnFManager)
@@ -1225,16 +1292,12 @@ class MainWindow(QMainWindow):
         return self.tabWidget.indexOf(w)
 
     def findTabWithName(self, name):
-        for idx in range(0, self.tabWidget.count()):
-            tName = self.tabWidget.tabText(idx)
+        for widx, workspace in self.stack.workspaces():
+            tab = workspace.wsFindTabWithName(name)
+            if tab:
+                return workspace, tab
 
-            if tName.strip() == name.strip():
-                return self.tabWidget.widget(idx)
-
-    def removeTabFromWidget(self, w):
-        idx = self.tabWidget.indexOf(w)
-        if idx:
-            self.tabWidget.removeTab(idx)
+        return None, None
 
     def onSettings(self):
         runDialog(settings.SettingsDialog, self.app)
@@ -1297,16 +1360,6 @@ class MainWindow(QMainWindow):
     def onMainTimerStatus(self):
         ensure(self.displayConnectionInfo())
 
-    def keyPressEvent(self, event):
-        modifiers = event.modifiers()
-
-        if modifiers & Qt.ControlModifier:
-            if event.key() == Qt.Key_W:
-                idx = self.tabWidget.currentIndex()
-                ensure(self.onTabCloseRequest(idx))
-
-        super(MainWindow, self).keyPressEvent(event)
-
     def explore(self, cid):
         ipfsPath = IPFSPath(cid, autoCidConv=True)
         if ipfsPath.valid:
@@ -1326,29 +1379,20 @@ class MainWindow(QMainWindow):
         tooltip = 'CID explorer: {0}'.format(cid)
         view = ipfsview.IPFSHashExplorerStack(self, cid)
         self.registerTab(view, tabName, current=True,
-                         icon=getIcon('hash.png'), tooltip=tooltip)
+                         icon=getIcon('hash.png'), tooltip=tooltip,
+                         workspace=WS_FILES)
 
-    def addMediaPlayerTab(self):
-        name = self.tabnMediaPlayer
-        ft = self.findTabWithName(name)
-        if ft:
-            return ft
-        tab = mediaplayer.MediaPlayerTab(self)
-
-        if tab.playerAvailable():
-            self.registerTab(tab, name, icon=getIcon('multimedia.png'),
-                             current=True)
-            return tab
-        else:
-            messageBox(mediaplayer.iPlayerUnavailable())
+    def getMediaPlayer(self):
+        with self.stack.workspaceCtx(WS_MULTIMEDIA) as ws:
+            return ws.mPlayerTab()
 
     def mediaPlayerQueue(self, path, playLast=False, mediaName=None):
-        tab = self.addMediaPlayerTab()
+        tab = self.getMediaPlayer()
         if tab:
             tab.queueFromPath(path, mediaName=mediaName, playLast=playLast)
 
     def mediaPlayerPlay(self, path, mediaName=None):
-        tab = self.addMediaPlayerTab()
+        tab = self.getMediaPlayer()
         if tab:
             tab.playFromPath(path, mediaName=mediaName)
 
@@ -1356,17 +1400,6 @@ class MainWindow(QMainWindow):
         tab = self.tabWidget.widget(idx)
         if tab:
             ensure(tab.onTabChanged())
-
-    async def onTabCloseRequest(self, idx):
-        tab = self.tabWidget.widget(idx)
-
-        if tab not in self.allTabs:
-            return False
-
-        if await tab.onClose() is True:
-            self.tabWidget.removeTab(idx)
-            self.allTabs.remove(tab)
-            del tab
 
     def openPsniffTab(self):
         self.registerTab(
@@ -1380,7 +1413,8 @@ class MainWindow(QMainWindow):
 
         self.registerTab(tab, iTextEditor(),
                          icon=getIcon('text-editor.png'), current=True,
-                         tooltip=str(path))
+                         tooltip=str(path),
+                         workspace=WS_EDIT)
 
     def addIpfsSearchView(self):
         tab = ipfssearch.IPFSSearchTab(self)
@@ -1389,7 +1423,7 @@ class MainWindow(QMainWindow):
         tab.view.browser.setFocus(Qt.OtherFocusReason)
 
     def onOpenMediaPlayer(self):
-        self.addMediaPlayerTab()
+        self.getMediaPlayer()
 
     def onOpenBrowserTabClicked(self, pinBrowsed=False):
         self.addBrowserTab(pinBrowsed=pinBrowsed)
@@ -1401,23 +1435,11 @@ class MainWindow(QMainWindow):
     def onPeersMgrClicked(self):
         self.showPeersMgr(current=True)
 
-    def onFileManagerClicked(self):
-        name = self.tabnFManager
-
-        icon = getIcon('folder-open.png')
-        ft = self.findTabWithName(name)
-        if ft:
-            ft.fileManager.updateTree()
-            return self.tabWidget.setCurrentWidget(ft)
-
-        fileManagerTab = files.FileManagerTab(
-            self.tabWidget, fileManager=self.fileManagerWidget)
-        self.registerTab(fileManagerTab, name, current=True, icon=icon)
         fileManagerTab.fileManager.updateTree()
 
     def onIpfsKeysClicked(self):
         name = self.tabnKeys
-        ft = self.findTabWithName(name)
+        wspace, ft = self.findTabWithName(name)
         if ft:
             return self.tabWidget.setCurrentWidget(ft)
 
@@ -1452,7 +1474,7 @@ class MainWindow(QMainWindow):
         # Peers mgr
         name = iPeers()
 
-        ft = self.findTabWithName(name)
+        wspace, ft = self.findTabWithName(name)
         if ft:
             return self.tabWidget.setCurrentWidget(ft)
 
@@ -1485,7 +1507,7 @@ class MainWindow(QMainWindow):
         self.hide()
 
     def addHashmarksTab(self):
-        ft = self.findTabWithName(self.tabnHashmarks)
+        wspace, ft = self.findTabWithName(self.tabnHashmarks)
         if ft:
             return self.tabWidget.setCurrentWidget(ft)
 
@@ -1502,22 +1524,14 @@ class MainWindow(QMainWindow):
                          icon=getIcon('hashmarks.png'), current=True)
 
     def onOpenChatWidget(self):
-        tab = self.findTabWithName(self.tabnChat)
+        wspace, tab = self.findTabWithName(self.tabnChat)
         if tab:
             tab.focusMessage()
             return self.tabWidget.setCurrentWidget(tab)
 
         self.registerTab(self.chatRoomWidget, self.tabnChat,
-                         icon=getIcon('chat.png'), current=True)
-
-    def onShowAtomFeeds(self):
-        ft = self.findTabWithName(self.tabnFeeds)
-        if ft:
-            return self.tabWidget.setCurrentWidget(ft)
-
-        tab = AtomFeedsViewTab(self, view=self.atomFeedsViewWidget)
-        self.registerTab(tab, self.tabnFeeds,
-                         icon=getIcon('atom-feed.png'), current=True)
+                         icon=getIcon('chat.png'), current=True,
+                         workspace='peers')
 
     def onIpfsObjectServed(self, ipfsPath, cType, reqTime):
         # TODO

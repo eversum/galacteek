@@ -204,6 +204,10 @@ QToolButton#pinGlobalButton::checked {
     background-color: #eec146;
 }
 
+QToolButton#wsSwitchButton::checked {
+    background-color: #eec146;
+}
+
 QLabel#linkInfos {
     color: black;
     font: 12pt "Inter UI";
@@ -399,4 +403,18 @@ QSlider::handle:horizontal {
 QSlider::sub-page:horizontal {
     border: 1px solid lightgray;
     background: #60cccf;
+}
+
+/* Workspaces */
+
+QToolBar#wsToolBar QToolButton {
+    margin-right: 10px;
+}
+
+QToolBar QToolButton::hover {
+    background-color: #4a9ea1;
+}
+
+QToolBar QToolButton::pressed {
+    background-color: #eec146;
 }
