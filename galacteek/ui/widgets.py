@@ -1,4 +1,5 @@
 import asyncio
+import attr
 from datetime import datetime
 
 from PyQt5.QtWidgets import QFrame
@@ -88,8 +89,13 @@ from .i18n import iHashmarkSourcesAddLegacyIpfsMarks
 from .i18n import iHashmarkSourceAlreadyRegistered
 
 
+@attr.s(auto_attribs=True)
+class TabContext(object):
+    tabIdent: str = ''
+
+
 class GalacteekTab(QWidget):
-    def __init__(self, gWindow, parent=None, sticky=False):
+    def __init__(self, gWindow, parent=None, sticky=False, ctx=None):
         super(GalacteekTab, self).__init__(parent)
 
         self.app = QApplication.instance()
@@ -98,12 +104,17 @@ class GalacteekTab(QWidget):
 
         self.gWindow = gWindow
         self._workspace = None
+        self._ctx = ctx if ctx else TabContext()
         self.sticky = sticky
         self.setAttribute(Qt.WA_DeleteOnClose)
 
     @property
     def workspace(self):
         return self._workspace
+
+    @property
+    def ctx(self):
+        return self._ctx
 
     @property
     def loop(self):
@@ -403,15 +414,25 @@ class QAObjTagItemToolButton(QToolButton):
 
 
 class HashmarkThisButton(QToolButton):
-    def __init__(self, ipfsPath, parent=None):
+    def __init__(self, ipfsPath: IPFSPath, parent=None):
         super(HashmarkThisButton, self).__init__(parent=parent)
         self.setIcon(getIcon('hashmarks.png'))
-        self.ipfsPath = ipfsPath
-
+        self._ipfsPath = ipfsPath
+        self.clicked.connect(self.onClicked)
         self.setToolTip(
             'Hashmark object: {}'.format(str(self.ipfsPath)))
 
-        self.clicked.connect(self.onClicked)
+    @property
+    def ipfsPath(self):
+        return self._ipfsPath
+
+    @ipfsPath.setter
+    def ipfsPath(self, path: IPFSPath):
+        self._ipfsPath = path
+
+        if self.ipfsPath.valid:
+            self.setToolTip(
+                'Hashmark object: {}'.format(str(self.ipfsPath)))
 
     def onClicked(self):
         from .hashmarks import addHashmarkAsync

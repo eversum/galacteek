@@ -90,6 +90,8 @@ class KeysTab(GalacteekTab):
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
 
+        self.ctx.tabIdent = 'ipfs-keys-manager'
+
         self.resolveTimeout = 60 * 5
         self.keysW = QWidget()
         self.addToLayout(self.keysW)

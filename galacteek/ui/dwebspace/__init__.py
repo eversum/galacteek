@@ -1,3 +1,5 @@
+import rule_engine
+
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtWidgets import QTabWidget
@@ -24,8 +26,8 @@ from galacteek.ui import textedit
 from galacteek.ui import mediaplayer
 from galacteek.ui import pin
 
-
 from galacteek.ui.helpers import getIcon
+from galacteek.ui.helpers import getPlanetIcon
 from galacteek.ui.helpers import playSound
 from galacteek.ui.feeds import AtomFeedsViewTab
 from galacteek.ui.feeds import AtomFeedsView
@@ -67,6 +69,7 @@ class MainTabWidget(QTabWidget):
         self.setElideMode(Qt.ElideMiddle)
         self.setUsesScrollButtons(True)
         self.setObjectName('wsTabWidget')
+        self.tabBar().setObjectName('wsTabBar')
 
         tabKeyFilter = TabWidgetKeyFilter(self)
         tabKeyFilter.nextPressed.connect(self.cycleTabs)
@@ -103,7 +106,6 @@ class ToolBarActionsContainer(QWidget):
         self.setLayout(hLayout)
 
         self.toolBar = QToolBar(self)
-        self.toolBar.setObjectName('wsToolBar')
         self.toolBar.setSizePolicy(
             QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -112,54 +114,60 @@ class ToolBarActionsContainer(QWidget):
         hLayout.addWidget(self.toolBar)
 
 
-class TabbedWorkspace(QWidget):
-    def __init__(self, stack, name,
+WS_MAIN = 'main'
+WS_PEERS = 'peers'
+WS_FILES = 'files'
+WS_MULTIMEDIA = 'multimedia'
+WS_EDIT = 'edit'
+WS_SEARCH = 'search'
+WS_MISC = 'misc'
+
+
+class BaseWorkspace(QWidget):
+    def setupWorkspace(self):
+        pass
+
+
+class TabbedWorkspace(BaseWorkspace):
+    def __init__(self, stack,
+                 name,
                  description=None,
+                 section='default',
                  icon=None):
         super().__init__(parent=stack)
 
         self.wsName = name
         self.wsDescription = description
+        self.wsSection = section
+        self.wsAttached = False
+        self.defaultAction = None
+
+        self.wsTagRules = []
         self.wsActions = {}
 
         self.app = QApplication.instance()
         self.stack = stack
+        self.wLayout = QVBoxLayout(self)
+        self.setLayout(self.wLayout)
 
-        self.wsIcon = icon if icon else getIcon('galacteek.png')
-
-        self.tabWidget = MainTabWidget()
         self.toolBarCtrl = QToolBar()
         self.toolBarActions = QToolBar()
-        self.toolBarActions.setObjectName('wsToolBar')
+        self.toolBarActions.setObjectName('wsActionsToolBar')
 
-        self.defaultAction = None
-
-        self.setObjectName(f'workspace{name}')
-        self.wLayout = QVBoxLayout()
-        self.setLayout(self.wLayout)
-        self.wLayout.addWidget(self.tabWidget)
-
-        self.tabWidget.tabCloseRequested.connect(
-            partialEnsure(self.onTabCloseRequest))
-
-        self.tabWidget.setElideMode(Qt.ElideMiddle)
-        self.tabWidget.setUsesScrollButtons(True)
-        self.tabWidget.onTabRemoved.connect(
-            partialEnsure(self.wsTabRemoved))
-        self.tabWidget.currentChanged.connect(
-            partialEnsure(self.wsTabChanged))
-
-        if self.app.system != 'Darwin':
-            self.tabWidget.setDocumentMode(True)
-
-        self.setCornerRight(self.toolBarCtrl)
-        self.setCornerLeft(self.toolBarActions)
+        self.wsIcon = icon if icon else getIcon('galacteek.png')
 
     def __enter__(self):
         return self
 
     def __exit__(self, *a):
         pass
+
+    def wsToolTip(self):
+        return self.wsDescription
+
+    def wsTabs(self):
+        for tidx in range(self.tabWidget.count()):
+            yield tidx, self.tabWidget.widget(tidx)
 
     def wsFindTabWithName(self, name):
         for idx in range(0, self.tabWidget.count()):
@@ -168,6 +176,11 @@ class TabbedWorkspace(QWidget):
             if tName.strip() == name.strip():
                 return self.tabWidget.widget(idx)
 
+    def wsFindTabWithId(self, id):
+        for tidx, tab in self.wsTabs():
+            if tab and tab.ctx.tabIdent == id:
+                return tab
+
     def empty(self):
         return self.tabWidget.count() == 0
 
@@ -175,7 +188,28 @@ class TabbedWorkspace(QWidget):
         return self.stack.indexOf(self)
 
     def setupWorkspace(self):
-        pass
+        # Workspace's tab widget and toolbars
+        self.tabWidget = MainTabWidget(self)
+
+        self.wLayout.addWidget(self.tabWidget)
+
+        self.tabWidget.setElideMode(Qt.ElideMiddle)
+        self.tabWidget.setUsesScrollButtons(True)
+        self.tabWidget.onTabRemoved.connect(
+            partialEnsure(self.wsTabRemoved))
+        self.tabWidget.currentChanged.connect(
+            partialEnsure(self.wsTabChanged))
+        self.tabWidget.tabCloseRequested.connect(
+            partialEnsure(self.onTabCloseRequest))
+
+        if self.app.system != 'Darwin':
+            self.tabWidget.setDocumentMode(True)
+
+        # Set the corner widgets
+        # Workspace actions on the left, the right toolbar is unused for now
+
+        self.setCornerRight(self.toolBarCtrl)
+        self.setCornerLeft(self.toolBarActions)
 
     def setCornerLeft(self, pButton):
         self.tabWidget.setCornerWidget(pButton, Qt.TopLeftCorner)
@@ -267,14 +301,45 @@ class TabbedWorkspace(QWidget):
         if soundNotify and 0:
             playSound('wsswitch.wav')
 
+    def wsTagRulesMatchesHashmark(self, hashmark):
+        tags = [
+            {
+                'tag': tag.name
+            } for tag in hashmark.iptags
+        ]
 
-WS_MAIN = 'main'
-WS_PEERS = 'peers'
-WS_FILES = 'files'
-WS_MULTIMEDIA = 'multimedia'
-WS_EDIT = 'edit'
-WS_SEARCH = 'search'
-WS_MISC = 'misc'
+        for rule in self.wsTagRules:
+            res = list(rule.filter(tags))
+            if len(res) > 0:
+                return True
+
+        return False
+
+
+class PlanetWorkspace(TabbedWorkspace):
+    def __init__(self, stack,
+                 planetName,
+                 description=None,
+                 icon=None):
+        super().__init__(
+            stack,
+            f'@{planetName}',
+            description=description,
+            icon=getPlanetIcon(planetName.lower())
+        )
+
+        self._planet = planetName
+
+        self.wsTagRules.append(rule_engine.Rule(
+            f'tag =~ "@{planetName}#.*"'
+        ))
+
+    @property
+    def planet(self):
+        return self._planet
+
+    def wsToolTip(self):
+        return f'Planet workspace: {self.planet}'
 
 
 class WorkspaceCore(TabbedWorkspace):
@@ -291,13 +356,19 @@ class WorkspaceFiles(TabbedWorkspace):
     def setupWorkspace(self):
         super().setupWorkspace()
 
+        fileManager = self.app.mainWindow.fileManagerWidget
+
         self.fileManagerTab = files.FileManagerTab(
             self.tabWidget,
-            fileManager=self.app.mainWindow.fileManagerWidget)
+            fileManager=fileManager
+        )
 
         icon = getIcon('folder-open.png')
 
         self.wsRegisterTab(self.fileManagerTab, iFileManager(), icon)
+
+        self.wsAddAction(fileManager.addFilesAction)
+        self.wsAddAction(fileManager.addDirectoryAction)
 
     async def workspaceSwitched(self):
         await super().workspaceSwitched()

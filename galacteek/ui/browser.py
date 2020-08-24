@@ -1136,8 +1136,6 @@ class BrowserTab(GalacteekTab):
                 initialProfileName = minProfile
 
         webProfile = self.getWebProfileByName(initialProfileName)
-        self.icept = RequestInterceptor()
-        webProfile.setUrlRequestInterceptor(self.icept)
 
         self.webEngineView = WebView(
             self, webProfile,
@@ -1181,7 +1179,7 @@ class BrowserTab(GalacteekTab):
         # for browsing CIDS and web profiles etc..)
 
         self.ipfsControlMenu = QMenu(self)
-        self.webProfilesMenu = QMenu('Web profile')
+        self.webProfilesMenu = QMenu('Web profile', self.ipfsControlMenu)
 
         self.webProfilesGroup = QActionGroup(self.webProfilesMenu)
         self.webProfilesGroup.setExclusive(True)

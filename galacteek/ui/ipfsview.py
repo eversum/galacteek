@@ -7,8 +7,7 @@ from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QPushButton
 from PyQt5.QtWidgets import QVBoxLayout
 from PyQt5.QtWidgets import QHBoxLayout
-from PyQt5.QtWidgets import QTreeView
-from PyQt5.QtWidgets import QHeaderView
+from PyQt5.QtWidgets import QListView
 from PyQt5.QtWidgets import QToolBox
 from PyQt5.QtWidgets import QProgressBar
 from PyQt5.QtWidgets import QSpacerItem
@@ -17,9 +16,10 @@ from PyQt5.QtWidgets import QToolButton
 from PyQt5.QtWidgets import QAbstractItemView
 from PyQt5.QtWidgets import QStackedWidget
 
-from PyQt5.QtGui import QStandardItemModel
 from PyQt5.QtGui import QKeySequence
 
+from PyQt5.QtCore import QAbstractListModel
+from PyQt5.QtCore import QModelIndex
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QEvent
@@ -27,14 +27,13 @@ from PyQt5.QtCore import QObject
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtCore import QMimeData
 from PyQt5.QtCore import QUrl
+from PyQt5.QtCore import QVariant
 
 from galacteek.appsettings import *
-from galacteek.core.modelhelpers import UneditableItem
 from galacteek.ipfs import cidhelpers
 from galacteek.ipfs.stat import StatInfo
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.wrappers import ipfsOp, ipfsStatOp
-from galacteek.ipfs.cache import IPFSEntryCache
 from galacteek.ipfs.mimetype import detectMimeType
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.cidhelpers import joinIpfs
@@ -43,12 +42,19 @@ from galacteek.ipfs.cidhelpers import cidConvertBase32
 from galacteek import ensure
 from galacteek import partialEnsure
 
+from .clipboard import iCopyCIDToClipboard
+from .clipboard import iCopyPathToClipboard
+from .clipboard import iCopyPubGwUrlToClipboard
+
+from .hashmarks import *  # noqa
+from .clips import RotatingCubeRedFlash140d
 from .i18n import *
 from .helpers import *
+from .widgets import AnimatedLabel
 from .widgets import GalacteekTab
 from .widgets import IPFSUrlLabel
 from .widgets import IPFSPathClipboardButton
-from .hashmarks import *
+from .widgets import HashmarkThisButton
 
 import aioipfs
 
@@ -88,6 +94,12 @@ def iLoading():
     return QCoreApplication.translate('IPFSHashExplorer', 'Loading ...')
 
 
+def iLoadedEntries(count, persec):
+    return QCoreApplication.translate(
+        'IPFSHashExplorer',
+        'Loaded entries: <b>{0}</b> (~{1} entries/s)').format(count, persec)
+
+
 def iTimeout():
     return QCoreApplication.translate('IPFSHashExplorer',
                                       'Timeout error')
@@ -104,28 +116,34 @@ def iTimeoutInvalidHash():
                                       'Timeout error: invalid hash')
 
 
-class IPFSItem(UneditableItem):
-    def __init__(self, text, icon=None):
-        super().__init__(text, icon=icon)
-        self.setParentHash(None)
+def iUnixFSFileToolTip(eInfo):
+    return QCoreApplication.translate(
+        'IPFSHashExplorer',
+        '''
+        <p><b>{0}</b></p>
+        <p>MIME type: {1}</p>
+        <p>CID: {2}</p>
+        <p>Size: {3}</p>
+        ''').format(
+            eInfo.filename,
+            eInfo.mimeType,
+            eInfo.cid,
+            sizeFormat(eInfo.entry['Size'])
+    )
 
-    def setParentHash(self, hash):
-        self.parentHash = hash
 
-    def getParentHash(self):
-        return self.parentHash
-
-
-class IPFSNameItem(IPFSItem):
-    def __init__(self, entry, text, icon):
-        super().__init__(text, icon=icon)
-
+class EntryInfo:
+    def __init__(self, entry, parentCid):
         self._entry = entry
-        self._mimeType = None
+        self._parentCid = parentCid
 
     @property
     def entry(self):
         return self._entry
+
+    @property
+    def filename(self):
+        return self.entry['Name']
 
     @property
     def ipfsPath(self):
@@ -163,10 +181,10 @@ class IPFSNameItem(IPFSItem):
         (preserving file names) if we have the parent's hash, or the IPFS path
         with the entry's hash otherwise
         """
-        parentHash = self.getParentHash()
-        name = self.entry['Name']
-        if parentHash:
-            return joinIpfs(os.path.join(parentHash, name))
+
+        if self._parentCid:
+            return joinIpfs(os.path.join(cidConvertBase32(self._parentCid),
+                                         self.filename))
         else:
             return joinIpfs(cidConvertBase32(self.entry['Hash']))
 
@@ -189,21 +207,21 @@ class IPFSNameItem(IPFSItem):
         return self.entry['Type'] == -1
 
 
-class IPFSHashItemModel(QStandardItemModel):
-    COL_NAME = 0
-    COL_SIZE = 1
-    COL_MIME = 2
-    COL_HASH = 3
+class UnixFSDirectoryModel(QAbstractListModel):
+    COL_UNIXFS_NAME = 0
+    COL_UNIXFS_SIZE = 1
+    COL_UNIXFS_MIME = 2
+    COL_UNIXFS_HASH = 3
 
-    def __init__(self, parent):
-        super(IPFSHashItemModel, self).__init__(parent)
+    def __init__(self, parent=None):
+        super(UnixFSDirectoryModel, self).__init__(parent)
 
-        self.entryCache = IPFSEntryCache()
-        self.rowsInserted.connect(self.onRowsInserted)
+        self.app = QApplication.instance()
+        self.entries = []
 
-    def clearModel(self):
-        self.clear()
-        self.entryCache.reset()
+        self.iconFolder = getIcon('folder-open.png')
+        self.iconFile = getIcon('file.png')
+        self.iconUnknown = getIcon('unknown-file.png')
 
     def mimeData(self, indexes):
         mimedata = QMimeData()
@@ -213,10 +231,10 @@ class IPFSHashItemModel(QStandardItemModel):
             if not idx.isValid():
                 continue
 
-            nameItem = self.getNameItemFromIdx(idx)
+            eInfo = self.getEntryInfoFromIdx(idx)
 
-            if nameItem:
-                url = QUrl(nameItem.ipfsPath.ipfsUrl)
+            if eInfo:
+                url = QUrl(eInfo.ipfsPath.ipfsUrl)
                 urls.append(url)
 
         mimedata.setUrls(urls)
@@ -225,26 +243,85 @@ class IPFSHashItemModel(QStandardItemModel):
     def canDropMimeData(self, data, action, row, column, parent):
         return True
 
+    def clearModel(self):
+        # self.clear()
+        pass
+
     def getHashFromIdx(self, idx):
-        nameItem = self.getNameItemFromIdx(idx)
-        if nameItem:
-            return nameItem.cid
+        eInfo = self.getEntryInfoFromIdx(idx)
+        if eInfo:
+            return eInfo.cid
 
-    def getNameFromIdx(self, idx):
-        idxName = self.index(idx.row(), self.COL_NAME, idx.parent())
-        return self.data(idxName)
+    def rowCount(self, parent):
+        return len(self.entries)
 
-    def getNameItemFromIdx(self, idx):
-        idxName = self.index(idx.row(), self.COL_NAME, idx.parent())
-        return self.itemFromIndex(idxName)
+    def columnCount(self, parent):
+        return 1
 
-    def onRowsInserted(self, parent, first, last):
-        """ Update the entry cache when rows are added """
-        for itNum in range(first, last + 1):
-            itNameIdx = self.index(itNum, self.COL_NAME, parent)
-            itName = self.itemFromIndex(itNameIdx)
-            entry = itName.entry
-            self.entryCache.register(entry)
+    def headerData(self, section, orient, role):
+        print('header data', section, orient, role)
+        if section == 0:
+            return 'ddd'
+        if section == 1:
+            return 'ddd2'
+        if section == 2:
+            return 'ddd3'
+        if section == 3:
+            return 'ddd4'
+
+    def mimeFromDb(self, entry):
+        mType = self.app.mimeDb.mimeTypeForFile(entry['Name'])
+        if mType:
+            return mType.name()
+
+    def getEntryInfoFromIdx(self, idx):
+        row = idx.row()
+
+        if row in range(0, len(self.entries)):
+            return self.entries[row]
+
+    async def serializeEntries(self):
+        pass
+
+    def formatEntries(self):
+        doc = []
+
+        for eInfo in self.entries:
+            doc.append(eInfo.entry)
+        return doc
+
+    def data(self, index, role):
+        if not index.isValid():
+            return QVariant(None)
+
+        row = index.row()
+        col = index.column()
+
+        eInfo = self.getEntryInfoFromIdx(index)
+
+        if role == Qt.DisplayRole:
+            if row > len(self.entries):
+                return QVariant(None)
+
+            if col == self.COL_UNIXFS_NAME:
+                return eInfo.filename
+            elif col == self.COL_UNIXFS_SIZE:
+                return 1
+            elif col == self.COL_UNIXFS_MIME:
+                return eInfo.mimeType
+            elif col == self.COL_UNIXFS_HASH:
+                return eInfo.cid
+        elif role == Qt.DecorationRole:
+            if eInfo.isDir():
+                return self.iconFolder
+            elif eInfo.isFile():
+                mIcon = getMimeIcon(eInfo.mimeType)
+                if mIcon:
+                    return mIcon
+                else:
+                    return self.iconFile
+        if role == Qt.ToolTipRole:
+            return iUnixFSFileToolTip(eInfo)
 
 
 class IPFSHashExplorerToolBox(GalacteekTab):
@@ -270,7 +347,8 @@ class IPFSHashExplorerToolBox(GalacteekTab):
     def itemsCount(self):
         return self.toolbox.count()
 
-    def viewHash(self, hashRef, addClose=False, autoOpenFolders=False):
+    def viewHash(self, hashRef, addClose=False, autoOpenFolders=False,
+                 parentView=None):
         w = self.lookup(hashRef)
         if w:
             self.toolbox.setCurrentWidget(w)
@@ -281,11 +359,13 @@ class IPFSHashExplorerToolBox(GalacteekTab):
 
         view = IPFSHashExplorerWidget(hashRef,
                                       parent=self, addClose=addClose,
+                                      parentView=parentView,
                                       autoOpenFolders=autoOpenFolders)
         view.closeRequest.connect(functools.partial(
             self.remove, view))
         view.directoryOpenRequest.connect(
-            lambda cid: self.viewHash(cid, addClose=True))
+            lambda nView, cid: self.viewHash(cid, addClose=True,
+                                             parentView=nView))
 
         idx = self.toolbox.addItem(view, getIconIpfsWhite(), hashRef)
         self.toolbox.setCurrentIndex(idx)
@@ -333,15 +413,18 @@ class IPFSHashExplorerStack(GalacteekTab):
     def itemsCount(self):
         return self.stack.count()
 
-    def viewHash(self, hashRef, addClose=False, autoOpenFolders=False):
+    def viewHash(self, hashRef, addClose=False, autoOpenFolders=False,
+                 parentView=None):
         view = IPFSHashExplorerWidget(hashRef,
                                       parent=self, addClose=addClose,
                                       showCidLabel=True,
-                                      autoOpenFolders=autoOpenFolders)
+                                      autoOpenFolders=autoOpenFolders,
+                                      parentView=parentView)
         view.closeRequest.connect(partialEnsure(
             self.remove, view))
         view.directoryOpenRequest.connect(
-            lambda cid: self.viewHash(cid, addClose=True))
+            lambda nView, cid: self.viewHash(cid, addClose=True,
+                                             parentView=nView))
 
         self.stack.insertWidget(self.stack.count(), view)
         self.stack.setCurrentWidget(view)
@@ -386,15 +469,34 @@ class TreeEventFilter(QObject):
         return False
 
 
-class MultihashTreeView(QTreeView):
-    pass
+class IPFSDirectoryListView(QListView):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.setObjectName('unixFsDirView')
+        self.setSpacing(5)
+        self.setUniformItemSizes(True)
+        self.viewModeList()
+        self.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.setDragDropMode(QAbstractItemView.DragOnly)
+        self.setContextMenuPolicy(Qt.CustomContextMenu)
+
+    def viewModeList(self):
+        self.setViewMode(QListView.ListMode)
+        self.setFlow(QListView.TopToBottom)
+        self.setWrapping(False)
+
+    def viewModeIcon(self):
+        self.setViewMode(QListView.IconMode)
+        self.setFlow(QListView.LeftToRight)
+        self.setWrapping(True)
 
 
 class IPFSHashExplorerWidget(QWidget):
     closeRequest = pyqtSignal()
-    directoryOpenRequest = pyqtSignal(str)
+    directoryOpenRequest = pyqtSignal(QObject, str)
     fileOpenRequest = pyqtSignal(IPFSPath)
-    parentMultihashSet = pyqtSignal(str)
+    parentCidSet = pyqtSignal(str)
 
     def __init__(self, hashRef, addClose=False,
                  mimeDetectionMethod='db',
@@ -402,20 +504,32 @@ class IPFSHashExplorerWidget(QWidget):
                  showCidLabel=False,
                  showGit=False,
                  hideHashes=False,
-                 autoOpenFolders=False, parent=None):
+                 autoOpenFolders=False,
+                 parentView=None,
+                 parent=None):
         super(IPFSHashExplorerWidget, self).__init__(parent)
 
         self.parent = parent
+        self.parentView = parentView
+        self.setObjectName('unixFsExplorer')
+
         self.app = QApplication.instance()
         self.gWindow = self.app.mainWindow
         self.mimeDetectionMethod = mimeDetectionMethod
-        self.model = IPFSHashItemModel(self)
+
+        self.loadingCube = AnimatedLabel(
+            RotatingCubeRedFlash140d(speed=100),
+            parent=self
+        )
+        self.loadingCube.clip.setScaledSize(QSize(24, 24))
+        self.loadingCube.hide()
+
+        self.model = UnixFSDirectoryModel(self)
         self.gitEnabled = showGit
         self.hideHashes = hideHashes
 
         self.listTask = None
 
-        self.parentMultihash = None
         self.parentButton = None
         self.rootHash = None
         self.rootPath = None
@@ -437,6 +551,7 @@ class IPFSHashExplorerWidget(QWidget):
 
         self.labelInfo = QLabel()
 
+        self.hLayoutInfo.addWidget(self.loadingCube, 0, Qt.AlignLeft)
         self.hLayoutInfo.addWidget(self.labelInfo, 0, Qt.AlignLeft)
 
         if addClose:
@@ -444,6 +559,7 @@ class IPFSHashExplorerWidget(QWidget):
             self.closeButton.clicked.connect(self.onCloseView)
             self.closeButton.setMaximumWidth(100)
             self.closeButton.setShortcut(QKeySequence('Ctrl+w'))
+            self.closeButton.setShortcut(QKeySequence('Ctrl+Backspace'))
             self.hLayoutCtrl.addWidget(self.closeButton, 0, Qt.AlignLeft)
 
         if addActions:
@@ -453,68 +569,72 @@ class IPFSHashExplorerWidget(QWidget):
             path = IPFSPath(self.rootHash, autoCidConv=True)
             labelMultihash = IPFSUrlLabel(path)
             clipButton = IPFSPathClipboardButton(path)
+            hashmarkButton = HashmarkThisButton(path)
+            pyrDropButton = self.app.mainWindow.getPyrDropButtonFor(path)
+
             layout = QHBoxLayout()
             layout.addWidget(labelMultihash)
             layout.addWidget(clipButton)
+            layout.addWidget(hashmarkButton)
+            layout.addWidget(pyrDropButton)
             layout.addItem(QSpacerItem(10, 20, QSizePolicy.Expanding,
                                        QSizePolicy.Minimum))
             self.mainLayout.addLayout(layout)
 
         self.mainLayout.addLayout(self.hLayoutTop)
 
-        self.parentMultihashSet.connect(self.onParentMultihash)
+        self.dirListView = IPFSDirectoryListView(self)
+        self.dirListView.setModel(self.model)
 
-        self.tree = MultihashTreeView()
-        self.tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.tree.setDragDropMode(QAbstractItemView.DragOnly)
-
-        self.mainLayout.addWidget(self.tree)
+        self.mainLayout.addWidget(self.dirListView)
 
         self.initModel()
 
-        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tree.customContextMenuRequested.connect(self.onContextMenu)
-        self.tree.doubleClicked.connect(self.onDoubleClicked)
-        self.tree.setSortingEnabled(True)
+        self.dirListView.customContextMenuRequested.connect(self.onContextMenu)
+        self.dirListView.doubleClicked.connect(self.onDoubleClicked)
 
-        self.evfilter = IPFSTreeKeyFilter(self.tree)
+        self.evfilter = IPFSTreeKeyFilter(self.dirListView)
         self.evfilter.copyHashPressed.connect(self.onCopyItemHash)
         self.evfilter.copyPathPressed.connect(self.onCopyItemPath)
         self.evfilter.returnPressed.connect(self.onReturnPressed)
         self.evfilter.backspacePressed.connect(self.onBackspacePressed)
-        self.tree.installEventFilter(self.evfilter)
+
+        self.dirListView.installEventFilter(self.evfilter)
         self.iconFolder = getIcon('folder-open.png')
         self.iconFile = getIcon('file.png')
         self.iconUnknown = getIcon('unknown-file.png')
 
         self.updateTree()
 
+    @property
+    def parentCid(self):
+        if self.parentView:
+            return self.parentView.rootHash
+
+    def statusLoading(self, busy=True):
+        if busy:
+            self.loadingCube.setVisible(busy)
+            self.loadingCube.startClip()
+            self.loadingCube.clip.setSpeed(10)
+        else:
+            self.loadingCube.setVisible(False)
+            self.loadingCube.stopClip()
+
     def changeMultihash(self, cid):
         if cidValid(cid):
-            self.parentMultihash = self.rootHash
-
-            if self.parentMultihash is not None:
-                self.parentMultihashSet.emit(self.parentMultihash)
-
             self.rootHash = cid
             self.rootPath = IPFSPath(self.rootHash, autoCidConv=True)
             self.cid = cidhelpers.getCID(self.rootHash)
             self.initModel()
 
     def goToParent(self):
-        if self.parentMultihash:
-            self.changeMultihash(self.parentMultihash)
+        if self.parentCid:
+            self.changeMultihash(self.parentCid)
             self.updateTree()
-
-    def onParentMultihash(self, parent):
-        pass
 
     def initModel(self):
         self.model.clearModel()
-        self.model.setHorizontalHeaderLabels(
-            [iFileName(), iFileSize(), iMimeType()])
-        self.itemRoot = self.model.invisibleRootItem()
-        self.itemRootIdx = self.model.indexFromItem(self.itemRoot)
+        self.itemRoot = QModelIndex()
 
     def addButtons(self):
         self.getTask = None
@@ -542,7 +662,7 @@ class IPFSHashExplorerWidget(QWidget):
         self.labelInfo.setText(text)
 
     def reFocus(self):
-        self.tree.setFocus(Qt.OtherFocusReason)
+        self.dirListView.setFocus(Qt.OtherFocusReason)
 
     async def cleanup(self):
         self.cancelTasks()
@@ -621,18 +741,21 @@ class IPFSHashExplorerWidget(QWidget):
                       None)
 
     def onReturnPressed(self):
-        currentIdx = self.tree.currentIndex()
+        currentIdx = self.dirListView.currentIndex()
         if currentIdx.isValid():
             self.onDoubleClicked(currentIdx)
 
     def onCopyItemHash(self):
-        dataHash = self.model.getHashFromIdx(self.tree.currentIndex())
-        self.app.setClipboardText(dataHash)
+        entryInfo = self.model.getEntryInfoFromIdx(
+            self.dirListView.currentIndex())
+        if entryInfo:
+            self.app.setClipboardText(entryInfo.cid)
 
     def onCopyItemPath(self):
-        nameItem = self.model.getNameItemFromIdx(self.tree.currentIndex())
-        if nameItem:
-            self.app.setClipboardText(nameItem.getFullPath())
+        entryInfo = self.model.getEntryInfoFromIdx(
+            self.dirListView.currentIndex())
+        if entryInfo:
+            self.app.setClipboardText(entryInfo.getFullPath())
 
     def onBackspacePressed(self):
         pass
@@ -647,29 +770,28 @@ class IPFSHashExplorerWidget(QWidget):
         self.gWindow.addBrowserTab().browseFsPath(path)
 
     def onDoubleClicked(self, idx):
-        nameItem = self.model.getNameItemFromIdx(idx)
-        dataHash = self.model.getHashFromIdx(idx)
+        entryInfo = self.model.getEntryInfoFromIdx(idx)
 
-        if nameItem.isDir():
-            self.directoryOpenRequest.emit(dataHash)
-        elif nameItem.isFile() or nameItem.isUnknown():
-            self.openFile(nameItem, dataHash)
+        if entryInfo.isDir():
+            self.directoryOpenRequest.emit(self, entryInfo.cid)
+        elif entryInfo.isFile() or entryInfo.isUnknown():
+            self.openFile(entryInfo)
 
-    def openFile(self, item, fileHash):
-        if item.mimeType is None:
-            return self.browse(fileHash)
+    def openFile(self, entryInfo):
+        # if item.mimeType is None:
+        #    return self.browse(fileHash)
 
         if self.autoOpenFiles:
-            ensure(self.openWithRscOpener(item, fileHash))
+            ensure(self.openWithRscOpener(entryInfo))
         else:
-            self.fileOpenRequest.emit(item.ipfsPath)
+            self.fileOpenRequest.emit(entryInfo.ipfsPath)
 
     @ipfsOp
-    async def openWithRscOpener(self, ipfsop, item, fileHash):
+    async def openWithRscOpener(self, ipfsop, entry):
         # Pass a null mimetype to the resource opener so that it
         # redetects the mimetype with a full (but slower) mime detection method
         opener = self.app.resourceOpener
-        await opener.open(item.getFullPath(), None)
+        await opener.open(entry.getFullPath(), None)
 
     def updateTree(self):
         if self.rootPath and self.rootPath.valid:
@@ -679,28 +801,58 @@ class IPFSHashExplorerWidget(QWidget):
                 parentItem=self.itemRoot)
 
     def onContextMenu(self, point):
-        selModel = self.tree.selectionModel()
+        selModel = self.dirListView.selectionModel()
         rows = selModel.selectedRows()
 
-        items = [self.model.getNameItemFromIdx(idx) for idx in rows]
+        if len(rows) == 0:
+            return
+
+        item = self.model.getEntryInfoFromIdx(rows.pop())
         menu = QMenu(self)
 
         def pinRecursive():
-            for item in items:
-                fp = item.getFullPath()
-                self.app.task(self.app.ipfsCtx.pinner.queue, fp, True, None)
+            self.app.task(
+                self.app.ipfsCtx.pinner.queue, item.getFullPath(), True, None)
 
         def download():
             dirSel = directorySelect()
-            for item in items:
-                self.app.task(self.getResource, item.getFullPath(),
-                              dirSel)
+            self.app.task(self.getResource, item.getFullPath(),
+                          dirSel)
+
+        menu.addAction(getIcon('clipboard.png'),
+                       iCopyCIDToClipboard(),
+                       functools.partial(self.app.setClipboardText,
+                                         item.cid)
+                       )
+
+        menu.addAction(getIcon('clipboard.png'),
+                       iCopyPathToClipboard(),
+                       functools.partial(self.app.setClipboardText,
+                                         item.getFullPath()))
+
+        menu.addAction(getIcon('clipboard.png'),
+                       iCopyPubGwUrlToClipboard(),
+                       functools.partial(
+                           self.app.setClipboardText,
+                           item.ipfsPath.publicGwUrl
+        ))
+
+        menu.addSeparator()
+        menu.addAction(getIcon('hashmarks.png'),
+                       iHashmark(),
+                       partialEnsure(
+            addHashmarkAsync,
+            item.ipfsPath.objPath,
+            item.filename
+        )
+        )
+        menu.addSeparator()
 
         menu.addAction(getIcon('pin.png'), iPinRecursive(),
                        pinRecursive)
         menu.addAction(iDownload(), download)
 
-        menu.exec(self.tree.mapToGlobal(point))
+        menu.exec(self.dirListView.mapToGlobal(point))
 
     async def timedList(self, ipfsop, objPath, parentItem, autoexpand,
                         secs, resolve_type):
@@ -711,7 +863,7 @@ class IPFSHashExplorerWidget(QWidget):
 
     @ipfsOp
     async def listMultihash(self, ipfsop, objPath, parentItem,
-                            autoexpand=False):
+                            autoexpand=False, timeout=60 * 10):
         """ Lists contents of IPFS object referenced by objPath,
             and change the tree's model afterwards.
 
@@ -719,22 +871,18 @@ class IPFSHashExplorerWidget(QWidget):
             timeout do the same call but without resolving nodes types
         """
 
-        self.tree.setModel(self.model)
-        self.tree.header().setSectionResizeMode(self.model.COL_NAME,
-                                                QHeaderView.ResizeToContents)
-        self.tree.header().setSectionResizeMode(self.model.COL_MIME,
-                                                QHeaderView.ResizeToContents)
+        self.statusLoading(True)
 
         try:
             self.setInfo(iLoading())
             await self.timedList(ipfsop, objPath, parentItem,
-                                 autoexpand, 300, True)
+                                 autoexpand, timeout, True)
         except asyncio.TimeoutError:
             self.setInfo(iTimeoutTryNoResolve())
 
             try:
                 await self.timedList(ipfsop, objPath, parentItem,
-                                     autoexpand, 300, False)
+                                     autoexpand, timeout, False)
             except asyncio.TimeoutError:
                 # That's a dead end .. bury that hash please ..
                 self.setInfo(iTimeoutInvalidHash())
@@ -744,8 +892,8 @@ class IPFSHashExplorerWidget(QWidget):
             # TODO
             self.setInfo(iErrNoCx())
             return
-
-        self.tree.sortByColumn(self.model.COL_NAME, Qt.AscendingOrder)
+        except Exception as e:
+            print(str(e))
 
         rStat = await ipfsop.objStat(objPath)
         statInfo = StatInfo(rStat)
@@ -755,15 +903,92 @@ class IPFSHashExplorerWidget(QWidget):
                                   statInfo.numLinks,
                                   sizeFormat(statInfo.totalSize)))
 
-    async def list(self, op, path, parentItem=None,
+        self.statusLoading(False)
+
+    async def list(self, ipfsop, path, parentItem=None,
                    autoexpand=False, resolve_type=True):
+        """
+        Does the actual directory listing with a streamed ls call
+        """
+
+        eCount = 0  # entry count
+        wiStart, wiEnd = None, None
+        startLt = self.app.loop.time()
+        stCount, stLt = None, None
+
+        _cp, dePath, deExists = self.app.multihashDb.pathDirEntries(
+            self.rootPath.objPath)
+
+        # Load from local cache or do a streamed ls
+        if deExists:
+            eGenerator = self.app.multihashDb.getDirEntries(
+                self.rootPath.objPath)
+        else:
+            eGenerator = ipfsop.listStreamed(path, resolve_type)
+
+        async for entry in eGenerator:
+            eCount += 1
+
+            rowCount = self.model.rowCount(QModelIndex())
+            rowStart = max(0, rowCount - 1)
+            rowEnd = rowStart + 1
+
+            # Set start window index for the first time
+            if wiStart is None:
+                wiStart = self.model.index(rowStart, 0, QModelIndex())
+
+            # Set end window index
+            wiEnd = self.model.index(rowEnd, 0, QModelIndex())
+
+            # Create the entry and add it to the model
+            entryInfo = EntryInfo(entry, self.rootHash)
+            entryInfo.mimeFromDb(self.app.mimeDb)
+            self.model.entries.append(entryInfo)
+
+            # Emit dataChanged() periodically
+            if divmod(eCount, 64)[1] == 0:
+                self.model.dataChanged.emit(wiStart, wiEnd)
+
+                # The model was refreshed, update the window index
+                wiStart = self.model.index(rowStart, 0, QModelIndex())
+
+            if divmod(eCount, 4)[1] == 0:
+                self.loadingCube.clip.setSpeed(
+                    min(
+                        self.loadingCube.clip.speed() + 5,
+                        400
+                    )
+                )
+
+                stCount, stLt = eCount, self.app.loop.time()
+
+                entriesPerSec = int(stCount / (stLt - startLt))
+                self.setInfo(iLoadedEntries(eCount, entriesPerSec))
+
+            # Give it some deserved sleep
+            await ipfsop.sleep(0.05)
+
+        #
+        # The CID was fully listed
+        # Emit dataChanged() and serialize the entries
+        #
+
+        self.model.dataChanged.emit(wiStart, wiEnd)
+        await self.serializeEntries()
+
+    async def serializeEntries(self):
+        await self.app.multihashDb.writeDirEntries(
+            self.rootPath.objPath, self.model.formatEntries())
+
+    async def listOld(self, op, path, parentItem=None,
+                      autoexpand=False, resolve_type=True):
         """
         Does the actual directory listing with
         a streamed ls call
         """
 
         parentItemSibling = self.model.sibling(parentItem.row(),
-                                               self.model.COL_HASH,
+                                               self.model.COL_UNIXFS_HASH,
                                                parentItem.index())
         parentItemHash = self.model.data(parentItemSibling)
         if parentItemHash is None:
@@ -772,8 +997,8 @@ class IPFSHashExplorerWidget(QWidget):
         async for obj in op.listStreamed(path, resolve_type):
             for entry in obj['Links']:
                 cid = entry['Hash']
-                if cid in self.model.entryCache:
-                    continue
+                # if cid in self.model.entryCache:
+                #    continue
 
                 if len(entry['Name']) > 32:
                     entryName = entry['Name'][0:32]
@@ -814,7 +1039,7 @@ class IPFSHashExplorerWidget(QWidget):
 
                 if nItemName.isDir() and self.autoOpenFolders:
                     # Automatically open sub folders. Used by unit tests
-                    self.directoryOpenRequest.emit(dataHash)
+                    self.directoryOpenRequest.emit(self, dataHash)
 
                 if nItemName.isDir() and entry['Name'] == '.git' and \
                         self.gitEnabled is True:

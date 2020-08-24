@@ -14,6 +14,7 @@ from galacteek import logUser
 from galacteek import ensure
 from galacteek import partialEnsure
 from galacteek import AsyncSignal
+from galacteek.database import hashmarksByPath
 
 from galacteek.did.ipid import IPService
 
@@ -71,6 +72,20 @@ class IPFSResourceOpener(QObject):
             minProfile='web3', pinBrowsed=pin).enterUrl(url)
 
     @ipfsOp
+    async def openHashmark(self, ipfsop, hashmark):
+        await hashmark._fetch_all()
+        workspace = self.app.mainWindow.stack.wsHashmarkTagRulesRun(
+            hashmark
+        )
+
+        await self.app.resourceOpener.open(
+            hashmark.path if hashmark.path else hashmark.url,
+            schemePreferred=hashmark.schemepreferred,
+            pin=True if hashmark.pin != 0 else False,
+            useWorkspace=workspace
+        )
+
+    @ipfsOp
     async def open(self, ipfsop, pathRef,
                    mimeType=None,
                    openingFrom=None,
@@ -81,7 +96,8 @@ class IPFSResourceOpener(QObject):
                    fromEncrypted=False,
                    editObject=False,
                    pin=False,
-                   burnAfterReading=False):
+                   burnAfterReading=False,
+                   useWorkspace=None):
         """
         Open the resource referenced by rscPath according
         to its MIME type
@@ -141,6 +157,13 @@ class IPFSResourceOpener(QObject):
         else:
             logUser.info(iResourceCannotOpen(rscPath))
             return
+
+        hashmark = await hashmarksByPath(rscPath)
+        if hashmark and not useWorkspace:
+            await hashmark._fetch_all()
+            useWorkspace = self.app.mainWindow.stack.wsHashmarkTagRulesRun(
+                hashmark
+            )
 
         if mimeType == mimeTypeDagUnknown:
             indexPath = ipfsPath.child('index.html')
@@ -260,7 +283,8 @@ class IPFSResourceOpener(QObject):
             self.objectOpened.emit(ipfsPath)
             return self.app.mainWindow.addBrowserTab(
                 minProfile=minWebProfile,
-                pinBrowsed=pin).browseFsPath(
+                pinBrowsed=pin,
+                workspace=useWorkspace).browseFsPath(
                     ipfsPath, schemePreferred=schemePreferred)
 
         if mimeType.isDir:
@@ -271,7 +295,8 @@ class IPFSResourceOpener(QObject):
                 self.objectOpened.emit(ipfsPath)
                 return self.app.mainWindow.addBrowserTab(
                     minProfile=minWebProfile,
-                    pinBrowsed=pin).browseFsPath(
+                    pinBrowsed=pin,
+                    workspace=useWorkspace).browseFsPath(
                         ipfsPath, schemePreferred=schemePreferred)
             else:
                 return await self.app.mainWindow.exploreIpfsPath(ipfsPath)

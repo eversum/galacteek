@@ -28,7 +28,7 @@ QWidget#centralWidget {
     margin: 0px;
 }
 
-QToolBar#toolbarMain {
+QToolBar#mainToolBar {
     padding: 0px;
     margin: 0px;
 }
@@ -163,7 +163,6 @@ QTextBrowser {
     background-color: #f6fafb;
 }
 
-
 QToolButton#pyramidsController::pressed {
     background-color: #eec146;
 }
@@ -212,6 +211,7 @@ QLabel#linkInfos {
     color: black;
     font: 12pt "Inter UI";
 }
+
 QProgressBar#pBarBrowser {
     text-align: center;
     color: black;
@@ -242,7 +242,6 @@ QLabel#ipfsStatusLabel {
     font: 10pt "Inter UI";
     font-weight: bold;
 }
-
 
 QLabel#lastLogLabel {
     font: 10pt "Montserrat";
@@ -407,8 +406,9 @@ QSlider::sub-page:horizontal {
 
 /* Workspaces */
 
-QToolBar#wsToolBar QToolButton {
-    margin-right: 10px;
+QToolBar#wsActionsToolBar QToolButton {
+    margin-right: 5px;
+    margin-left: 5px;
 }
 
 QToolBar QToolButton::hover {
@@ -417,4 +417,29 @@ QToolBar QToolButton::hover {
 
 QToolBar QToolButton::pressed {
     background-color: #eec146;
+}
+
+/* UnixFS QListView */
+
+QListView#unixFsDirView {
+    border: 1px solid lightgray;
+    padding-left: 10px;
+    padding-top: 10px;
+}
+
+QListView#unixFsDirView::item {
+    font: 13pt "Montserrat";
+}
+
+QListView#unixFsDirView::item:hover {
+    background-color: #eec146;
+    border: 1px solid #4b9fa2;
+    margin-left: 10px;
+}
+
+QListView#unixFsDirView::item:selected {
+    background-color: #60cccf;
+    border: 1px solid #4b9fa2;
+    color: black;
+    margin-left: 15px;
 }

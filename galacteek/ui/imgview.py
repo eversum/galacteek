@@ -34,6 +34,7 @@ from galacteek.ipfs.mimetype import MIMEType
 from .widgets import GalacteekTab
 from .widgets import IPFSUrlLabel
 from .widgets import IPFSPathClipboardButton
+from .widgets import HashmarkThisButton
 from .helpers import getIcon
 from .helpers import messageBox
 from .clipboard import iCopyToClipboard
@@ -79,10 +80,12 @@ class ImageViewerTab(GalacteekTab):
 
         self.pathLabel = IPFSUrlLabel(None)
         self.pathClipB = IPFSPathClipboardButton(None)
+        self.hashmarkButton = HashmarkThisButton(IPFSPath(None))
 
         layout = QHBoxLayout()
         layout.addWidget(self.pathLabel, 0, Qt.AlignLeft)
         layout.addWidget(self.pathClipB, 0, Qt.AlignLeft)
+        layout.addWidget(self.hashmarkButton, 0, Qt.AlignLeft)
         layout.addItem(
             QSpacerItem(10, 10, QSizePolicy.Expanding, QSizePolicy.Minimum))
         layout.addWidget(self.pinButton, 0, Qt.AlignLeft)
@@ -106,6 +109,7 @@ class ImageViewerTab(GalacteekTab):
         self.pinButton.clicked.connect(self.view.pinImage)
 
     def onImageLoaded(self, path, mimeType):
+        self.hashmarkButton.ipfsPath = path
         self.pinButton.setEnabled(True)
         self.pathLabel.path = path
         self.pathClipB.path = path

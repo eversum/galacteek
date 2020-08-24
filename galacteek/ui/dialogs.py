@@ -891,6 +891,7 @@ class IPTagsSelectDialog(QDialog):
         self.ui.lineEditTag.setValidator(
             QRegExpValidator(QRegExp(r'[A-Za-z0-9-_@#]+')))
         self.ui.lineEditTag.setMaxLength(128)
+        self.ui.lineEditTag.setClearButtonEnabled(True)
 
         self.ui.tagItButton.clicked.connect(self.onTagObject)
         self.ui.untagItButton.clicked.connect(self.untagObject)
@@ -951,7 +952,6 @@ class IPTagsSelectDialog(QDialog):
             return
 
         await database.ipTagAdd(ipTagsFormat(tagname))
-        self.ui.lineEditTag.clear()
         await self.updateAllTags()
 
     async def updateAllTags(self):

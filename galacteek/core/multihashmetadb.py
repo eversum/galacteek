@@ -23,7 +23,7 @@ class IPFSObjectMetadataDatabase:
     def metaDbPath(self):
         return self._metaDbPath
 
-    def path(self, rscPath):
+    def path(self, rscPath, ext=None):
         if isinstance(rscPath, str) and isIpfsPath(rscPath):
             path = stripIpfs(
                 rscPath.rstrip('/')).replace('/', '_')
@@ -33,15 +33,37 @@ class IPFSObjectMetadataDatabase:
                 containerId = comps[0][0:8]
                 containerPath = os.path.join(self.metaDbPath, containerId)
                 metaPath = os.path.join(containerPath, path)
+
+                if isinstance(ext, str):
+                    metaPath = f'{metaPath}.{ext}'
+
                 return containerPath, metaPath, os.path.exists(metaPath)
 
         return None, None, False
+
+    def pathDirEntries(self, rscPath):
+        return self.path(rscPath, ext='direntries')
 
     async def write(self, metaPath, metadata, mode='w+t'):
         async with aiofiles.open(metaPath, mode) as fd:
             await fd.write(
                 json.dumps(metadata, indent=4)
             )
+
+    async def writeDirEntries(self, rscPath, data, mode='w+t'):
+        cPath, dePath, exists = self.pathDirEntries(rscPath)
+
+        if not exists:
+            if not os.path.isdir(cPath):
+                os.mkdir(cPath)
+
+            try:
+                async with aiofiles.open(dePath, mode) as fd:
+                    await fd.write(json.dumps(data))
+            except BaseException:
+                log.debug(f'Error storing dirents for {rscPath}')
+            else:
+                log.debug(f'Stored dirents for {rscPath}')
 
     async def store(self, rscPath, **data):
         containerPath, metaPath, exists = self.path(rscPath)
@@ -88,3 +110,13 @@ class IPFSObjectMetadataDatabase:
                     log.debug('Error reading metadata for {0}: {1}'.format(
                         rscPath, str(err)))
                     os.unlink(metaPath)
+
+    async def getDirEntries(self, rscPath):
+        containerPath, dePath, exists = self.pathDirEntries(rscPath)
+        if dePath and exists:
+            async with aiofiles.open(dePath, 'rt') as fd:
+                data = json.loads(await fd.read())
+
+                if isinstance(data, list):
+                    for entry in data:
+                        yield entry

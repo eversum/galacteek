@@ -45,7 +45,6 @@ from galacteek.ipfs.wrappers import *
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.cidhelpers import IPFSPath
 
-from galacteek.dweb.page import HashmarksPage, DWebView, WebTab
 from galacteek.core.modelhelpers import *
 
 from . import ui_ipfsinfos
@@ -312,7 +311,7 @@ class MiscToolBar(QToolBar):
     def __init__(self, parent):
         super().__init__(parent)
 
-        self.setObjectName('toolbarMisc')
+        self.setObjectName('miscToolBar')
         self.setAllowedAreas(
             Qt.RightToolBarArea
         )
@@ -328,7 +327,7 @@ class MainToolBar(QToolBar):
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.setObjectName('toolbarMain')
+        self.setObjectName('mainToolBar')
 
         self.setFloatable(False)
         self.setAllowedAreas(
@@ -362,9 +361,19 @@ class WorkspacesToolBar(QToolBar):
         super().__init__(parent)
 
         self.wsButtons = {}
+        self.wsPlanetsToolBar = QToolBar()
+        self.wsPlanetsToolBarAdded = False
 
-    def add(self, btn):
-        self.wsButtons[btn] = self.addWidget(btn)
+    def add(self, btn, dst='default'):
+        if dst == 'default':
+            self.wsButtons[btn] = self.addWidget(btn)
+        elif dst == 'planets':
+            if not self.wsPlanetsToolBarAdded:
+                # change that soon this is wrong
+                self.addWidget(self.wsPlanetsToolBar)
+                self.wsPlanetsToolBarAdded = True
+
+            self.wsButtons[btn] = self.wsPlanetsToolBar.addWidget(btn)
 
     def buttonForWorkspace(self, workspace):
         for wsButton in self.wsButtons.keys():
@@ -393,8 +402,7 @@ class WorkspaceSwitchButton(QToolButton):
         self.setIcon(workspace.wsIcon)
         self.setObjectName('wsSwitchButton')
 
-        if workspace.wsDescription:
-            self.setToolTip(workspace.wsDescription)
+        self.setToolTip(workspace.wsToolTip())
 
     def checkStateSet(self):
         super(WorkspaceSwitchButton, self).checkStateSet()
@@ -440,6 +448,8 @@ class CentralStack(QStackedWidget):
             partialEnsure(self.onWorkspaceChanged))
         self.toolBarWs = wsToolBar
 
+        self.__wsDormant = []
+
     @property
     def mainWindow(self):
         return self.parent()
@@ -447,6 +457,9 @@ class CentralStack(QStackedWidget):
     def workspaces(self):
         for idx in range(0, self.count()):
             yield idx, self.workspaceFromIndex(idx)
+
+        for ws in self.__wsDormant:
+            yield -1, ws
 
     def workspacesBeforeIndex(self, widx):
         for idx in range(widx, self.count()):
@@ -486,10 +499,23 @@ class CentralStack(QStackedWidget):
 
         self.toolBarWs.wsSwitched(wspace)
 
-    def addWorkspace(self, workspace):
-        self.addWidget(workspace)
-        self.toolBarWs.add(self.wsSwitchButton(workspace))
-        workspace.setupWorkspace()
+    def __addWorkspace(self, workspace):
+        if not workspace.wsAttached:
+            self.addWidget(workspace)
+            workspace.wsAttached = True
+            self.toolBarWs.add(
+                self.wsSwitchButton(workspace),
+                dst=workspace.wsSection
+            )
+            workspace.setupWorkspace()
+
+    def addWorkspace(self, workspace, section='default', dormant=False):
+        workspace.wsSection = section
+
+        if not dormant:
+            self.__addWorkspace(workspace)
+        else:
+            self.__wsDormant.append(workspace)
 
     def addWorkspaces(self, *wspaces):
         [self.addWorkspace(w) for w in wspaces]
@@ -530,6 +556,17 @@ class CentralStack(QStackedWidget):
 
         if wsButton and curWorkspace is not workspace:
             wsButton.styleNotify()
+
+    def wsHashmarkTagRulesRun(self, hashmark):
+        for idx, workspace in self.workspaces():
+            if workspace.wsTagRulesMatchesHashmark(hashmark):
+                if idx == -1:
+                    self.__addWorkspace(workspace)
+                    self.__wsDormant.remove(workspace)
+
+                return workspace
+
+        return None
 
 
 class BrowseButton(PopupToolButton):
@@ -627,14 +664,6 @@ class MainWindow(QMainWindow):
         loggerMain.handlers.append(self.userLogsHandler)
         loggerUser.handlers.append(self.userLogsHandler)
 
-        self.tabnFManager = iFileManager()
-        self.tabnKeys = iKeys()
-        self.tabnPinning = iPinningStatus()
-        self.tabnMediaPlayer = iMediaPlayer()
-        self.tabnHashmarks = iHashmarks()
-        self.tabnChat = iChat()
-        self.tabnFeeds = iAtomFeeds()
-
         self.menuManual = QMenu(iManual(), self)
 
         # DID explorer
@@ -693,11 +722,6 @@ class MainWindow(QMainWindow):
         self.editorOpenAction = QAction(getIcon('text-editor.png'),
                                         iTextEditor(),
                                         triggered=self.addEditorTab)
-
-        self.hashmarksManagerAction = QAction(getIcon('hashmarks.png'),
-                                              iHashmarksManager(),
-                                              shortcut=QKeySequence('Ctrl+m'),
-                                              triggered=self.addHashmarksTab)
 
         self.editorOpenAction = QAction(getIcon('text-editor.png'),
                                         iTextEditor(),
@@ -867,17 +891,10 @@ class MainWindow(QMainWindow):
         self.toolbarMain.addWidget(self.hashmarksSearcher)
         self.toolbarMain.addWidget(self.profileButton)
 
-        # self.toolbarMain.addWidget(self.chatCenterButton)
-        # self.toolbarMain.addWidget(self.peersButton)
-        # self.toolbarMain.addWidget(self.atomButton)
-
-        # self.toolbarMain.addSeparator()
-        # self.toolbarMain.addWidget(self.fileManagerButton)
-        # self.toolbarMain.addWidget(self.textEditorButton)
-        # self.toolbarMain.addWidget(self.cameraController)
-
         self.toolbarMain.addSeparator()
         self.toolbarMain.addWidget(self.toolbarWs)
+        self.toolbarMain.addSeparator()
+        self.toolbarMain.addWidget(self.cameraController)
         self.toolbarMain.addSeparator()
 
         self.hashmarkMgrButton.hashmarkClicked.connect(self.onHashmarkClicked)
@@ -914,6 +931,13 @@ class MainWindow(QMainWindow):
         self.wspaceMultimedia = WorkspaceMultimedia(self.stack)
         self.wspaceEdit = WorkspaceEdition(self.stack)
         self.wspaceMisc = WorkspaceMisc(self.stack)
+
+        self.wspaceEarth = PlanetWorkspace(self.stack, 'Earth')
+        self.wspaceMars = PlanetWorkspace(self.stack, 'Mars')
+        self.wspaceJupiter = PlanetWorkspace(self.stack, 'Jupiter')
+        self.wspaceMercury = PlanetWorkspace(self.stack, 'Mercury')
+        self.wspaceNeptune = PlanetWorkspace(self.stack, 'Neptune')
+        self.wspacePluto = PlanetWorkspace(self.stack, 'Pluto')
 
         self.webProfile = QtWebEngineWidgets.QWebEngineProfile.defaultProfile()
 
@@ -1037,15 +1061,38 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).keyPressEvent(event)
 
     def setupWorkspaces(self):
-        self.stack.addWorkspaces(
-            self.wspaceFs,
-            self.wspaceCore,
-            self.wspacePeers,
-            self.wspaceSearch,
-            self.wspaceEdit,
-            self.wspaceMultimedia,
-            self.wspaceMisc
-        )
+        if 0:
+            self.stack.addWorkspaces(
+                self.wspaceFs,
+                self.wspaceCore,
+                self.wspacePeers,
+                self.wspaceSearch,
+                self.wspaceEdit,
+                self.wspaceMultimedia,
+                self.wspaceMisc
+            )
+
+        self.stack.addWorkspace(self.wspaceFs)
+        self.stack.addWorkspace(self.wspaceCore)
+        self.stack.addWorkspace(
+            self.wspaceEarth, section='planets')
+        self.stack.addWorkspace(
+            self.wspaceMars, section='planets', dormant=True)
+        self.stack.addWorkspace(
+            self.wspaceJupiter, section='planets', dormant=True)
+        self.stack.addWorkspace(
+            self.wspaceMercury, section='planets', dormant=True)
+        self.stack.addWorkspace(
+            self.wspaceNeptune, section='planets', dormant=True)
+        self.stack.addWorkspace(
+            self.wspacePluto, section='planets', dormant=True)
+
+        self.stack.addWorkspace(self.wspacePeers)
+        self.stack.addWorkspace(self.wspaceSearch)
+        self.stack.addWorkspace(self.wspaceEdit)
+        self.stack.addWorkspace(self.wspaceMultimedia)
+        self.stack.addWorkspace(self.wspaceMisc)
+
         self.stack.wsAddGlobalAction(self.browseAction)
         self.stack.activateWorkspaces(False)
 
@@ -1056,16 +1103,14 @@ class MainWindow(QMainWindow):
         self.app.urlHistory.clear()
 
     def onHashmarkClicked(self, hashmark):
-        ensure(self.app.resourceOpener.open(
-            hashmark.path if hashmark.path else hashmark.url,
-            schemePreferred=hashmark.schemepreferred,
-            pin=True if hashmark.pin != 0 else False))
+        ensure(self.app.resourceOpener.openHashmark(hashmark))
 
     def onMainToolbarMoved(self, orientation):
         self.toolbarMain.lastPos = self.toolbarMain.pos()
 
         self.toolbarTools.setOrientation(orientation)
         self.qaToolbar.setOrientation(orientation)
+        self.toolbarWs.setOrientation(orientation)
 
         if self.toolbarMain.vertical:
             self.toolbarMain.emptySpace.setSizePolicy(
@@ -1133,12 +1178,13 @@ class MainWindow(QMainWindow):
         for action in self.profilesActionGroup.actions():
             if action.data() == pName:
                 action.setChecked(True)
-                # Refresh the file manager
-                wspace, tab = self.findTabFileManager()
 
-                if tab:
-                    tab.fileManager.setupModel()
-                    tab.fileManager.pathSelectorDefault()
+                # Refresh the file manager
+                fmTab = self.findTabFileManager()
+
+                if fmTab:
+                    fmTab.fileManager.setupModel()
+                    fmTab.fileManager.pathSelectorDefault()
 
     def onProfilesList(self, pList):
         currentList = [action.data() for action in
@@ -1280,15 +1326,18 @@ class MainWindow(QMainWindow):
         self.lastLogLabel.setToolTip(msg)
 
     def registerTab(self, tab, name, icon=None, current=True,
-                    tooltip=None, workspace='current'):
-        if isinstance(workspace, str):
-            if workspace == 'current':
-                sidx, wspace = self.stack.currentWorkspace()
-            else:
-                sidx, wspace = self.stack.workspaceByName(workspace)
-                if wspace is None:
-                    # XXX
-                    return
+                    tooltip=None, workspace=None):
+        if workspace is None:
+            sidx, wspace = self.stack.currentWorkspace()
+        elif isinstance(workspace, str):
+            sidx, wspace = self.stack.workspaceByName(workspace)
+            if wspace is None:
+                # XXX
+                return
+        elif issubclass(workspace.__class__, BaseWorkspace):
+            wspace = workspace
+        else:
+            sidx, wspace = self.stack.currentWorkspace()
 
         wspace.wsRegisterTab(tab, name, icon=icon, current=current,
                              tooltip=tooltip)
@@ -1297,7 +1346,8 @@ class MainWindow(QMainWindow):
             wspace.wsSwitch()
 
     def findTabFileManager(self):
-        return self.findTabWithName(self.tabnFManager)
+        with self.stack.workspaceCtx(WS_FILES) as ws:
+            return ws.wsFindTabWithId('filemanager')
 
     def findTabIndex(self, w):
         return self.tabWidget.indexOf(w)
@@ -1442,15 +1492,12 @@ class MainWindow(QMainWindow):
         self.registerTab(w, 'New document', current=True)
 
     def onIpfsKeysClicked(self):
-        name = self.tabnKeys
-
         with self.stack.workspaceCtx(WS_MISC) as ws:
-            tab = ws.wsFindTabWithName(name)
+            tab = ws.wsFindTabWithId('ipfs-keys-manager')
             if tab:
                 return ws.tabWidget.setCurrentWidget(tab)
             else:
-                keysTab = keys.KeysTab(self)
-                ws.wsRegisterTab(keysTab, name, current=True)
+                ws.wsRegisterTab(keys.KeysTab(self), iKeys(), current=True)
 
     def onHelpDonate(self):
         tab = self.app.mainWindow.addBrowserTab(workspace=WS_MISC)
@@ -1459,7 +1506,7 @@ class MainWindow(QMainWindow):
 
     def addBrowserTab(self, label='No page loaded', pinBrowsed=False,
                       minProfile=None, current=True,
-                      workspace='current'):
+                      workspace=None):
         icon = getIconIpfsIce()
         tab = browser.BrowserTab(self,
                                  minProfile=minProfile,
@@ -1502,23 +1549,6 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         event.ignore()
         self.hide()
-
-    def addHashmarksTab(self):
-        wspace, ft = self.findTabWithName(self.tabnHashmarks)
-        if ft:
-            return self.tabWidget.setCurrentWidget(ft)
-
-        tab = WebTab(self.tabWidget)
-
-        if self.hashmarksPage is None:
-            self.hashmarksPage = HashmarksPage(self.app.marksLocal,
-                                               self.app.marksNetwork,
-                                               parent=tab)
-        hview = DWebView(page=self.hashmarksPage, parent=tab)
-        tab.attach(hview)
-
-        self.registerTab(tab, iHashmarks(),
-                         icon=getIcon('hashmarks.png'), current=True)
 
     def onIpfsObjectServed(self, ipfsPath, cType, reqTime):
         # TODO

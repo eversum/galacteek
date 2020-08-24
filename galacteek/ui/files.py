@@ -19,6 +19,8 @@ from PyQt5.QtWidgets import QInputDialog
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QFileSystemModel
 from PyQt5.QtWidgets import QHeaderView
+from PyQt5.QtWidgets import QWidgetAction
+from PyQt5.QtWidgets import QToolBar
 
 from PyQt5.QtCore import QModelIndex
 from PyQt5.QtCore import QItemSelectionModel
@@ -32,7 +34,6 @@ from PyQt5.QtCore import QSortFilterProxyModel
 
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtGui import QImage
-from PyQt5.QtGui import QKeySequence
 
 from galacteek import ensure
 from galacteek import partialEnsure
@@ -161,6 +162,21 @@ def iSelectDirectory():
 def iSelectFiles():
     return QCoreApplication.translate('FileManagerForm',
                                       'Select one or more files to import')
+
+
+def iAddFiles():
+    return QCoreApplication.translate('FileManagerForm',
+                                      'Add files')
+
+
+def iAddDirectory():
+    return QCoreApplication.translate('FileManagerForm',
+                                      'Add directory')
+
+
+def iRefresh():
+    return QCoreApplication.translate('FileManagerForm',
+                                      'Refresh')
 
 
 def iOfflineMode():
@@ -340,6 +356,37 @@ class TimeFrameSelectorWidget(QWidget):
         return QDate.currentDate()
 
 
+class FileManagerButtonAction(QWidgetAction):
+    """
+    A filemanager widget action wrapping a QToolButton.
+    When clicked the action is explicitely triggered via trigger()
+    """
+
+    def __init__(self, icon, parent, tooltip=None):
+        super().__init__(parent)
+        self.icon = icon
+        self.tooltip = tooltip
+
+    def createWidget(self, parent):
+        btn = QToolButton(parent)
+
+        if self.tooltip:
+            btn.setToolTip(self.tooltip)
+
+        btn.setIcon(self.icon)
+        btn.clicked.connect(lambda: self.trigger())
+        return btn
+
+
+class AddFilesAction(QWidgetAction):
+    def createWidget(self, parent):
+        btn = QToolButton(parent)
+        btn.setToolTip(iAddFiles())
+        btn.setIcon(getIcon('add-file.png'))
+        btn.clicked.connect(lambda: self.trigger())
+        return btn
+
+
 class FileManager(QWidget):
     statusReady = 0
     statusBusy = 1
@@ -356,8 +403,36 @@ class FileManager(QWidget):
         self._offlineMode = False
         self._importTask = None
 
+        self.fsCtrlToolBar = QToolBar()
+
         self.ui = ui_files.Ui_FileManagerForm()
         self.ui.setupUi(self)
+
+        self.ui.fsControlLayout.addWidget(self.fsCtrlToolBar)
+
+        self.addFilesAction = FileManagerButtonAction(
+            getIcon('add-file.png'),
+            self,
+            tooltip=iAddFiles()
+        )
+        self.addDirectoryAction = FileManagerButtonAction(
+            getIcon('add-folder.png'),
+            self,
+            tooltip=iAddDirectory()
+        )
+        self.refreshAction = FileManagerButtonAction(
+            getIcon('refresh.png'),
+            self,
+            tooltip=iRefresh()
+        )
+
+        self.addFilesAction.triggered.connect(self.onAddFilesClicked)
+        self.addDirectoryAction.triggered.connect(self.onAddDirClicked)
+        self.refreshAction.triggered.connect(self.onRefreshClicked)
+
+        self.fsCtrlToolBar.addAction(self.addFilesAction)
+        self.fsCtrlToolBar.addAction(self.addDirectoryAction)
+        self.fsCtrlToolBar.addAction(self.refreshAction)
 
         self.hashFunction = 'sha2-256'
         self.mfsMetadataRe = re.compile(
@@ -389,16 +464,12 @@ class FileManager(QWidget):
         self.busyCube.hide()
 
         self.ui.datesPickButton.toggled.connect(self.onDatePickToggled)
-        self.ui.refreshButton.setShortcut(QKeySequence('Ctrl+r'))
 
         self.ui.fsControlLayout.insertWidget(0, self.busyCube)
 
         # Connect the various buttons
         self.ui.helpButton.clicked.connect(
             lambda: self.app.manuals.browseManualPage('filemanager.html'))
-        self.ui.addFileButton.clicked.connect(self.onAddFilesClicked)
-        self.ui.addDirectoryButton.clicked.connect(self.onAddDirClicked)
-        self.ui.refreshButton.clicked.connect(self.onRefreshClicked)
         self.ui.searchFiles.returnPressed.connect(
             partialEnsure(self.onSearchFiles))
         self.ui.searchFiles.setToolTip(iSearchFilesHelp())
@@ -583,9 +654,9 @@ class FileManager(QWidget):
             self.status = self.statusReady
 
         self.mfsTree.setEnabled(not busy)
-        self.ui.addFileButton.setEnabled(not busy)
-        self.ui.addDirectoryButton.setEnabled(not busy)
-        self.ui.refreshButton.setEnabled(not busy)
+        self.addFilesAction.setEnabled(not busy)
+        self.addDirectoryAction.setEnabled(not busy)
+        self.refreshAction.setEnabled(not busy)
         self.ui.searchFiles.setEnabled(not busy)
         self.ui.fileManagerButton.setEnabled(not busy)
         self.ui.localFileManagerSwitch.setEnabled(not busy)
@@ -812,16 +883,16 @@ class FileManager(QWidget):
             self.setupPathSelector()
 
     def enableButtons(self, flag=True):
-        for btn in [self.ui.addFileButton,
-                    self.ui.addDirectoryButton,
-                    self.ui.refreshButton,
-                    self.ui.localFileManagerSwitch,
-                    self.ui.fileManagerButton,
-                    self.ui.fsOptionsButton,
-                    self.ui.pathSelector,
-                    self.ui.offlineButton,
-                    self.ui.searchFiles]:
-            btn.setEnabled(flag)
+        for elem in [self.addFilesAction,
+                     self.addDirectoryAction,
+                     self.refreshAction,
+                     self.ui.localFileManagerSwitch,
+                     self.ui.fileManagerButton,
+                     self.ui.fsOptionsButton,
+                     self.ui.pathSelector,
+                     self.ui.offlineButton,
+                     self.ui.searchFiles]:
+            elem.setEnabled(flag)
 
         if self.model and self.displayedItem is self.model.itemEncrypted:
             self.ui.addDirectoryButton.setEnabled(False)
@@ -1956,6 +2027,8 @@ class FileManager(QWidget):
 class FileManagerTab(GalacteekTab):
     def __init__(self, gWindow, fileManager=None):
         super(FileManagerTab, self).__init__(gWindow, sticky=True)
+
+        self.ctx.tabIdent = 'filemanager'
 
         self.fileManager = fileManager if fileManager else \
             FileManager(parent=self)

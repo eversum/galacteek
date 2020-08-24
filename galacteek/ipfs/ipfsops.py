@@ -1038,8 +1038,10 @@ class IPFSOperator(object):
                 objects = listing.get('Objects', [])
 
                 for obj in objects:
-                    await self.sleep()
-                    yield obj
+                    links = obj['Links']
+                    for lnk in links:
+                        yield lnk
+                        await self.sleep()
         except aioipfs.APIError as e:
             raise e
         except BaseException as err:

@@ -14,10 +14,20 @@ Files workspace
 This workspace contains the filemanager. Anything opened by the
 filemanager will appear on this workspace.
 
-Core workspace
---------------
+Planet-bound workspaces
+-----------------------
 
-This workspace is for browsing mainly.
+These workspaces are bound to a specific planet. When opening
+a hashmark which has tags matching one of the planets, the
+document will be opened on the workspace corresponding to the
+planet. With the exception of the workspace of *Earth*, all
+other workspaces of this type are dormant and are only
+activated when there's a match.
+
+*Example*: you've bookmarked the wikipedia article of the
+`Mars trojans <ipfs://bafybeiemxf5abjwjbikoz4mc3a3dla6ual3jsgpdr4cjr3oz3evfyavhwq/wiki/Mars_trojan.html>`_
+with the tag **@Mars#trojan**. Once tagged, this document will
+always be opened on the workspace of Mars.
 
 Search workspace
 ----------------
