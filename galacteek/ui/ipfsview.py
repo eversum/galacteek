@@ -533,11 +533,13 @@ class IPFSHashExplorerWidget(QWidget):
         self.hLayoutTop = QHBoxLayout()
         self.hLayoutInfo = QHBoxLayout()
         self.hLayoutCtrl = QHBoxLayout()
-        self.hLayoutTop.addLayout(self.hLayoutInfo)
+
         spacerItem = QSpacerItem(10, 20, QSizePolicy.Expanding,
                                  QSizePolicy.Minimum)
-        self.hLayoutTop.addItem(spacerItem)
+
         self.hLayoutTop.addLayout(self.hLayoutCtrl)
+        self.hLayoutTop.addItem(spacerItem)
+        self.hLayoutTop.addLayout(self.hLayoutInfo)
 
         self.labelInfo = QLabel()
 
@@ -548,7 +550,7 @@ class IPFSHashExplorerWidget(QWidget):
             self.closeButton = QPushButton('Close')
             self.closeButton.clicked.connect(self.onCloseView)
             self.closeButton.setMaximumWidth(100)
-            self.closeButton.setShortcut(QKeySequence('Ctrl+Backspace'))
+            self.closeButton.setShortcut(QKeySequence('Backspace'))
             self.hLayoutCtrl.addWidget(self.closeButton, 0, Qt.AlignLeft)
 
         if addActions:

@@ -128,7 +128,7 @@ class WebsiteAddPostTab(GalacteekTab):
 
         self.app = QApplication.instance()
 
-        self.posting = False
+        self.posting = 0
 
         buttonBox = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
@@ -184,23 +184,24 @@ class WebsiteAddPostTab(GalacteekTab):
         profile = ipfsop.ctx.currentProfile
 
         try:
-            self.posting = True
+            self.posting = 1
             await profile.userWebsite.blogPost(
                 title, body, tags=tags)
         except Exception as err:
-            self.posting = False
+            self.posting = 0
             messageBox(str(err))
             self.setEnabled(True)
         else:
+            self.posting = 2
             self.tabRemove()
 
     async def onClose(self):
         contents = self.markdownInput.markdownText()
 
-        if self.posting is True:
+        if self.posting == 1:
             return False
 
-        if not self.posting and len(contents) > 0:
+        elif self.posting == 0 and len(contents) > 0:
             return await self.cancelCheck()
 
         return True
