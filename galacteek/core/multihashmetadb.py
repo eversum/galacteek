@@ -113,10 +113,14 @@ class IPFSObjectMetadataDatabase:
 
     async def getDirEntries(self, rscPath):
         containerPath, dePath, exists = self.pathDirEntries(rscPath)
+
         if dePath and exists:
             async with aiofiles.open(dePath, 'rt') as fd:
                 data = json.loads(await fd.read())
 
                 if isinstance(data, list):
                     for entry in data:
-                        yield entry
+                        try:
+                            yield entry
+                        except GeneratorExit:
+                            raise

@@ -87,6 +87,8 @@ from .i18n import iHashmarkSourcesDbSync
 from .i18n import iHashmarkSourcesAddGitRepo
 from .i18n import iHashmarkSourcesAddLegacyIpfsMarks
 from .i18n import iHashmarkSourceAlreadyRegistered
+from .i18n import iIPFSUrlTypeNative
+from .i18n import iIPFSUrlTypeHttpGateway
 
 
 @attr.s(auto_attribs=True)
@@ -132,8 +134,8 @@ class GalacteekTab(QWidget):
 
     def tabRemove(self):
         idx = self.tabIndex()
-        if idx:
-            self.workspace.tabWidget.removeTab(idx)
+        if idx >= 0:
+            self.workspace.tabWidget.tabCloseRequested.emit(idx)
 
     def setTabName(self, name, widget=None):
         idx = self.tabIndex(w=widget)
@@ -1198,14 +1200,26 @@ class MarkdownTextEdit(QPlainTextEdit):
 
     redrawPreview = pyqtSignal()
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName('markdownTextEdit')
+
     def dragEnterEvent(self, event):
         event.accept()
 
-    async def handleObjectDrop(self, path):
+    async def handleObjectDrop(self, path, urlType='fullpath'):
         path = IPFSPath(path, autoCidConv=True)
 
         if path.valid:
             name = path.basename
+
+            if urlType == 'fullpath':
+                url = path.ipfsUrl
+            elif urlType == 'fullpathgw':
+                url = path.publicGwUrl
+            else:
+                # unknown
+                return
 
             mType = await detectMimeType(path.objPath)
 
@@ -1226,7 +1240,7 @@ class MarkdownTextEdit(QPlainTextEdit):
                     self.insertPlainText(
                         "[![{name}]({url}){istyle}]({url})\n".format(
                             name=name,
-                            url=path.ipfsUrl,
+                            url=url,
                             istyle=style
                         )
                     )
@@ -1235,7 +1249,7 @@ class MarkdownTextEdit(QPlainTextEdit):
                 self.insertPlainText(
                     "[{name}]({url})\n".format(
                         name=name,
-                        url=path.ipfsUrl
+                        url=url
                     )
                 )
             return True
@@ -1287,27 +1301,45 @@ class MarkdownTextEdit(QPlainTextEdit):
                 menu
             )
             itemsMenu.setIcon(getIcon('clipboard.png'))
+            itemsMenu.setToolTipsVisible(True)
 
             for idx, clipItem in clipMgr.itemsStack.items(count=20):
+                itMenu = QMenu(clipItem.pathShort, itemsMenu)
+                itMenu.setToolTipsVisible(True)
+                itMenu.setToolTip(clipItem.path)
+
                 if clipItem.mimeIcon:
-                    itemsMenu.addAction(
-                        clipItem.mimeIcon,
-                        clipItem.path,
-                        partialEnsure(self.onLinkClipboardItem, clipItem)
+                    itMenu.setIcon(clipItem.mimeIcon)
+
+                itMenu.addAction(
+                    clipItem.mimeIcon,
+                    iIPFSUrlTypeNative(),
+                    partialEnsure(
+                        self.onLinkClipboardItem,
+                        clipItem,
+                        'fullpath'
                     )
-                else:
-                    itemsMenu.addAction(
-                        clipItem.path,
-                        partialEnsure(self.onLinkClipboardItem, clipItem)
+                ).setToolTip(clipItem.path)
+
+                itMenu.addAction(
+                    clipItem.mimeIcon,
+                    iIPFSUrlTypeHttpGateway(),
+                    partialEnsure(
+                        self.onLinkClipboardItem,
+                        clipItem,
+                        'fullpathgw'
                     )
+                ).setToolTip(clipItem.path)
+
+                itemsMenu.addMenu(itMenu)
 
             menu.addSeparator()
             menu.addMenu(itemsMenu)
 
         menu.exec(event.globalPos())
 
-    async def onLinkClipboardItem(self, clipItem):
-        if await self.handleObjectDrop(clipItem.path):
+    async def onLinkClipboardItem(self, clipItem, urlType):
+        if await self.handleObjectDrop(clipItem.path, urlType=urlType):
             self.redrawPreview.emit()
 
 
@@ -1324,15 +1356,20 @@ class MarkdownInputWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.app = QApplication.instance()
+        self.setObjectName('markdownInputWidget')
 
-        self.markdownDocButton = QPushButton(
+        self.markdownDocButton = QToolButton()
+        self.markdownDocButton.setIcon(getIcon('qta:fa5b.markdown'))
+        self.markdownDocButton.setToolTip(
             'Have you completely lost your Markdown ?')
-        self.markdownDocButton.setMaximumWidth(600)
 
         self.markdownDocButton.clicked.connect(self.onMarkdownHelp)
         helpLayout = QHBoxLayout()
         labelsLayout = QHBoxLayout()
+        labelsLayout.addWidget(self.markdownDocButton)
         labelsLayout.addWidget(QLabel('Markdown input'))
+        labelsLayout.addItem(
+            QSpacerItem(10, 10, QSizePolicy.Expanding, QSizePolicy.Minimum))
         labelsLayout.addWidget(QLabel('Preview'))
 
         helpLayout.addWidget(self.markdownDocButton)
@@ -1350,13 +1387,13 @@ class MarkdownInputWidget(QWidget):
         self.updateTimer.timeout.connect(self.onTimerOut)
 
         mainLayout = QVBoxLayout()
+        mainLayout.setContentsMargins(30, 30, 30, 30)
         editLayout = QHBoxLayout()
         editLayout.addWidget(self.textEditUser)
         editLayout.addWidget(self.textEditMarkdown)
 
         mainLayout.addLayout(labelsLayout)
         mainLayout.addLayout(editLayout)
-        mainLayout.addLayout(helpLayout)
 
         self.setLayout(mainLayout)
         self.setMinSize()

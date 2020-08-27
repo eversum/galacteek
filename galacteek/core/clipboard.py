@@ -51,6 +51,11 @@ class ClipboardItem(QObject):
         return self._ipfsPath.objPath
 
     @property
+    def pathShort(self):
+        # Object path (shortened)
+        return self._ipfsPath.objPathShort
+
+    @property
     def fullPath(self):
         # Full path (with fragment)
         return self._ipfsPath.fullPath

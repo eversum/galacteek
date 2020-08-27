@@ -34,7 +34,6 @@ from galacteek.ipfs import cidhelpers
 from galacteek.ipfs.stat import StatInfo
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.wrappers import ipfsOp, ipfsStatOp
-from galacteek.ipfs.mimetype import detectMimeType
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import cidValid
@@ -244,7 +243,6 @@ class UnixFSDirectoryModel(QAbstractListModel):
         return True
 
     def clearModel(self):
-        # self.clear()
         pass
 
     def getHashFromIdx(self, idx):
@@ -257,17 +255,6 @@ class UnixFSDirectoryModel(QAbstractListModel):
 
     def columnCount(self, parent):
         return 1
-
-    def headerData(self, section, orient, role):
-        print('header data', section, orient, role)
-        if section == 0:
-            return 'ddd'
-        if section == 1:
-            return 'ddd2'
-        if section == 2:
-            return 'ddd3'
-        if section == 3:
-            return 'ddd4'
 
     def mimeFromDb(self, entry):
         mType = self.app.mimeDb.mimeTypeForFile(entry['Name'])
@@ -315,11 +302,14 @@ class UnixFSDirectoryModel(QAbstractListModel):
             if eInfo.isDir():
                 return self.iconFolder
             elif eInfo.isFile():
-                mIcon = getMimeIcon(eInfo.mimeType)
-                if mIcon:
-                    return mIcon
+                if eInfo.mimeType:
+                    mIcon = getMimeIcon(eInfo.mimeType)
+                    if mIcon:
+                        return mIcon
+                    else:
+                        return self.iconFile
                 else:
-                    return self.iconFile
+                    return self.iconUnknown
         if role == Qt.ToolTipRole:
             return iUnixFSFileToolTip(eInfo)
 
@@ -533,7 +523,7 @@ class IPFSHashExplorerWidget(QWidget):
         self.parentButton = None
         self.rootHash = None
         self.rootPath = None
-        self.changeMultihash(hashRef)
+        self.changeCid(hashRef)
 
         self.mainLayout = QVBoxLayout(self)
         self.setLayout(self.mainLayout)
@@ -558,7 +548,6 @@ class IPFSHashExplorerWidget(QWidget):
             self.closeButton = QPushButton('Close')
             self.closeButton.clicked.connect(self.onCloseView)
             self.closeButton.setMaximumWidth(100)
-            self.closeButton.setShortcut(QKeySequence('Ctrl+w'))
             self.closeButton.setShortcut(QKeySequence('Ctrl+Backspace'))
             self.hLayoutCtrl.addWidget(self.closeButton, 0, Qt.AlignLeft)
 
@@ -567,13 +556,13 @@ class IPFSHashExplorerWidget(QWidget):
 
         if showCidLabel:
             path = IPFSPath(self.rootHash, autoCidConv=True)
-            labelMultihash = IPFSUrlLabel(path)
+            labelCid = IPFSUrlLabel(path)
             clipButton = IPFSPathClipboardButton(path)
             hashmarkButton = HashmarkThisButton(path)
             pyrDropButton = self.app.mainWindow.getPyrDropButtonFor(path)
 
             layout = QHBoxLayout()
-            layout.addWidget(labelMultihash)
+            layout.addWidget(labelCid)
             layout.addWidget(clipButton)
             layout.addWidget(hashmarkButton)
             layout.addWidget(pyrDropButton)
@@ -620,7 +609,7 @@ class IPFSHashExplorerWidget(QWidget):
             self.loadingCube.setVisible(False)
             self.loadingCube.stopClip()
 
-    def changeMultihash(self, cid):
+    def changeCid(self, cid):
         if cidValid(cid):
             self.rootHash = cid
             self.rootPath = IPFSPath(self.rootHash, autoCidConv=True)
@@ -629,11 +618,10 @@ class IPFSHashExplorerWidget(QWidget):
 
     def goToParent(self):
         if self.parentCid:
-            self.changeMultihash(self.parentCid)
+            self.changeCid(self.parentCid)
             self.updateTree()
 
     def initModel(self):
-        self.model.clearModel()
         self.itemRoot = QModelIndex()
 
     def addButtons(self):
@@ -796,7 +784,7 @@ class IPFSHashExplorerWidget(QWidget):
     def updateTree(self):
         if self.rootPath and self.rootPath.valid:
             self.listTask = self.app.task(
-                self.listMultihash,
+                self.listObject,
                 self.rootPath.objPath,
                 parentItem=self.itemRoot)
 
@@ -862,8 +850,8 @@ class IPFSHashExplorerWidget(QWidget):
                       resolve_type=resolve_type), secs)
 
     @ipfsOp
-    async def listMultihash(self, ipfsop, objPath, parentItem,
-                            autoexpand=False, timeout=60 * 10):
+    async def listObject(self, ipfsop, objPath, parentItem,
+                         autoexpand=False, timeout=60 * 10):
         """ Lists contents of IPFS object referenced by objPath,
             and change the tree's model afterwards.
 
@@ -887,21 +875,18 @@ class IPFSHashExplorerWidget(QWidget):
                 # That's a dead end .. bury that hash please ..
                 self.setInfo(iTimeoutInvalidHash())
                 return
-
-        except aioipfs.APIError:
-            # TODO
-            self.setInfo(iErrNoCx())
-            return
+        except aioipfs.APIError as err:
+            self.setInfo(iIpfsError(err.message))
         except Exception as e:
-            print(str(e))
+            self.setInfo(iGeneralError(str(e)))
+        else:
+            rStat = await ipfsop.objStat(objPath)
+            statInfo = StatInfo(rStat)
 
-        rStat = await ipfsop.objStat(objPath)
-        statInfo = StatInfo(rStat)
-
-        if statInfo.valid and self.cid:
-            self.setInfo(iCIDInfo(self.cid.version,
-                                  statInfo.numLinks,
-                                  sizeFormat(statInfo.totalSize)))
+            if statInfo.valid and self.cid:
+                self.setInfo(iCIDInfo(self.cid.version,
+                                      statInfo.numLinks,
+                                      sizeFormat(statInfo.totalSize)))
 
         self.statusLoading(False)
 
@@ -974,77 +959,13 @@ class IPFSHashExplorerWidget(QWidget):
         #
 
         self.model.dataChanged.emit(wiStart, wiEnd)
-        await self.serializeEntries()
+
+        if not deExists:
+            await self.serializeEntries()
 
     async def serializeEntries(self):
         await self.app.multihashDb.writeDirEntries(
             self.rootPath.objPath, self.model.formatEntries())
-
-    async def listOld(self, op, path, parentItem=None,
-                      autoexpand=False, resolve_type=True):
-        """
-        Does the actual directory listing with
-        a streamed ls call
-        """
-
-        parentItemSibling = self.model.sibling(parentItem.row(),
-                                               self.model.COL_UNIXFS_HASH,
-                                               parentItem.index())
-        parentItemHash = self.model.data(parentItemSibling)
-        if parentItemHash is None:
-            parentItemHash = self.rootHash
-
-        async for obj in op.listStreamed(path, resolve_type):
-            for entry in obj['Links']:
-                cid = entry['Hash']
-                # if cid in self.model.entryCache:
-                #    continue
-
-                if len(entry['Name']) > 32:
-                    entryName = entry['Name'][0:32]
-                else:
-                    entryName = entry['Name']
-
-                nItemName = IPFSNameItem(entry, entryName, None)
-
-                if self.mimeDetectionMethod == 'db':
-                    nItemName.mimeFromDb(self.app.mimeDb)
-                elif self.mimeDetectionMethod == 'magic':
-                    mType = await detectMimeType(cid)
-                    if mType:
-                        nItemName.mimeType = str(mType)
-
-                nItemName.setParentHash(parentItemHash)
-                nItemSize = IPFSItem(sizeFormat(entry['Size']))
-                nItemSize.setToolTip(str(entry['Size']))
-                nItemMime = IPFSItem(nItemName.mimeType or iUnknown())
-                nItemName.setToolTip(entry['Name'])
-
-                if nItemName.isDir():
-                    nItemName.setIcon(self.iconFolder)
-                elif nItemName.isFile():
-                    if nItemName.mimeType:
-                        mIcon = getMimeIcon(nItemName.mimeType)
-                        if mIcon:
-                            nItemName.setIcon(mIcon)
-                        else:
-                            nItemName.setIcon(self.iconFile)
-                    else:
-                        nItemName.setIcon(self.iconFile)
-                elif nItemName.isUnknown():
-                    nItemName.setIcon(self.iconUnknown)
-
-                nItem = [nItemName, nItemSize, nItemMime]
-                parentItem.appendRow(nItem)
-
-                if nItemName.isDir() and self.autoOpenFolders:
-                    # Automatically open sub folders. Used by unit tests
-                    self.directoryOpenRequest.emit(self, dataHash)
-
-                if nItemName.isDir() and entry['Name'] == '.git' and \
-                        self.gitEnabled is True:
-                    # If there's a git repo here, add a control button
-                    self.addGitControl(entry)
 
     @ipfsStatOp
     async def getResource(self, ipfsop, rPath, dest, rStat):
@@ -1080,7 +1001,7 @@ class IPFSHashExplorerWidgetFollow(IPFSHashExplorerWidget):
         self.directoryOpenRequest.connect(self.onOpenDir)
 
     def onOpenDir(self, cid):
-        self.changeMultihash(cid)
+        self.changeCid(cid)
         self.updateTree()
 
     def onBackspacePressed(self):

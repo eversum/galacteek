@@ -1,7 +1,6 @@
 import os.path
 import uuid
 import pkg_resources
-import markdown
 from datetime import datetime
 from datetime import timezone
 
@@ -20,6 +19,7 @@ from galacteek.ipfs.cidhelpers import stripIpfs
 from galacteek.core.analyzer import ResourceAnalyzer
 from galacteek.core import isoformat
 from galacteek.dweb import render
+from galacteek.dweb.markdown import markitdown
 from galacteek.dweb.atom import DWEB_ATOM_FEEDFN
 from galacteek.dweb.atom import DWEB_ATOM_FEEDGWFN
 
@@ -492,7 +492,7 @@ class UserWebsite:
             fEntry.updated(post['date_modified'])
             fEntry.published(post['date_published'])
             fEntry.content(
-                content=markdown.markdown(post['body']),
+                content=markitdown(post['body']),
                 type='html'
             )
 

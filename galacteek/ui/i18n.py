@@ -27,6 +27,17 @@ def iUnixFSNode():
     return QCoreApplication.translate('GalacteekWindow', 'UnixFS node')
 
 
+# URL types
+
+def iIPFSUrlTypeNative():
+    return QCoreApplication.translate('GalacteekWindow', 'IPFS URL: native')
+
+
+def iIPFSUrlTypeHttpGateway():
+    return QCoreApplication.translate(
+        'GalacteekWindow', 'IPFS URL: gatewayed')
+
+
 # Decentralized identifiers (IPID)
 
 

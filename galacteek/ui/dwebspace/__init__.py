@@ -433,12 +433,32 @@ class WorkspaceEdition(TabbedWorkspace):
     def setupWorkspace(self):
         super().setupWorkspace()
 
+        self.actionHelp = self.wsAddCustomAction(
+            'help', getIcon('help.png'),
+            iHelp(), self.onHelpEditing)
+
+        self.actionMarkdownHelp = self.wsAddCustomAction(
+            'help', getIcon('qta:fa5b.markdown'),
+            'Have you completely lost your Markdown ?',
+            self.onHelpMarkdown)
+
         self.actionPostBlog = self.wsAddCustomAction(
             'blogpost', getIcon('blog.png'),
             iNewBlogPost(), self.onAddBlogPost, default=True)
+
         self.actionTextEdit = self.wsAddCustomAction(
             'textedit', getIcon('text-editor.png'),
             iTextEditor(), self.onAddTextEditorTab)
+
+    def onHelpEditing(self):
+        self.app.manuals.browseManualPage('editing.html')
+
+    def onHelpMarkdown(self):
+        ref = self.app.ipfsCtx.resources.get('markdown-reference')
+        if ref:
+            self.app.mainWindow.addBrowserTab().browseIpfsHash(
+                ref['Hash']
+            )
 
     def onAddTextEditorTab(self):
         tab = textedit.TextEditorTab(editing=True, parent=self)

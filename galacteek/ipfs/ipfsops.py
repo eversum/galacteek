@@ -1042,6 +1042,9 @@ class IPFSOperator(object):
                     for lnk in links:
                         yield lnk
                         await self.sleep()
+        except GeneratorExit:
+            self.debug(f'listStreamed ({path}): generator exit')
+            raise
         except aioipfs.APIError as e:
             raise e
         except BaseException as err:

@@ -128,12 +128,16 @@ class WebsiteAddPostTab(GalacteekTab):
 
         self.app = QApplication.instance()
 
+        self.posting = False
+
         buttonBox = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel, self)
 
         self.title = QLineEdit()
         self.title.setMaximumWidth(600)
         self.title.setAlignment(Qt.AlignCenter)
+        self.title.textEdited.connect(self.onTitleEdited)
+
         regexp = QRegExp(r"[\w_-\s]+")
         self.title.setValidator(QRegExpValidator(regexp))
         self.title.setMaxLength(92)
@@ -141,13 +145,15 @@ class WebsiteAddPostTab(GalacteekTab):
         titleLayout = QHBoxLayout()
         titleLayout.setSpacing(64)
         titleLayout.addItem(
-            QSpacerItem(60, 10, QSizePolicy.Minimum, QSizePolicy.Minimum))
+            QSpacerItem(100, 10, QSizePolicy.Minimum, QSizePolicy.Minimum))
         titleLayout.addWidget(QLabel('Title'))
         titleLayout.addWidget(self.title)
         titleLayout.addItem(
             QSpacerItem(10, 10, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
         self.markdownInput = MarkdownInputWidget()
+
+        self.vLayout.setContentsMargins(20, 20, 20, 20)
         self.vLayout.addLayout(titleLayout)
 
         self.vLayout.addWidget(self.markdownInput)
@@ -157,6 +163,9 @@ class WebsiteAddPostTab(GalacteekTab):
         buttonBox.rejected.connect(partialEnsure(self.postCancelled))
 
         self.title.setFocus(Qt.OtherFocusReason)
+
+    def onTitleEdited(self, text):
+        self.setTabName(text if text else iNewBlogPost())
 
     async def process(self):
         contents = self.markdownInput.markdownText()
@@ -175,9 +184,11 @@ class WebsiteAddPostTab(GalacteekTab):
         profile = ipfsop.ctx.currentProfile
 
         try:
+            self.posting = True
             await profile.userWebsite.blogPost(
                 title, body, tags=tags)
         except Exception as err:
+            self.posting = False
             messageBox(str(err))
             self.setEnabled(True)
         else:
@@ -186,7 +197,10 @@ class WebsiteAddPostTab(GalacteekTab):
     async def onClose(self):
         contents = self.markdownInput.markdownText()
 
-        if len(contents) > 0:
+        if self.posting is True:
+            return False
+
+        if not self.posting and len(contents) > 0:
             return await self.cancelCheck()
 
         return True
@@ -197,6 +211,4 @@ class WebsiteAddPostTab(GalacteekTab):
             'Cancel ?')
 
     async def postCancelled(self):
-        if len(self.markdownInput.markdownText()) == 0 or \
-                await self.cancelCheck():
-            self.tabRemove()
+        self.tabRemove()

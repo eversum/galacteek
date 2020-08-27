@@ -237,7 +237,7 @@ def domainValid(domain):
 
 # Regexps
 
-pathChars = r'\w|<>"\/:;,!\*%&=@\$~/\s\.\-_\\\'()\+'
+pathChars = r'\w|<>"\/:;,!\*%&=@\$~/\s\.\-_\\\'()\+\[\]'
 
 query = r'(?P<query>[\w?=&:;+]*)?'
 
@@ -390,6 +390,11 @@ class IPFSPath:
     def path(self):
         # Return the object path (without fragment)
         return self.objPath
+
+    @property
+    def objPathShort(self):
+        # Object path (shortened)
+        return shortPathRepr(self.objPath)
 
     @property
     def basename(self):

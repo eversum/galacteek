@@ -443,3 +443,9 @@ QListView#unixFsDirView::item:selected {
     color: black;
     margin-left: 15px;
 }
+
+/* Markdown */
+
+QPlainTextEdit#markdownTextEdit {
+    background-color: #F0F7F7;
+}
