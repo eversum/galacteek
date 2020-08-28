@@ -925,7 +925,6 @@ class MainWindow(QMainWindow):
         self.stack = CentralStack(self, self.toolbarWs)
 
         self.wspacePeers = WorkspacePeers(self.stack)
-        self.wspaceCore = WorkspaceCore(self.stack)
         self.wspaceFs = WorkspaceFiles(self.stack)
         self.wspaceSearch = WorkspaceSearch(self.stack)
         self.wspaceMultimedia = WorkspaceMultimedia(self.stack)
@@ -1061,19 +1060,7 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).keyPressEvent(event)
 
     def setupWorkspaces(self):
-        if 0:
-            self.stack.addWorkspaces(
-                self.wspaceFs,
-                self.wspaceCore,
-                self.wspacePeers,
-                self.wspaceSearch,
-                self.wspaceEdit,
-                self.wspaceMultimedia,
-                self.wspaceMisc
-            )
-
         self.stack.addWorkspace(self.wspaceFs)
-        self.stack.addWorkspace(self.wspaceCore)
         self.stack.addWorkspace(
             self.wspaceEarth, section='planets')
         self.stack.addWorkspace(
