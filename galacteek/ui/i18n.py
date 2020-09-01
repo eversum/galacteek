@@ -27,6 +27,22 @@ def iUnixFSNode():
     return QCoreApplication.translate('GalacteekWindow', 'UnixFS node')
 
 
+def iUnixFSFileToolTip(eInfo):
+    return QCoreApplication.translate(
+        'IPFSHashExplorer',
+        '''
+        <p><b>{0}</b></p>
+        <p>MIME type: {1}</p>
+        <p>CID: {2}</p>
+        <p>Size: {3}</p>
+        ''').format(
+            eInfo.filename,
+            eInfo.mimeType,
+            eInfo.cid,
+            eInfo.sizeFormatted
+    )
+
+
 # URL types
 
 def iIPFSUrlTypeNative():
@@ -278,6 +294,30 @@ def iSharedHashmarks():
     return QCoreApplication.translate('GalacteekWindow', 'Shared hashmarks')
 
 
+def iGarbageCollectRun():
+    return QCoreApplication.translate(
+        'GalacteekWindow', 'Run garbage collector')
+
+
+def iGarbageCollectRunAsk():
+    return QCoreApplication.translate(
+        'GalacteekWindow',
+        'Do you want to run the garbage collector '
+        'on your repository ?'
+    )
+
+
+def iGarbageCollector():
+    return QCoreApplication.translate(
+        'GalacteekWindow', 'Garbage collector')
+
+
+def iGCPurgedObject(cid):
+    return QCoreApplication.translate(
+        'GalacteekWindow',
+        'Purged object with CID: {0}').format(cid)
+
+
 def iSearchIpfsContent():
     return QCoreApplication.translate(
         'GalacteekWindow',
@@ -408,6 +448,11 @@ def iIpfsSearchText(text):
 
 def iIpfsSearch():
     return QCoreApplication.translate('GalacteekWindow',
+                                      'IPFS Search')
+
+
+def iSearch():
+    return QCoreApplication.translate('GalacteekWindow',
                                       'Search')
 
 
@@ -469,6 +514,10 @@ def iEditInputObject():
 
 def iDownload():
     return QCoreApplication.translate('GalacteekWindow', 'Download')
+
+
+def iDownloadDirectory():
+    return QCoreApplication.translate('GalacteekWindow', 'Download directory')
 
 
 def iDownloadOpenDialog():
@@ -603,6 +652,10 @@ def iPinning():
 
 def iPin():
     return QCoreApplication.translate('GalacteekWindow', 'Pin')
+
+
+def iPinDirectory():
+    return QCoreApplication.translate('GalacteekWindow', 'Pin directory')
 
 
 def iUnpin():

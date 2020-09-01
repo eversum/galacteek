@@ -4,6 +4,7 @@ aiohttp>=3.4.4
 aioipfs>=0.4.9
 aiojobs>=0.2.2
 aiopubsub>=2.1.5
+aiorwlock>=0.6.0
 aiosqlite>=0.10.0
 async-generator>=1.10
 async-timeout>=3.0.1
@@ -22,6 +23,7 @@ markdown>=3.0
 mkdocs-blog-plugin>=0.25
 mkdocs>=1.1.2
 multiaddr>=0.0.8
+orjson>=3,<4
 pillow>=6.0.0
 protobuf==3.6.1
 py-multibase==1.0.1

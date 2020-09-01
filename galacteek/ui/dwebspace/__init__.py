@@ -15,10 +15,10 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QObject
 from PyQt5.QtCore import QEvent
-from PyQt5.QtCore import QSize
 
 from galacteek.ui.peers import PeersManager
 from galacteek import partialEnsure
+from galacteek import ensure
 
 from galacteek.ui import files
 from galacteek.ui import ipfssearch
@@ -29,6 +29,8 @@ from galacteek.ui import pin
 from galacteek.ui.helpers import getIcon
 from galacteek.ui.helpers import getPlanetIcon
 from galacteek.ui.helpers import playSound
+from galacteek.ui.helpers import questionBoxAsync
+
 from galacteek.ui.feeds import AtomFeedsViewTab
 from galacteek.ui.feeds import AtomFeedsView
 from galacteek.ui.i18n import *
@@ -54,8 +56,21 @@ class TabWidgetKeyFilter(QObject):
 
 
 class MainTabBar(QTabBar):
-    def tabSizeHint(self, index):
-        return QSize(180, 32)
+    def __init__(self, parent):
+        super().__init__(parent=parent)
+        self.setAcceptDrops(True)
+        self.setObjectName('wsTabBar')
+        self.tabWidget = parent
+
+    def dragEnterEvent(self, event):
+        event.accept()
+
+    def dropEvent(self, event):
+        tabIdx = self.tabAt(event.pos())
+        tab = self.tabWidget.widget(tabIdx)
+
+        if tab:
+            self.tabWidget.tabDropProcessEvent(tab, event)
 
 
 class MainTabWidget(QTabWidget):
@@ -65,15 +80,19 @@ class MainTabWidget(QTabWidget):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
 
+        self.setTabBar(MainTabBar(self))
         self.setTabsClosable(True)
         self.setElideMode(Qt.ElideMiddle)
         self.setUsesScrollButtons(True)
         self.setObjectName('wsTabWidget')
-        self.tabBar().setObjectName('wsTabBar')
+        self.setAcceptDrops(True)
 
         tabKeyFilter = TabWidgetKeyFilter(self)
         tabKeyFilter.nextPressed.connect(self.cycleTabs)
         tabKeyFilter.closePressed.connect(self.closeCurrentTab)
+
+    def tabDropProcessEvent(self, tab, event):
+        tab.tabDropEvent(event)
 
     def removeTabFromWidget(self, w):
         idx = self.tabWidget.indexOf(w)
@@ -359,7 +378,7 @@ class WorkspaceFiles(TabbedWorkspace):
         fileManager = self.app.mainWindow.fileManagerWidget
 
         self.fileManagerTab = files.FileManagerTab(
-            self.tabWidget,
+            self.app.mainWindow,
             fileManager=fileManager
         )
 
@@ -369,6 +388,29 @@ class WorkspaceFiles(TabbedWorkspace):
 
         self.wsAddAction(fileManager.addFilesAction)
         self.wsAddAction(fileManager.addDirectoryAction)
+
+        self.actionGc = self.wsAddCustomAction(
+            'gc', getIcon('clear-all.png'),
+            iGarbageCollectRun(),
+            partialEnsure(self.onRunGC)
+        )
+
+    async def onRunGC(self):
+        tab = self.wsFindTabWithId('gcrunner')
+
+        if not tab and await questionBoxAsync(iGarbageCollector(),
+                                              iGarbageCollectRunAsk()):
+
+            gcRunnerTab = files.GCRunnerTab(self.app.mainWindow)
+            gcRunnerTab.gcClosed.connectTo(self.onGcFinished)
+
+            self.wsRegisterTab(gcRunnerTab, iGarbageCollector(),
+                               self.actionGc.icon(), current=True)
+            self.actionGc.setEnabled(False)
+            ensure(gcRunnerTab.run())
+
+    async def onGcFinished(self):
+        self.actionGc.setEnabled(True)
 
     async def workspaceSwitched(self):
         await super().workspaceSwitched()
@@ -418,8 +460,7 @@ class WorkspaceSearch(TabbedWorkspace):
                                self.onAddSearchTab, default=True)
 
     def onAddSearchTab(self):
-        tab = ipfssearch.IPFSSearchTab(
-            self, sticky=self.empty())
+        tab = ipfssearch.IPFSSearchTab(self.app.mainWindow)
         self.wsRegisterTab(tab, iIpfsSearch(), current=True,
                            icon=self.wsIcon)
         tab.view.browser.setFocus(Qt.OtherFocusReason)

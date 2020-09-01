@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import QFileSystemModel
 from PyQt5.QtWidgets import QHeaderView
 from PyQt5.QtWidgets import QWidgetAction
 from PyQt5.QtWidgets import QToolBar
+from PyQt5.QtWidgets import QTextEdit
 
 from PyQt5.QtCore import QModelIndex
 from PyQt5.QtCore import QItemSelectionModel
@@ -41,13 +42,13 @@ from galacteek import GALACTEEK_NAME
 from galacteek import AsyncSignal
 from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import IPFSPath
-from galacteek.ipfs.cidhelpers import cidConvertBase32
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.mimetype import MIMEType
 from galacteek.appsettings import *
 
 from galacteek.core import modelhelpers
+from galacteek.core import utcDatetimeIso
 from galacteek.core.models.mfs import MFSItem
 from galacteek.core.models.mfs import MFSNameItem
 from galacteek.core.models.mfs import MFSTimeFrameItem
@@ -250,6 +251,13 @@ def iSearchFilesHelp():
     return QCoreApplication.translate(
         'FileManagerForm',
         'Search your files (regular expression)'
+    )
+
+
+def iEntryExistsHere():
+    return QCoreApplication.translate(
+        'FileManagerForm',
+        'An entry with this CID already exists here'
     )
 
 
@@ -1003,6 +1011,37 @@ class FileManager(QWidget):
 
         ensure(_handle())
 
+    def tabDropProcessEvent(self, event):
+        """
+        Process drag-and-drop on the tab (usually from unixfs explorer)
+        """
+
+        mimeData = event.mimeData()
+
+        if mimeData is None:
+            return
+
+        if mimeData.hasUrls():
+            for url in mimeData.urls():
+                if not url.isValid():
+                    continue
+
+                path = IPFSPath(url.toString())
+
+                if path.valid:
+                    ensure(self.linkFromDrop(path, self.displayPath))
+
+    @ipfsOp
+    async def linkFromDrop(self, ipfsop, path: IPFSPath, dstRoot: str):
+        # Pin and link the dropped file
+
+        dst = Path(dstRoot).joinpath(path.basename)
+
+        await ipfsop.ctx.pin(path.objPath)
+        await ipfsop.filesCp(path.objPath, str(dst))
+
+        self.refreshAction.trigger()
+
     def onCopyItemHash(self):
         currentItem = self.currentItem()
         if currentItem:
@@ -1119,6 +1158,11 @@ class FileManager(QWidget):
             else:
                 self.gWindow.mediaPlayerPlay(joinIpfs(itemHash),
                                              mediaName=name)
+        if nameItem.isDir():
+            menu.addAction(getIcon('folder-open.png'),
+                           iExploreDirectory(),
+                           functools.partial(explore, dataHash))
+            menu.addSeparator()
 
         menu.addAction(getIcon('clipboard.png'),
                        iCopyCIDToClipboard(),
@@ -1398,7 +1442,8 @@ class FileManager(QWidget):
             await self.listFiles(self.displayPath,
                                  parentItem=self.displayedItem, maxdepth=0,
                                  timeout=60,
-                                 subTask=False)
+                                 subTask=False,
+                                 searching=True)
 
             self.busy(True)
 
@@ -1577,7 +1622,7 @@ class FileManager(QWidget):
 
     @ipfsOp
     async def listFiles(self, ipfsop, path, parentItem, maxdepth=1,
-                        autoexpand=False, timeout=20,
+                        autoexpand=False, timeout=40,
                         timeFrameUpdate=False,
                         **kw):
         if self.isBusy:
@@ -1602,7 +1647,7 @@ class FileManager(QWidget):
         self.busy(False)
 
     async def listPathWithTimeout(self, ipfsop, path, parentItem, **kw):
-        timeout = kw.pop('timeout', 20)
+        timeout = kw.pop('timeout', 40)
         try:
             with async_timeout.timeout(timeout):
                 await self.listPath(ipfsop, path, parentItem, **kw)
@@ -1658,14 +1703,34 @@ class FileManager(QWidget):
         return self.mfsMetadataRe.match(mfsEntryName)
 
     async def listPath(self, op, path, parentItem, depth=0, maxdepth=1,
-                       subTask=True,
+                       subTask=True, searching=False,
                        autoexpand=False, timeout=20):
+        """
+        This coroutine does all the heavy work of listing MFS
+        directories and storing them in the Qt model.
+
+        Instead of using the regular approach of calling
+        /files/ls (which lists all entries at once), we do
+        a files stat first to extract the directory's CID,
+        then proceed to do a streamed unixfs ls call.
+        """
+
         if not parentItem or not parentItem.path:
             return
 
-        listing = await op.filesList(path)
-        if not listing:
+        stat = await op.filesStat(path, timeout=5)
+        if not stat:
             return
+
+        childBlocks = stat.get('Blocks')
+
+        # Deterrent
+        if childBlocks > 256:
+            if not await questionBoxAsync(
+                    '',
+                    f'Directory has {childBlocks} '
+                    'entries, keep loading ?'):
+                return
 
         try:
             parentItemSibling = self.model.sibling(parentItem.row(), 0,
@@ -1681,109 +1746,130 @@ class FileManager(QWidget):
 
         modelParent = None
 
-        for entry in listing:
-            entryExists = False
+        if autoexpand is True:
+            self.mfsTree.expand(parentItem.index())
 
-            await asyncio.sleep(0)
+        eCount = 0
+        async for entries in op.listStreamed(stat['Hash'], egenCount=16):
+            for entry in entries:
+                eCount += 1
+                entryExists = False
 
-            eFound = [e async for e in self.findInParent(parentItem, entry)]
-            if len(eFound) > 0:
-                entryExists = True
+                if divmod(eCount, 8)[1] == 0:
+                    await asyncio.sleep(0)
 
-            match = self.mfsMetadataMatch(entry['Name'])
+                cidString = entry['Hash']
 
-            if match:
-                try:
-                    mdict = match.groupdict()
-                    time = int(mdict.get('time'))
-                    entryName = mdict.get('name')
+                match = self.mfsMetadataMatch(entry['Name'])
 
-                    _dt = datetime.fromtimestamp(time)
-                    _date = date(_dt.year, _dt.month, _dt.day)
+                if match:
+                    try:
+                        mdict = match.groupdict()
+                        time = int(mdict.get('time'))
+                        entryName = mdict.get('name')
 
-                    dateText = _dt.strftime('%Y-%m-%d')
-                except Exception:
-                    continue
+                        _dt = datetime.fromtimestamp(time)
+                        _date = date(_dt.year, _dt.month, _dt.day)
 
-                result = parentItem.findChildByName(dateText)
-                if result:
-                    modelParent = result
-                else:
-                    modelParent = MFSTimeFrameItem(
-                        _date, dateText, icon=getIcon('clock.png'))
-
-                    if modelParent.inRange(
-                            self.tfDateFrom,
-                            self.tfDateTo):
-                        parentItem.appendRow([modelParent, MFSItem('')])
-                    else:
+                        dateText = _dt.strftime('%Y-%m-%d')
+                    except Exception:
                         continue
-            else:
-                entryName = entry['Name']
-                modelParent = parentItem
 
-            if entryExists:
-                nItemName = eFound.pop()
-            else:
-                icon = None
-                if entry['Type'] == 1:  # directory
-                    icon = self.iconFolder
-
-                cidString = cidConvertBase32(entry['Hash'])
-                nItemName = MFSNameItem(entry, entryName, icon, cidString)
-
-                if entry['Type'] == 1:
-                    nItemName.mimeDirectory(self.app.mimeDb)
-                else:
-                    nItemName.mimeFromDb(self.app.mimeDb)
-
-                nItemName.setParentHash(parentItemHash)
-                nItemSize = MFSItem(sizeFormat(entry['Size']))
-                nItemName.setToolTip(mfsItemInfosMarkup(nItemName))
-
-                if not icon and nItemName.mimeTypeName:
-                    # If we have a better icon matching the file's type..
-
-                    mType = MIMEType(nItemName.mimeTypeName)
-                    mIcon = getIconFromMimeType(mType, defaultIcon='unknown')
-
-                    if mIcon:
-                        nItemName.setIcon(mIcon)
-
-                # Set its path in the MFS
-                nItemName.path = os.path.join(parentItem.path, entry['Name'])
-
-                modelParent.appendRow([nItemName, nItemSize])
-
-            if entry['Type'] == 1:  # directory
-                if autoexpand is True:
-                    self.mfsTree.setExpanded(nItemName.index(), True)
-
-                if maxdepth > depth or maxdepth == 0:
-                    # We used to await listPath() here but it sucks
-                    # tremendously if you have a dead CID in the MFS which
-                    # will make the ls timeout and hang the filemanager.
-                    # Instead, use listPathWithTimeout() in another task. The
-                    # FM status will be set to ready before potential
-                    # subfolders are being listed in background tasks, which
-                    # is fine
-
-                    coro = self.listPathWithTimeout(
-                        op,
-                        nItemName.path,
-                        nItemName,
-                        maxdepth=maxdepth, depth=depth + 1,
-                        timeout=timeout)
-
-                    if subTask is True:
-                        ensure(coro)
+                    result = parentItem.findChildByName(dateText)
+                    if result:
+                        modelParent = result
                     else:
-                        # Used for searching (all directories are expanded)
-                        await coro
+                        modelParent = MFSTimeFrameItem(
+                            _date, dateText, icon=getIcon('clock.png'))
 
-            if isinstance(modelParent, MFSTimeFrameItem):
-                if modelParent.isToday() or modelParent.isPast3Days():
-                    self.mfsTree.expand(modelParent.index())
+                        if modelParent.inRange(
+                                self.tfDateFrom,
+                                self.tfDateTo):
+                            parentItem.appendRow([modelParent, MFSItem('')])
+                        else:
+                            continue
+                else:
+                    entryName = entry['Name']
+                    modelParent = parentItem
+
+                if modelParent.hasCid(cidString):
+                    # Entry was found inside the timeframe item
+                    entryExists = True
+                    if not searching:
+                        continue
+
+                if entryExists:
+                    nItemName = modelParent.findChildByCid(cidString)
+                else:
+                    icon = None
+                    if entry['Type'] == 1:  # directory
+                        icon = self.iconFolder
+
+                    nItemName = MFSNameItem(
+                        entry, entryName, icon, cidString,
+                        parent=modelParent)
+
+                    if entry['Type'] == 1:
+                        nItemName.mimeDirectory(self.app.mimeDb)
+                    else:
+                        nItemName.mimeFromDb(self.app.mimeDb)
+
+                    nItemName.setParentHash(parentItemHash)
+                    nItemSize = MFSItem(sizeFormat(entry['Size']))
+                    nItemName.setToolTip(mfsItemInfosMarkup(nItemName))
+
+                    if not icon and nItemName.mimeTypeName:
+                        # If we have a better icon matching the file's type..
+
+                        mType = MIMEType(nItemName.mimeTypeName)
+                        mIcon = getIconFromMimeType(
+                            mType, defaultIcon='unknown')
+
+                        if mIcon:
+                            nItemName.setIcon(mIcon)
+
+                    # Set its path in the MFS
+                    nItemName.path = os.path.join(
+                        parentItem.path, entry['Name'])
+
+                    # Store the entry in the item
+                    modelParent.storeEntry(nItemName, nItemSize)
+
+                    if 0:
+                        self.mfsTree.scrollTo(nItemName.index())
+
+                if entry['Type'] == 1:  # directory
+                    if autoexpand is True:
+                        self.mfsTree.setExpanded(nItemName.index(), True)
+
+                    if maxdepth > (depth + 1) or maxdepth == 0:
+                        # We used to await listPath() here but it sucks
+                        # tremendously if you have a dead CID in the MFS
+                        # which # will make the ls timeout and hang the
+                        # filemanager.
+                        # Instead, use listPathWithTimeout() in another task.
+                        # The FM status will be set to ready before potential
+                        # subfolders are being listed in background tasks,
+                        # which is fine
+
+                        coro = self.listPathWithTimeout(
+                            op,
+                            nItemName.path,
+                            nItemName,
+                            maxdepth=maxdepth, depth=depth + 1,
+                            timeout=timeout,
+                            searching=searching,
+                            subTask=subTask)
+
+                        if subTask is True:
+                            ensure(coro)
+                        else:
+                            # Used for searching (all directories are expanded)
+                            await coro
+
+                if isinstance(modelParent, MFSTimeFrameItem):
+                    if modelParent.isToday() or modelParent.isPast3Days():
+                        self.mfsTree.expand(modelParent.index())
 
         if autoexpand is True:
             self.mfsTree.expand(parentItem.index())
@@ -1800,6 +1886,10 @@ class FileManager(QWidget):
             # Delete the entry in the MFS directory
             await ipfsop.filesDelete(_dir,
                                      entry['Name'], recursive=True)
+
+            _parent = item.parentItem
+            if _parent:
+                _parent.purgeCid(cid)
 
             # Purge the item's cid in the model
             # Purge its parent as well because the parent cid will change
@@ -1830,6 +1920,11 @@ class FileManager(QWidget):
             await op.sleep()
             if entry['Hash'] == cid:
                 await op.filesDelete(_dir, entry['Name'], recursive=True)
+
+                _parent = item.parentItem
+                if _parent:
+                    _parent.purgeCid(cid)
+
                 await modelhelpers.modelDeleteAsync(
                     self.model, cid,
                     role=self.model.CidRole
@@ -1981,6 +2076,10 @@ class FileManager(QWidget):
                         basename=None):
         path = Path(fpath)
 
+        if self.displayedItem.hasCid(entry['Hash']):
+            messageBox(iEntryExistsHere())
+            return
+
         if tsMetadata:
             return await self.linkEntryWithMetadata(
                 fpath, entry, dest,
@@ -2035,3 +2134,50 @@ class FileManagerTab(GalacteekTab):
         self.fileManager.setupModel()
 
         self.addToLayout(self.fileManager)
+
+    def tabDropEvent(self, event):
+        self.fileManager.tabDropProcessEvent(event)
+
+
+class GCRunnerTab(GalacteekTab):
+    gcClosed = AsyncSignal()
+
+    def __init__(self, gWindow):
+        super(GCRunnerTab, self).__init__(gWindow)
+
+        self.ctx.tabIdent = 'gcrunner'
+        self.gcTask = None
+        self.log = QTextEdit()
+        self.log.setObjectName('ipfsGcLog')
+        self.log.setReadOnly(True)
+        self.addToLayout(self.log)
+
+    async def run(self):
+        self.gcTask = await self.app.scheduler.spawn(self.runGc())
+
+    async def onClose(self):
+        if self.gcTask:
+            await self.gcTask.close()
+
+        await self.gcClosed.emit()
+        return True
+
+    @ipfsOp
+    async def runGc(self, ipfsop):
+        self.log.append("GC run, start date: {d}\n".format(d=utcDatetimeIso()))
+        purgedCn = 0
+
+        async for entry in ipfsop.client.repo.gc():
+            try:
+                cid = entry['Key']['/']
+            except Exception:
+                continue
+
+            self.log.append(iGCPurgedObject(cid))
+
+            purgedCn += 1
+            await ipfsop.sleep(0.08)
+
+        self.log.append("\n")
+        self.log.append("GC done, end date: {d}\n".format(d=utcDatetimeIso()))
+        self.log.append(f'Purged {purgedCn} CIDs')

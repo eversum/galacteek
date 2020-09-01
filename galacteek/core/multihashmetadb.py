@@ -2,7 +2,8 @@ import asyncio
 import aiofiles
 import os.path
 import os
-import json
+import orjson
+from itertools import zip_longest
 
 from galacteek import log
 from galacteek.ipfs.cidhelpers import stripIpfs
@@ -44,13 +45,13 @@ class IPFSObjectMetadataDatabase:
     def pathDirEntries(self, rscPath):
         return self.path(rscPath, ext='direntries')
 
-    async def write(self, metaPath, metadata, mode='w+t'):
+    async def write(self, metaPath, metadata, mode='w+b'):
         async with aiofiles.open(metaPath, mode) as fd:
             await fd.write(
-                json.dumps(metadata, indent=4)
+                orjson.dumps(metadata, option=orjson.OPT_INDENT_2)
             )
 
-    async def writeDirEntries(self, rscPath, data, mode='w+t'):
+    async def writeDirEntries(self, rscPath, data, mode='w+b'):
         cPath, dePath, exists = self.pathDirEntries(rscPath)
 
         if not exists:
@@ -59,7 +60,7 @@ class IPFSObjectMetadataDatabase:
 
             try:
                 async with aiofiles.open(dePath, mode) as fd:
-                    await fd.write(json.dumps(data))
+                    await fd.write(orjson.dumps(data))
             except BaseException:
                 log.debug(f'Error storing dirents for {rscPath}')
             else:
@@ -104,23 +105,27 @@ class IPFSObjectMetadataDatabase:
                 try:
                     async with aiofiles.open(metaPath, 'rt') as fd:
                         data = await fd.read()
-                        return json.loads(data)
+                        return orjson.loads(data)
                 except BaseException as err:
                     # Error reading metadata
                     log.debug('Error reading metadata for {0}: {1}'.format(
                         rscPath, str(err)))
                     os.unlink(metaPath)
 
-    async def getDirEntries(self, rscPath):
+    async def getDirEntries(self, rscPath, egenCount=16):
         containerPath, dePath, exists = self.pathDirEntries(rscPath)
 
         if dePath and exists:
-            async with aiofiles.open(dePath, 'rt') as fd:
-                data = json.loads(await fd.read())
+            try:
+                async with aiofiles.open(dePath, 'rt') as fd:
+                    data = orjson.loads(await fd.read())
 
-                if isinstance(data, list):
-                    for entry in data:
-                        try:
-                            yield entry
-                        except GeneratorExit:
-                            raise
+                    if isinstance(data, list):
+                        for pack in zip_longest(*[iter(data)] * egenCount,
+                                                fillvalue=None):
+                            yield [e for e in pack if e is not None]
+            except GeneratorExit:
+                log.debug(f'getDirEntries {rscPath}: generator exit')
+                raise
+            except BaseException as err:
+                log.debug(f'getDirEntries error: {rscPath}: {err}')

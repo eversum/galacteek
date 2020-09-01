@@ -1,5 +1,6 @@
 import asyncio
-import json
+import aiofiles
+import orjson
 import os.path
 import time
 
@@ -20,6 +21,7 @@ class PinningMaster(object):
 
     def __init__(self, ctx, checkPinned=False, statusFilePath=None):
         self.lock = asyncio.Lock()
+        self.sflock = asyncio.Lock()
         self._ordersQueue = asyncio.Queue()
         self._ctx = ctx
         self._pinStatus = {}
@@ -59,31 +61,38 @@ class PinningMaster(object):
     def queueStatus(self, qname):
         return self.pinStatus.get(qname, None)
 
-    def status(self, all=False):
+    async def status(self, all=False):
         export = {}
 
-        for qname, queue in self.pinStatus.items():
-            for path, pinData in queue.items():
-                if pinData['pinned'] is True and all is False:
-                    continue
-                exportQ = export.setdefault(qname, [])
-                progress = None
-                if pinData['status']:
-                    progress = pinData['status'].get('Progress', 'Unknown')
-                exportQ.append({
-                    'path': path,
-                    'recursive': pinData['recursive'],
-                    'pinned': pinData['pinned'],
-                    'ts_queued': pinData['ts_queued'],
-                    'progress': progress
-                })
+        async with self.lock:
+            for qname, queue in self.pinStatus.items():
+                for path, pinData in queue.items():
+                    if pinData['pinned'] is True and all is False:
+                        continue
+                    exportQ = export.setdefault(qname, [])
+                    progress = None
+                    if pinData['status']:
+                        progress = pinData['status'].get('Progress', 'Unknown')
+                    exportQ.append({
+                        'path': path,
+                        'recursive': pinData['recursive'],
+                        'pinned': pinData['pinned'],
+                        'ts_queued': pinData['ts_queued'],
+                        'progress': progress
+                    })
 
         return export
 
-    def activeItemsCount(self):
+    async def activeItemsCount(self):
         count = 0
-        for qname, items in self.status().items():
-            count += len(items)
+        try:
+            status = await self.status()
+
+            for qname, items in status.items():
+                count += len(items)
+        except Exception:
+            pass
+
         return count
 
     async def cleanupStatus(self, pinnedExpires=60 * 2):
@@ -111,29 +120,37 @@ class PinningMaster(object):
             for path in toDelete:
                 await self.pathDelete(path)
 
-    def _emitItemsCount(self):
-        self.ipfsCtx.pinItemsCount.emit(self.activeItemsCount())
+    async def _emitItemsCount(self):
+        self.ipfsCtx.pinItemsCount.emit(await self.activeItemsCount())
 
-    def pathRegister(self, qname, path, recursive):
-        if qname not in self.pinStatus:
-            self._pinStatus[qname] = {}
+    async def pathRegistered(self, path):
+        async with self.lock:
+            for qname, queue in self.pinStatus.items():
+                if path in queue:
+                    return True
 
-        self._pinStatus[qname][path] = {
-            'recursive': recursive,
-            'status': None,
-            'ts_queued': int(time.time()),
-            'ts_pinned': 0,
-            'pinned': False,
-            'cancel': False
-        }
+        return False
+
+    async def pathRegister(self, qname, path, recursive):
+        async with self.lock:
+            cont = self._pinStatus.setdefault(qname, {})
+            cont[path] = {
+                'recursive': recursive,
+                'status': None,
+                'ts_queued': int(time.time()),
+                'ts_pinned': 0,
+                'pinned': False,
+                'cancel': False
+            }
 
         self.ipfsCtx.pinNewItem.emit(path)
-        self._emitItemsCount()
+        await self._emitItemsCount()
         return self.pinStatus[qname][path]
 
-    def statusFromPath(self, path, qname='default'):
-        if qname in self.pinStatus:
-            return self.pinStatus[qname].get(path, None)
+    async def statusFromPath(self, path, qname='default'):
+        async with self.lock:
+            if qname in self.pinStatus:
+                return self.pinStatus[qname].get(path, None)
 
     async def pathDelete(self, path):
         async with self.lock:
@@ -143,7 +160,8 @@ class PinningMaster(object):
                         item=self.pinStatus[qname][path]))
                     del self._pinStatus[qname][path]
                     self.ipfsCtx.pinItemRemoved.emit(qname, path)
-        self._emitItemsCount()
+
+        await self._emitItemsCount()
 
     @ipfsOp
     async def pin(self, op, path, recursive=False, qname='default'):
@@ -162,7 +180,9 @@ class PinningMaster(object):
                 await self.pathDelete(path)
                 return (path, 0, 'Already pinned')
 
-        pItem = self.pathRegister(qname, path, recursive)
+        pItem = await self.pathRegister(qname, path, recursive)
+
+        await self.saveStatus()
 
         try:
             stalledCn = 0
@@ -222,7 +242,9 @@ class PinningMaster(object):
                 pItem['ts_pinned'] = now
                 self.ipfsCtx.pinFinished.emit(path)
 
-            self._emitItemsCount()
+            await self.saveStatus()
+
+            await self._emitItemsCount()
 
             return (path, 0, 'OK')
 
@@ -238,7 +260,8 @@ class PinningMaster(object):
     async def stop(self):
         if self._processTask:
             await self._processTask.close()
-        self.saveStatus()
+
+        await self.saveStatus()
 
     def restoreStatus(self, data):
         if not isinstance(data, dict):
@@ -254,21 +277,23 @@ class PinningMaster(object):
                         path=path, recursive=recursive))
                     ensure(self.queue(path, recursive, None, qname=qname))
 
-    def saveStatus(self):
-        with open(self._statusFilePath, 'w+t') as fd:
-            fd.write(json.dumps(self.status(), indent=4))
+    async def saveStatus(self):
+        async with self.sflock:
+            async with aiofiles.open(self._statusFilePath, 'w+b') as fd:
+                await fd.write(orjson.dumps(await self.status()))
 
-    def cancel(self, qname, path):
-        status = self.statusFromPath(path, qname=qname)
+    async def cancel(self, qname, path):
+        status = await self.statusFromPath(path, qname=qname)
         if status:
             status['cancel'] = True
+            await self.saveStatus()
 
     async def process(self):
         if os.path.exists(self._statusFilePath):
             try:
                 data = None
                 with open(self._statusFilePath, 'rt') as fd:
-                    data = json.load(fd)
+                    data = orjson.loads(fd.read())
             except Exception:
                 self.debug('Could not load pin status file')
             else:
@@ -288,6 +313,11 @@ class PinningMaster(object):
 
                 try:
                     qname, path, recursive, callback = item
+
+                    if await self.pathRegistered(path):
+                        self.debug(f'{path}: already queued')
+                        continue
+
                     f = asyncio.ensure_future(
                         self.pin(path, recursive=recursive, qname=qname))
                     if callback:

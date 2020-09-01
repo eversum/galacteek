@@ -56,7 +56,7 @@ from . import keys
 from . import settings
 from . import orbital
 from . import textedit
-from . import ipfsview
+from . import unixfs
 from . import ipfssearch
 from . import eventlog
 from . import chat
@@ -1194,6 +1194,8 @@ class MainWindow(QMainWindow):
 
         self.fileManagerWidget.setupModel()
 
+        await self.app.ipfsCtx.peers.watchNetworkGraph()
+
         await self.displayConnectionInfo()
         await self.app.marksLocal.pyramidsInit()
         await self.app.sqliteDb.feeds.start()
@@ -1422,7 +1424,7 @@ class MainWindow(QMainWindow):
         tabName = path.shortRepr()
 
         tooltip = 'CID explorer: {0}'.format(cid)
-        view = ipfsview.IPFSHashExplorerStack(self, cid)
+        view = unixfs.IPFSHashExplorerStack(self, cid)
         self.registerTab(view, tabName, current=True,
                          icon=getIcon('hash.png'), tooltip=tooltip,
                          workspace=WS_FILES)

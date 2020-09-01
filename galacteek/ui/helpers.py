@@ -567,7 +567,7 @@ def mfsItemInfosMarkup(mfsItem):
     try:
         baseEncoding = multibase.multibase.get_codec(mfsItem.cidString)
     except:
-        return '<p>Invalid CID</p>'
+        baseEncoding = None
 
     if mfsItem.mimeTypeName:
         mimeicon = ':/share/icons/mimetypes/{m}.png'.format(

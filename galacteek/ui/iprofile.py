@@ -413,6 +413,10 @@ class ProfileEditDialog(QDialog):
     async def localHandleAvailable(self, ipfsop, iphandle):
         log.debug('Checking if {} is available ..'.format(iphandle))
 
+        if await self.profile.userInfo.ipHandleExists(iphandle) is True:
+            log.debug(f'{iphandle} is already registered ..')
+            return (False, None, None)
+
         qrPng = await self.profile.userInfo.encodeIpHandleQr(
             iphandle,
             self.profile.userInfo.personDid
@@ -420,7 +424,7 @@ class ProfileEditDialog(QDialog):
 
         if not qrPng:
             log.debug(f'{iphandle}: QR is empty ..')
-            return False
+            return (False, None, None)
 
         providers = await ipfsop.whoProvides(qrPng['Hash'], timeout=5)
         log.debug('Providers: {!r}'.format(providers))

@@ -167,6 +167,9 @@ class GalacteekTab(QWidget):
     async def initialize(self, op):
         pass
 
+    def tabDropEvent(self, event):
+        pass
+
 
 class HorizontalLine(QFrame):
     def __init__(self, parent=None):

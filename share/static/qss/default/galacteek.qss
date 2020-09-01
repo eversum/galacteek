@@ -449,3 +449,38 @@ QListView#unixFsDirView::item:selected {
 QPlainTextEdit#markdownTextEdit {
     background-color: #F0F7F7;
 }
+
+/* Peers manager */
+
+QTreeView#peersMgrView::item {
+    margin-top: 3px;
+    margin-bottom: 3px;
+}
+
+/* Push buttons */
+
+QPushButton {
+    background-color: #F0F7F7;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    border: 1px solid #8f8f91;
+    border-radius: 6px;
+}
+
+QPushButton::hover {
+    background-color: #eec146;
+    border: 2px solid #8f8f91;
+}
+
+/* Close button in the UnixFS explorer */
+
+QPushButton#unixFsBackButton {
+    font-weight: bold;
+}
+
+QTextEdit#ipfsGcLog {
+    background-color: #F0F7F7;
+    font: 14pt "Inter UI";
+}

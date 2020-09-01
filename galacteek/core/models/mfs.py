@@ -1,4 +1,5 @@
 import os.path
+import weakref
 from datetime import datetime
 from datetime import timedelta
 
@@ -33,10 +34,23 @@ def sampleQrCodes():
 
 
 class MFSItem(UneditableItem):
-    def __init__(self, text, path=None, parenthash=None, icon=None):
+    def __init__(self, text, path=None, parenthash=None, icon=None,
+                 parent=None):
         super(MFSItem, self).__init__(text, icon=icon)
         self._path = path
         self._parentHash = parenthash
+        self._parentItem = weakref.ref(parent) if parent else None
+        self._cidCache = []
+
+    @property
+    def parentItem(self):
+        # Qt has .parent() but it will segfault your a** every time
+        if self._parentItem:
+            return self._parentItem()
+
+    @property
+    def cidCache(self):
+        return self._cidCache
 
     @property
     def path(self):
@@ -49,6 +63,21 @@ class MFSItem(UneditableItem):
     @property
     def parentHash(self):
         return self._parentHash
+
+    def hasCid(self, cid):
+        return cid in self._cidCache
+
+    def purgeCid(self, cid):
+        try:
+            self._cidCache.remove(cid)
+        except Exception:
+            pass
+
+    def storeEntry(self, nameItem, sizeItem):
+        if nameItem.cidString:
+            self._cidCache.append(nameItem.cidString)
+
+        self.appendRow([nameItem, sizeItem])
 
     def setParentHash(self, pHash):
         self._parentHash = pHash
@@ -64,11 +93,11 @@ class MFSItem(UneditableItem):
                 else:
                     yield child
 
-    def findChildByMultihash(self, multihash):
+    def findChildByCid(self, cid):
         for item in self.childrenItems():
             if not isinstance(item, MFSNameItem):
                 continue
-            if item.entry['Hash'] == multihash:
+            if item.entry['Hash'] == cid:
                 return item
 
     def findChildByName(self, name):
@@ -138,8 +167,8 @@ class MFSTimeFrameItem(MFSItem):
 
 
 class MFSNameItem(MFSItem):
-    def __init__(self, entry, text, icon, cidString):
-        super().__init__(text, icon=icon)
+    def __init__(self, entry, text, icon, cidString, parent=None):
+        super().__init__(text, icon=icon, parent=parent)
 
         self._entry = entry
         self._mimeType = None
@@ -192,7 +221,15 @@ class MFSNameItem(MFSItem):
         return fp + '/' if self.isDir() else fp
 
     def isFile(self):
-        return self.entry['Type'] == 0
+        # XXX: MFS ls calls return type 0 for files, while
+        # regular unixfs ls will return type 2
+        # Since we use a mixed approach now (getting the
+        # CID with files stat and then do a unixfs ls)
+        # entry type for files is 2
+        #
+        # return self.entry['Type'] == 0
+
+        return self.entry['Type'] == 2
 
     def isDir(self):
         return self.entry['Type'] == 1
@@ -376,6 +413,26 @@ class MFSItemModel(QStandardItemModel):
             item = self.itemFromIndex(idxName)
             if isinstance(item, MFSNameItem):
                 return item
+
+    def findCidInModel(self, cid, parentItem, recursive=False):
+        flags = Qt.MatchFixedString | Qt.MatchWrap
+
+        if recursive:
+            flags |= Qt.MatchRecursive
+
+        return self.model.match(
+            parentItem.index(),
+            self.model.CidRole,
+            cid,
+            -1,
+            flags)
+
+    def itemFromCid(self, cid, parent=None):
+        idxList = self.findCidInModel(
+            cid, parent=parent if parent else self.itemRoot
+        )
+        if len(idxList) > 0:
+            return self.itemFromIndex(idxList.pop())
 
     def data(self, index, role):
         if not index.isValid():

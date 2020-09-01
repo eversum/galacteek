@@ -59,7 +59,8 @@ async def getPageResults(query, page, filters={}, sslverify=True):
         results = await searchPage(query, page, filters=filters,
                                    sslverify=sslverify)
         return IPFSSearchResults(page, results)
-    except Exception:
+    except Exception as err:
+        log.debug(f'ipfs-search error ({query}, page {page}): {err}')
         return emptyResults
 
 

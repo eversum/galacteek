@@ -365,20 +365,21 @@ class IPFSSearchHandler(QObject):
     def sendHit(self, hit):
         hitHash = hit.get('hash', None)
         mimeType = hit.get('mimetype', None)
+        hitSize = hit.get('size', None)
 
         ipfsPath = IPFSPath(hitHash, autoCidConv=True)
         if not ipfsPath.valid:
             return
 
-        sizeFormatted = sizeFormat(hit.get('size', 0))
+        sizeFormatted = sizeFormat(hitSize if hitSize else 0)
 
         pHit = {
             'hash': hitHash,
             'path': str(ipfsPath),
             'url': ipfsPath.ipfsUrl,
-            'mimetype': mimeType if mimeType else '',
+            'mimetype': mimeType if mimeType else 'application/unknown',
             'title': hit.get('title', iUnknown()),
-            'size': hit.get('size', iUnknown()),
+            'size': hitSize if hitSize else 0,
             'sizeformatted': sizeFormatted,
             'description': hit.get('description', None),
             'type': hit.get('type', iUnknown()),
@@ -473,6 +474,8 @@ class IPFSSearchHandler(QObject):
         except asyncio.CancelledError:
             return False
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             log.debug(
                 'IPFSSearch: unknown exception while searching: {}'.format(
                     str(e)))

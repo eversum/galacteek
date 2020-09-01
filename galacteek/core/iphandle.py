@@ -20,6 +20,11 @@ class SpaceHandle:
         return self.m is not None
 
     @property
+    def peer(self):
+        if self.valid:
+            return self.m.group('peer')
+
+    @property
     def vPlanet(self):
         if self.valid:
             return self.m.group('vplanet')

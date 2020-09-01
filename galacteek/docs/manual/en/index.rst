@@ -16,6 +16,7 @@ galacteek's manual (english)
     Shortcuts <shortcuts>
     Hashmarks <hashmarks>
     File manager <filemanager>
+    Explorer <unixfs>
     Browsing <browsing>
     Editing <editing> 
     Pinning <pinning>

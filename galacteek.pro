@@ -16,7 +16,7 @@ SOURCES = galacteek/application.py \
 	galacteek/ui/i18n.py \
 	galacteek/ui/imgview.py \
 	galacteek/ui/ipfssearch.py \
-	galacteek/ui/ipfsview.py \
+	galacteek/ui/unixfs.py \
 	galacteek/ui/keys.py \
 	galacteek/ui/mainui.py \
 	galacteek/ui/mediaplayer.py \

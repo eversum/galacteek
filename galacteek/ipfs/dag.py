@@ -1,5 +1,6 @@
 import asyncio
 import os.path
+import aiorwlock
 
 from async_generator import async_generator, yield_, yield_from_
 
@@ -172,16 +173,21 @@ class DAGPortal(QObject, DAGOperations):
     loaded = pyqtSignal(str)
 
     def __init__(self, dagCid=None, dagRoot=None, offline=False,
-                 parent=None):
+                 parent=None, lock=None):
         super().__init__(parent)
         self._dagCid = dagCid
         self._dagRoot = dagRoot
         self._dagPath = IPFSPath(self._dagCid)
+        self.lock = lock if lock else asyncio.Lock()
         self.evLoaded = asyncio.Event()
         self.offline = offline
 
     @property
     def d(self):
+        return self._dagRoot
+
+    @property
+    def root(self):
         return self._dagRoot
 
     def debug(self, msg):
@@ -229,16 +235,19 @@ class DAGPortal(QObject, DAGOperations):
         try:
             cid = await op.waitFor(
                 op.dagPut(self.dagRoot, offline=self.offline), timeout)
-        except aioipfs.APIError:
-            pass
+        except aioipfs.APIError as err:
+            self.debug(f'Sync error: {err.message}')
         else:
             self.dagCid = cid
 
     async def __aenter__(self):
+        await self.lock.acquire()
+
         if self.dagRoot is None:
             await self.load()
             if self.dagRoot is None:
                 raise Exception('Cannot load dag')
+
         return self
 
     @async_enterable
@@ -246,7 +255,7 @@ class DAGPortal(QObject, DAGOperations):
         return DAGEditor(self)
 
     async def __aexit__(self, *args):
-        pass
+        self.lock.release()
 
     def link(self, cid):
         if isinstance(cid, str):
@@ -257,6 +266,8 @@ class DAGPortal(QObject, DAGOperations):
 
 class EvolvingDAG(QObject, DAGOperations):
     """
+    Evolving (mutating) DAG protected by a RW-lock
+
     :param str dagMetaMfsPath: the path inside the MFS for the metadata
         describing this DAG
     """
@@ -265,6 +276,7 @@ class EvolvingDAG(QObject, DAGOperations):
     dagCidChanged = pyqtSignal(str)
     metadataEntryChanged = pyqtSignal()
 
+    dagUpdated = AsyncSignal(str)
     available = AsyncSignal(object)
 
     keyCidLatest = 'cidlatest'
@@ -274,8 +286,8 @@ class EvolvingDAG(QObject, DAGOperations):
                  autoUpdateDates=False, loop=None):
         super().__init__()
 
-        self.lock = asyncio.Lock()
         self.loop = loop if loop else asyncio.get_event_loop()
+        self.lock = aiorwlock.RWLock(loop=loop)
         self.loaded = asyncio.Future()
 
         self._curMetaEntry = None
@@ -289,6 +301,14 @@ class EvolvingDAG(QObject, DAGOperations):
         self._autoPrevious = autoPreviousNode
         self._autoUpdateDates = autoUpdateDates
         self.changed.connect(lambda: ensure(self.ipfsSave()))
+
+    @property
+    def wLock(self):
+        return self.lock.writer_lock
+
+    @property
+    def rLock(self):
+        return self.lock.reader_lock
 
     @property
     def dagMetaMfsPath(self):
@@ -384,7 +404,8 @@ class EvolvingDAG(QObject, DAGOperations):
     @ipfsOp
     async def ipfsSave(self, op):
         self.debug('Saving (acquiring lock)')
-        async with self.lock:
+
+        async with self.wLock:
             prevCid = self.dagCid
             history = self.dagMeta.setdefault('history', [])
             maxItems = self.dagMetaMaxHistoryItems
@@ -432,6 +453,8 @@ class EvolvingDAG(QObject, DAGOperations):
         if entry:
             self.curMetaEntry = entry
 
+        await self.dagUpdated.emit(cid)
+
     @ipfsOp
     async def rewind(self, ipfsop):
         """
@@ -447,7 +470,7 @@ class EvolvingDAG(QObject, DAGOperations):
         history = self.dagMeta['history']
         prevCid = self.dagMeta[self.keyCidLatest]
 
-        async with self.lock:
+        async with self.wLock:
             if len(history) >= 2:
                 newCid = history[0]
 
@@ -477,17 +500,25 @@ class EvolvingDAG(QObject, DAGOperations):
 
     async def __aenter__(self):
         """
-        Lock is acquired on entering the async ctx manager
+        Write lock is acquired on entering the async ctx manager
         """
-        await self.lock.acquire()
+        await self.wLock.acquire()
         return self
 
     async def __aexit__(self, *args):
         """
-        Release the lock and save. The changed signal is emitted
+        Release the write lock and save. The changed signal is emitted
         """
-        self.lock.release()
+        self.wLock.release()
         self.changed.emit()
+
+    @async_enterable
+    async def read(self):
+        """
+        Return a read-only portal, its context manager uses the read lock
+        """
+        return DAGPortal(dagCid=self.dagCid, dagRoot=self.dagRoot,
+                         lock=self.rLock)
 
     @async_enterable
     async def portal(self):

@@ -1424,6 +1424,8 @@ class EDAGBuildingPyramidController(MultihashPyramidToolButton):
 
     @ipfsOp
     async def initialize(self, ipfsop):
+        await super().initialize()
+
         profile = ipfsop.ctx.currentProfile
         self.edagMetaPath = profile.edagPyramidMetadataPath(self.pyramid.uuid)
         await self.initDag()

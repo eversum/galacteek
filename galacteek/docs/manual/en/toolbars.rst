@@ -19,11 +19,14 @@ The left side of the toolbar offers the following controls
 - Main browse button
 - Hashmarks manager (see :ref:`hashmarks`)
 - Hashmarks search
-- Atom feeds
-- Filemanager
-- Editor
-- Peers
 - Profile
+- Files workspace
+- Earth workspace (see :ref:`workspaces`)
+- Peers workspace
+- Search workspace
+- Edition workspace
+- Multimedia workspace
+- Misc workspace
 - Quick access section
 
 Quick access

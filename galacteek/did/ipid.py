@@ -21,6 +21,7 @@ from galacteek import log
 from galacteek.core import SingletonDecorator
 
 from galacteek.ipfs.wrappers import ipfsOp
+from galacteek.ipfs.cidhelpers import cidValid
 from galacteek.ipfs.cidhelpers import stripIpfs
 from galacteek.ipfs.cidhelpers import joinIpns
 from galacteek.ipfs.cidhelpers import IPFSPath
@@ -303,7 +304,9 @@ class IPIdentifier(DAGOperations):
     def docCid(self, cid):
         self.message('Updating DIDDoc CID from {prev} to {n}'.format(
             prev=self._docCid, n=cid))
-        self._docCid = cid
+
+        if cidValid(cid):
+            self._docCid = cid
 
     @property
     def doc(self):
@@ -525,8 +528,9 @@ class IPIdentifier(DAGOperations):
 
     @ipfsOp
     async def resolve(self, ipfsop, resolveTimeout=30):
-        useCache = 'always' if self.local else 'never'
-        maxLifetime = 86400 * 7 if self.local else 60 * 10
+        useCache = 'always'
+        cache = 'always'
+        maxLifetime = 86400 * 10 if self.local else 86400 * 20
 
         self.message('DID resolve: {did} (using cache: {usecache})'.format(
             did=self.ipnsKey, usecache=useCache))
@@ -535,6 +539,8 @@ class IPIdentifier(DAGOperations):
             joinIpns(self.ipnsKey),
             timeout=resolveTimeout,
             useCache=useCache,
+            cache=cache,
+            cacheOrigin='ipidmanager',
             maxCacheLifetime=maxLifetime
         )
 

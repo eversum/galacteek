@@ -1,3 +1,4 @@
+.. _filemanager:
 
 File manager
 ============
@@ -9,6 +10,10 @@ File manager
 By clicking on the folder icon in the application's toolbar you'll get
 access to the filemanager for importing content in your IPFS repository
 through the *Mutable File System* (see :term:`MFS`).
+
+*Note*: the filemanager is slow for rendering large directories, always
+use the UnixFS explorer in that case (using right-click, *Explore* or
+with *Ctrl-x*)
 
 Settings
 --------

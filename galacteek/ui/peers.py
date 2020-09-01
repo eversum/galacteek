@@ -25,13 +25,17 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtCore import QBuffer
 from PyQt5.QtCore import QByteArray
 from PyQt5.QtCore import QIODevice
+
 from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QBrush
 
 from galacteek import ensure
 from galacteek import log
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.cidhelpers import *
 from galacteek.ipfs.ipfsops import *
+from galacteek.core import utcDatetimeIso
 from galacteek.core.modelhelpers import *
 from galacteek.core.models import BaseAbstractItem
 from galacteek.core.iphandle import SpaceHandle
@@ -82,7 +86,8 @@ def iServicesSearchHelp():
         ''')
 
 
-def iPeerToolTip(avatarUrl, peerId, ipHandle, did, validated, authenticated):
+def iPeerToolTip(avatarUrl, peerId, ipHandle, did, validated, authenticated,
+                 avgPingMs):
     return QCoreApplication.translate(
         'PeersManager',
         '''
@@ -94,13 +99,19 @@ def iPeerToolTip(avatarUrl, peerId, ipHandle, did, validated, authenticated):
         <p>DID: <b>{3}</b></p>
         <p>{4}</p>
         <p>{5}</p>
+        <p>Average ping: {6}</p>
         </p>
         ''').format(avatarUrl, peerId, ipHandle, did,
                     'QR Validated' if validated is True else 'Not validated',
-                    'DID Auth OK' if authenticated is True else 'No Auth')
+                    'DID Auth OK' if authenticated is True else 'No Auth',
+                    f'<b>{avgPingMs}</b> ms' if avgPingMs >= 0 else
+                    'Unreachable')
 
 
 ItemTypeRole = Qt.UserRole + 1
+PeerIdRole = Qt.UserRole + 2
+PeerDidRole = Qt.UserRole + 3
+PeerHandleRole = Qt.UserRole + 4
 
 
 class PeerBaseItem(BaseAbstractItem):
@@ -116,9 +127,9 @@ class PeerBaseItem(BaseAbstractItem):
 class PeerTreeItem(PeerBaseItem):
     itemType = 'peer'
 
-    def __init__(self, peerCtx, parent=None):
+    def __init__(self, piCtx, parent=None):
         super(PeerTreeItem, self).__init__(data=None, parent=parent)
-        self.ctx = peerCtx
+        self.ctx = piCtx
 
     def columnCount(self):
         return 2
@@ -127,7 +138,7 @@ class PeerTreeItem(PeerBaseItem):
         return self.ctx.peerId
 
     def tooltip(self, col):
-        handle = SpaceHandle(self.ctx.ident.iphandle)
+        handle = SpaceHandle(self.ctx.iphandle)
 
         try:
             data = QByteArray()
@@ -148,19 +159,37 @@ class PeerTreeItem(PeerBaseItem):
             str(handle),
             self.ctx.ipid.did,
             self.ctx.validated,
-            self.ctx.authenticated
+            self.ctx.authenticated,
+            self.ctx.pingAvg()
         )
 
-    def data(self, column):
+    def data(self, column, role):
         handle = self.ctx.spaceHandle
 
-        if column == 0:
-            if handle.valid:
-                return handle.short
+        if role == Qt.DisplayRole or role == Qt.EditRole:
+            if column == 0:
+                if handle.valid:
+                    return handle.short
+                else:
+                    return iUnknown()
+            if column == 1:
+                return self.ctx.ipid.did
+
+        elif role == Qt.BackgroundRole:
+            if self.ctx.ipid.local:
+                color = QColor('#cce4ff')
             else:
-                return iUnknown()
-        if column == 1:
+                if self.ctx.alive():
+                    color = QColor('#90C983')
+                else:
+                    color = QColor('#F0F7F7')
+            return QBrush(color)
+        elif role == PeerIdRole:
+            return self.ctx.peerId
+        elif role == PeerDidRole:
             return self.ctx.ipid.did
+        elif role == PeerHandleRole:
+            return str(handle)
 
         return QVariant(None)
 
@@ -183,7 +212,10 @@ class PeerTreeItem(PeerBaseItem):
                 await pSItem.updateContained()
 
     def icon(self):
-        return self.ctx.avatarPixmapScaled(32, 32)
+        if self.ctx.alive():
+            return self.ctx.avatarPixmapScaled(32, 32)
+        else:
+            return getIcon('offline.png')
 
 
 class PeerServiceObjectTreeItem(PeerBaseItem):
@@ -207,7 +239,7 @@ class PeerServiceObjectTreeItem(PeerBaseItem):
     def tooltip(self, col):
         return self.sObject.get('id')
 
-    def data(self, column):
+    def data(self, column, role):
         if column == 0:
             handle = self.peerItem.ctx.spaceHandle
             exploded = didExplode(self.sObject['id'])
@@ -254,7 +286,7 @@ class PeerServiceTreeItem(PeerBaseItem):
         else:
             return getIconIpfs64()
 
-    def data(self, column):
+    def data(self, column, role):
         if column == 0:
             handle = self.peerItem.ctx.spaceHandle
             exploded = didExplode(self.service.id)
@@ -283,11 +315,12 @@ class PeersModel(QAbstractItemModel):
     def __init__(self, parent=None):
         super(PeersModel, self).__init__(parent)
 
+        self.app = QApplication.instance()
         self.rootItem = PeerBaseItem([
             iIPHandle(),
             iIPIDLong()
         ])
-        self.lock = asyncio.Lock()
+        self.lock = asyncio.Lock(loop=self.app.loop)
 
     def mimeData(self, indexes):
         mimedata = QMimeData()
@@ -320,14 +353,23 @@ class PeersModel(QAbstractItemModel):
 
         item = index.internalPointer()
 
-        if role == Qt.UserRole:
+        specRoles = [
+            PeerIdRole,
+            PeerDidRole,
+            PeerHandleRole,
+            Qt.DisplayRole,
+            Qt.BackgroundRole,
+            Qt.EditRole
+        ]
+
+        if role in specRoles:
+            return item.data(index.column(), role)
+
+        elif role == Qt.UserRole:
             return item.userData(index.column())
 
         elif role == ItemTypeRole:
             return item.itemType
-
-        elif role == Qt.DisplayRole or role == Qt.EditRole:
-            return item.data(index.column())
 
         elif role == Qt.DecorationRole:
             return item.icon()
@@ -414,14 +456,22 @@ class PeersModel(QAbstractItemModel):
 
         return success
 
-    async def peerLookup(self, peerId):
+    async def peerLookupByDid(self, did):
         async with self.lock:
             for item in self.rootItem.childItems:
                 if not isinstance(item, PeerTreeItem):
                     continue
 
-                if item.ctx.peerId == peerId:
+                if item.ctx.ipid.did == did:
                     return item
+
+    def peerIdRegistered(self, peerId):
+        return len(self.match(self.indexRoot(), PeerIdRole, QVariant(peerId),
+                              1, Qt.MatchExactly | Qt.MatchWrap)) > 0
+
+    def didRegistered(self, did):
+        return len(self.match(self.indexRoot(), PeerDidRole, did,
+                              1, Qt.MatchExactly | Qt.MatchWrap)) > 0
 
 
 class PeersTracker:
@@ -435,6 +485,12 @@ class PeersTracker:
         self.ctx.peers.peerDidModified.connectTo(self.onPeerDidModified)
         self.ctx.peers.peerLogout.connectTo(self.onPeerLogout)
 
+    def peerDataChangedEmit(self, peerItem):
+        self.model.dataChanged.emit(
+            self.model.index(peerItem.row(), 0),
+            self.model.index(peerItem.row() + 1, 0)
+        )
+
     async def onPeerLogout(self, peerId):
         async with self.model.lock:
             for item in self.model.rootItem.childItems:
@@ -445,40 +501,61 @@ class PeersTracker:
                     if self.model.removeRows(item.row(), 1):
                         del item
 
-    async def onPeerModified(self, peerId):
-        pass
+    async def onPeerModified(self, piCtx):
+        peerItem = await self.model.peerLookupByDid(piCtx.ipid.did)
 
-    async def onPeerDidModified(self, peerId, modified):
+        if peerItem:
+            self.peerDataChangedEmit(peerItem)
+
+    async def onPeerDidModified(self, piCtx, modified):
         if modified:
-            peerItem = await self.model.peerLookup(peerId)
+            peerItem = await self.model.peerLookupByDid(piCtx.ipid.did)
+
             if peerItem:
                 await peerItem.updateServices()
-                self.model.dataChanged.emit(
-                    self.model.index(peerItem.row(), 0),
-                    self.model.index(peerItem.row() + 1, 0)
-                )
+                self.peerDataChangedEmit(peerItem)
                 await peerItem.ctx.fetchAvatar()
 
-    async def onPeerAdded(self, peerId):
-        peerCtx = self.ctx.peers.getByPeerId(peerId)
-        if not peerCtx:
-            return
+    @ipfsOp
+    async def onPeerAuthenticated(self, ipfsop, piCtx):
+        profile = ipfsop.ctx.currentProfile
+        did = piCtx.ipid.did
+        handle = str(piCtx.spaceHandle)
 
-        await self.addPeerToModel(peerId, peerCtx)
+        async with profile.dagNetwork as g:
+            pData = g.root['peers'].setdefault(piCtx.peerId, {})
 
-    async def addPeerToModel(self, peerId, peerCtx):
-        async with self.model.lock:
-            peerItem = PeerTreeItem(peerCtx, parent=self.model.rootItem)
-            ensure(peerCtx.fetchAvatar())
+            if handle not in pData:
+                pData[handle] = {
+                    'did': did,
+                    'didobj': {},
+                    'dateregistered': utcDatetimeIso()
+                }
 
-            self.model.rootItem.appendChild(peerItem)
+                # Link the DID document in the graph
+                if piCtx.ipid.docCid:
+                    pData[handle]['didobj'] = g.ipld(piCtx.ipid.docCid)
 
-            try:
-                await peerItem.updateServices()
-            except Exception:
-                pass
+                log.debug(f'Authenticated {handle} in the peers graph')
 
-            self.model.modelReset.emit()
+    async def onPeerAdded(self, piCtx):
+        if not self.model.didRegistered(piCtx.ipid.did):
+            await self.addPeerToModel(piCtx)
+
+    async def addPeerToModel(self, piCtx):
+        peerItem = PeerTreeItem(
+            piCtx, parent=self.model.rootItem)
+
+        ensure(piCtx.fetchAvatar())
+
+        self.model.rootItem.appendChild(peerItem)
+
+        try:
+            await peerItem.updateServices()
+        except Exception:
+            pass
+
+        self.model.modelReset.emit()
 
     async def onPeersChange(self):
         pass
@@ -604,7 +681,7 @@ class PeersManager(GalacteekTab):
     def __init__(self, gWindow, peersTracker, **kw):
         super().__init__(gWindow, sticky=True)
 
-        self.lock = asyncio.Lock()
+        self.lock = asyncio.Lock(loop=self.app.loop)
         self.peersTracker = peersTracker
 
         self.peersWidget = QWidget()
@@ -635,7 +712,7 @@ class PeersManager(GalacteekTab):
     async def onPeersChange(self):
         pass
 
-    async def onPeerAdded(self, peerId):
+    async def onPeerAdded(self, piCtx):
         self.tabActiveNotify()
 
     def onContextMenu(self, point):
@@ -643,10 +720,10 @@ class PeersManager(GalacteekTab):
         if not idx.isValid():
             return
 
-        peerId = self.model.data(idx, Qt.UserRole)
-        peerCtx = self.peersTracker.ctx.peers.getByPeerId(peerId)
+        handle = self.model.data(idx, PeerHandleRole)
+        piCtx = self.peersTracker.ctx.peers.getByHandle(handle)
 
-        if not peerCtx:
+        if not piCtx:
             return
 
         def menuBuilt(future):
@@ -658,10 +735,10 @@ class PeersManager(GalacteekTab):
                 traceback.print_exc()
                 log.debug(str(e))
 
-        ensure(self.showPeerContextMenu(peerCtx, point), futcallback=menuBuilt)
+        ensure(self.showPeerContextMenu(piCtx, point), futcallback=menuBuilt)
 
     @ipfsOp
-    async def showPeerContextMenu(self, ipfsop, peerCtx, point):
+    async def showPeerContextMenu(self, ipfsop, piCtx, point):
         menu = QMenu(self)
 
         # Services menu
@@ -672,17 +749,17 @@ class PeersManager(GalacteekTab):
         followAction = QAction(
             iFollow(),
             self,
-            triggered=lambda checked: ensure(self.onFollowPeer(peerCtx))
+            triggered=lambda checked: ensure(self.onFollowPeer(piCtx))
         )
 
-        if peerCtx.peerId == ipfsop.ctx.node.id:
+        if piCtx.peerId == ipfsop.ctx.node.id:
             followAction.setEnabled(False)
 
         menu.addAction(followAction)
         menu.addSeparator()
         menu.addMenu(sMenu)
 
-        await buildIpServicesMenu(peerCtx.ipid, sMenu)
+        await buildIpServicesMenu(piCtx.ipid, sMenu)
 
         return menu
 
@@ -718,17 +795,18 @@ class PeersManager(GalacteekTab):
         await self.app.resourceOpener.browseIpService(serviceId)
 
     @ipfsOp
-    async def onFollowPeer(self, ipfsop, peerCtx):
+    async def onFollowPeer(self, ipfsop, piCtx):
         profile = ipfsop.ctx.currentProfile
 
         await profile.userInfo.follow(
-            peerCtx.ipid.did,
-            peerCtx.ident.iphandle
+            piCtx.ipid.did,
+            piCtx.iphandle
         )
 
     @ipfsOp
-    async def followPeerFeed(self, op, peerCtx):
-        identMsg = peerCtx.ident
+    async def followPeerFeed(self, op, piCtx):
+        identMsg = piCtx.ident
+
         path = os.path.join(joinIpns(identMsg.dagIpns), DWEB_ATOM_FEEDFN)
         ipfsPath = IPFSPath(path)
 

@@ -41,6 +41,7 @@ from galacteek.core.ipfsmarks import IPFSMarks
 from galacteek.core.userdag import UserDAG
 from galacteek.core.userdag import UserWebsite
 from galacteek.core.edags.chatchannels import ChannelsDAG
+from galacteek.core.edags.ngraph import PeersGraphDAG
 from galacteek.core import utcDatetimeIso
 
 from galacteek.crypto.qrcode import IPFSQrEncoder
@@ -181,6 +182,18 @@ class UserProfileEDAG(EvolvingDAG):
 
         for did, info in section.items():
             yield did, info
+
+    async def identitiesIter(self):
+        async with self.read() as portal:
+            for uid, identity in portal.root['identities'].items():
+                yield uid, identity
+
+    async def ipHandleExists(self, iphandle):
+        async for uid, identity in self.identitiesIter():
+            if identity['iphandle'] == iphandle:
+                return True
+
+        return False
 
     @ipfsOp
     async def createIdentity(self, ipfsop, peered=False,
@@ -486,6 +499,10 @@ class UserProfile(QObject):
         return self._dagChatChannels
 
     @property
+    def dagNetwork(self):
+        return self._dagNetwork
+
+    @property
     def root(self):
         return self._rootDir  # profile's root dir in the MFS
 
@@ -643,6 +660,10 @@ class UserProfile(QObject):
         return os.path.join(self.pathEDags, 'chatchannels.edag')
 
     @property
+    def pathEDagNetwork(self):
+        return os.path.join(self.pathEDags, 'network.edag')
+
+    @property
     def pathEdagShares(self):
         return os.path.join(self.pathEDags, 'shares.edag')
 
@@ -695,10 +716,17 @@ class UserProfile(QObject):
         self._dagChatChannels = ChannelsDAG(
             self.pathChatChannelsDagMeta, loop=self.ctx.loop)
 
+        self._dagNetwork = PeersGraphDAG(
+            self.pathEDagNetwork, loop=self.ctx.loop,
+            autoUpdateDates=True
+        )
+
         ensure(self.dagUser.load())
         await self.dagUser.loaded
 
         await self.dagChatChannels.load()
+
+        await self.dagNetwork.load()
 
         await self.ipHandles.load()
 

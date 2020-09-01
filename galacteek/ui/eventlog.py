@@ -1,4 +1,4 @@
-import json
+import orjson
 import asyncio
 
 from PyQt5.QtWidgets import QTextEdit
@@ -80,7 +80,9 @@ class EventLogWidget(GalacteekTab):
             file.commit()
 
     def displayEvent(self, event):
-        self.logZone.append(json.dumps(event, indent=4))
+        self.logZone.append(
+            orjson.dumps(event, option=orjson.OPT_INDENT_2).decode()
+        )
 
     @ipfsOp
     async def logWatch(self, op):
@@ -113,7 +115,7 @@ class EventLogWidget(GalacteekTab):
                 if display is True:
                     self.displayEvent(event)
 
-                await op.sleep()
+                await op.sleep(0.05)
 
         except asyncio.CancelledError:
             return

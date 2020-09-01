@@ -30,7 +30,7 @@ class BaseAbstractItem(object):
     def columnCount(self):
         return len(self.itemData)
 
-    def data(self, column):
+    def data(self, column, role):
         try:
             return self.itemData[column]
         except IndexError:

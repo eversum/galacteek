@@ -15,19 +15,20 @@ from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtWidgets import QToolButton
 from PyQt5.QtWidgets import QAbstractItemView
 from PyQt5.QtWidgets import QStackedWidget
+from PyQt5.QtWidgets import QLineEdit
 
 from PyQt5.QtGui import QKeySequence
 
-from PyQt5.QtCore import QAbstractListModel
+from PyQt5.QtCore import QItemSelectionModel
 from PyQt5.QtCore import QModelIndex
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QEvent
 from PyQt5.QtCore import QObject
 from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtCore import QMimeData
-from PyQt5.QtCore import QUrl
-from PyQt5.QtCore import QVariant
+
+from galacteek.core.models.unixfs import UnixFSEntryInfo
+from galacteek.core.models.unixfs import UnixFSDirectoryModel
 
 from galacteek.appsettings import *
 from galacteek.ipfs import cidhelpers
@@ -35,7 +36,6 @@ from galacteek.ipfs.stat import StatInfo
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.wrappers import ipfsOp, ipfsStatOp
 from galacteek.ipfs.cidhelpers import IPFSPath
-from galacteek.ipfs.cidhelpers import joinIpfs
 from galacteek.ipfs.cidhelpers import cidValid
 from galacteek.ipfs.cidhelpers import cidConvertBase32
 from galacteek import ensure
@@ -113,205 +113,6 @@ def iTimeoutTryNoResolve():
 def iTimeoutInvalidHash():
     return QCoreApplication.translate('IPFSHashExplorer',
                                       'Timeout error: invalid hash')
-
-
-def iUnixFSFileToolTip(eInfo):
-    return QCoreApplication.translate(
-        'IPFSHashExplorer',
-        '''
-        <p><b>{0}</b></p>
-        <p>MIME type: {1}</p>
-        <p>CID: {2}</p>
-        <p>Size: {3}</p>
-        ''').format(
-            eInfo.filename,
-            eInfo.mimeType,
-            eInfo.cid,
-            sizeFormat(eInfo.entry['Size'])
-    )
-
-
-class EntryInfo:
-    def __init__(self, entry, parentCid):
-        self._entry = entry
-        self._parentCid = parentCid
-
-    @property
-    def entry(self):
-        return self._entry
-
-    @property
-    def filename(self):
-        return self.entry['Name']
-
-    @property
-    def ipfsPath(self):
-        return IPFSPath(self.getFullPath(), autoCidConv=True)
-
-    @property
-    def mimeType(self):
-        return self._mimeType
-
-    @mimeType.setter
-    def mimeType(self, mime):
-        self._mimeType = mime
-
-    def mimeFromDb(self, db):
-        mType = db.mimeTypeForFile(self.entry['Name'])
-        if mType:
-            self.mimeType = mType.name()
-
-    @property
-    def mimeCategory(self):
-        if self.mimeType:
-            return self.mimeType.split('/')[0]
-
-    @property
-    def cid(self):
-        return self.entry['Hash']
-
-    @property
-    def cidObject(self):
-        return cidhelpers.getCID(self.cid)
-
-    def getFullPath(self):
-        """
-        Returns the full IPFS path of the entry associated with this item
-        (preserving file names) if we have the parent's hash, or the IPFS path
-        with the entry's hash otherwise
-        """
-
-        if self._parentCid:
-            return joinIpfs(os.path.join(cidConvertBase32(self._parentCid),
-                                         self.filename))
-        else:
-            return joinIpfs(cidConvertBase32(self.entry['Hash']))
-
-    def isRaw(self):
-        return self.entry['Type'] == 0
-
-    def isDir(self):
-        return self.entry['Type'] == 1
-
-    def isFile(self):
-        return self.entry['Type'] == 2
-
-    def isMetadata(self):
-        return self.entry['Type'] == 3
-
-    def isSymlink(self):
-        return self.entry['Type'] == 4
-
-    def isUnknown(self):
-        return self.entry['Type'] == -1
-
-
-class UnixFSDirectoryModel(QAbstractListModel):
-    COL_UNIXFS_NAME = 0
-    COL_UNIXFS_SIZE = 1
-    COL_UNIXFS_MIME = 2
-    COL_UNIXFS_HASH = 3
-
-    def __init__(self, parent=None):
-        super(UnixFSDirectoryModel, self).__init__(parent)
-
-        self.app = QApplication.instance()
-        self.entries = []
-
-        self.iconFolder = getIcon('folder-open.png')
-        self.iconFile = getIcon('file.png')
-        self.iconUnknown = getIcon('unknown-file.png')
-
-    def mimeData(self, indexes):
-        mimedata = QMimeData()
-
-        urls = []
-        for idx in indexes:
-            if not idx.isValid():
-                continue
-
-            eInfo = self.getEntryInfoFromIdx(idx)
-
-            if eInfo:
-                url = QUrl(eInfo.ipfsPath.ipfsUrl)
-                urls.append(url)
-
-        mimedata.setUrls(urls)
-        return mimedata
-
-    def canDropMimeData(self, data, action, row, column, parent):
-        return True
-
-    def clearModel(self):
-        pass
-
-    def getHashFromIdx(self, idx):
-        eInfo = self.getEntryInfoFromIdx(idx)
-        if eInfo:
-            return eInfo.cid
-
-    def rowCount(self, parent):
-        return len(self.entries)
-
-    def columnCount(self, parent):
-        return 1
-
-    def mimeFromDb(self, entry):
-        mType = self.app.mimeDb.mimeTypeForFile(entry['Name'])
-        if mType:
-            return mType.name()
-
-    def getEntryInfoFromIdx(self, idx):
-        row = idx.row()
-
-        if row in range(0, len(self.entries)):
-            return self.entries[row]
-
-    async def serializeEntries(self):
-        pass
-
-    def formatEntries(self):
-        doc = []
-
-        for eInfo in self.entries:
-            doc.append(eInfo.entry)
-        return doc
-
-    def data(self, index, role):
-        if not index.isValid():
-            return QVariant(None)
-
-        row = index.row()
-        col = index.column()
-
-        eInfo = self.getEntryInfoFromIdx(index)
-
-        if role == Qt.DisplayRole:
-            if row > len(self.entries):
-                return QVariant(None)
-
-            if col == self.COL_UNIXFS_NAME:
-                return eInfo.filename
-            elif col == self.COL_UNIXFS_SIZE:
-                return 1
-            elif col == self.COL_UNIXFS_MIME:
-                return eInfo.mimeType
-            elif col == self.COL_UNIXFS_HASH:
-                return eInfo.cid
-        elif role == Qt.DecorationRole:
-            if eInfo.isDir():
-                return self.iconFolder
-            elif eInfo.isFile():
-                if eInfo.mimeType:
-                    mIcon = getMimeIcon(eInfo.mimeType)
-                    if mIcon:
-                        return mIcon
-                    else:
-                        return self.iconFile
-                else:
-                    return self.iconUnknown
-        if role == Qt.ToolTipRole:
-            return iUnixFSFileToolTip(eInfo)
 
 
 class IPFSHashExplorerToolBox(GalacteekTab):
@@ -469,7 +270,11 @@ class IPFSDirectoryListView(QListView):
         self.viewModeList()
         self.setSelectionMode(QAbstractItemView.SingleSelection)
         self.setDragDropMode(QAbstractItemView.DragOnly)
+        self.setDragEnabled(True)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
+
+    def dragEnterEvent(self, event):
+        event.accept()
 
     def viewModeList(self):
         self.setViewMode(QListView.ListMode)
@@ -515,6 +320,7 @@ class IPFSHashExplorerWidget(QWidget):
         self.loadingCube.hide()
 
         self.model = UnixFSDirectoryModel(self)
+
         self.gitEnabled = showGit
         self.hideHashes = hideHashes
 
@@ -523,6 +329,7 @@ class IPFSHashExplorerWidget(QWidget):
         self.parentButton = None
         self.rootHash = None
         self.rootPath = None
+        self.srIdxList = []
         self.changeCid(hashRef)
 
         self.mainLayout = QVBoxLayout(self)
@@ -542,12 +349,18 @@ class IPFSHashExplorerWidget(QWidget):
         self.hLayoutTop.addLayout(self.hLayoutInfo)
 
         self.labelInfo = QLabel()
+        self.buttonRetry = QPushButton('Retry')
+        self.buttonRetry.hide()
+        self.buttonRetry.clicked.connect(self.updateTree)
 
         self.hLayoutInfo.addWidget(self.loadingCube, 0, Qt.AlignLeft)
         self.hLayoutInfo.addWidget(self.labelInfo, 0, Qt.AlignLeft)
+        self.hLayoutInfo.addWidget(self.buttonRetry, 0, Qt.AlignLeft)
 
         if addClose:
-            self.closeButton = QPushButton('Close')
+            self.closeButton = QPushButton('Back')
+            self.closeButton.setObjectName('unixFsBackButton')
+            self.closeButton.setIcon(getIcon('go-previous.png'))
             self.closeButton.clicked.connect(self.onCloseView)
             self.closeButton.setMaximumWidth(100)
             self.closeButton.setShortcut(QKeySequence('Backspace'))
@@ -628,7 +441,7 @@ class IPFSHashExplorerWidget(QWidget):
 
     def addButtons(self):
         self.getTask = None
-        self.getButton = QPushButton(iDownload())
+        self.getButton = QPushButton(iDownloadDirectory())
         self.getButton.clicked.connect(self.onGet)
         self.getLabel = QLabel()
         self.getProgress = QProgressBar()
@@ -636,17 +449,60 @@ class IPFSHashExplorerWidget(QWidget):
         self.getProgress.setMaximum(100)
         self.getProgress.hide()
 
+        self.searchButton = QToolButton()
+        self.searchButton.setIcon(getIcon('search-engine.png'))
+        self.searchButton.setCheckable(True)
+        self.searchButton.setShortcut(QKeySequence('Ctrl+s'))
+        self.searchButton.setToolTip(iSearch())
+        self.searchRegLine = QLineEdit()
+        self.searchRegLine.returnPressed.connect(self.onSearchRun)
+        self.searchRegLine.textEdited.connect(self.onSearchEdited)
+        self.searchRegLine.hide()
+        self.searchButton.toggled.connect(self.onSearchToggled)
+
         self.markButton = QPushButton(getIcon('hashmarks.png'), iHashmark())
         self.markButton.clicked.connect(self.onHashmark)
 
-        self.pinButton = QPushButton(iPin())
+        self.pinButton = QPushButton(iPinDirectory())
         self.pinButton.clicked.connect(self.onPin)
 
         self.hLayoutCtrl.addWidget(self.getButton)
         self.hLayoutCtrl.addWidget(self.pinButton)
         self.hLayoutCtrl.addWidget(self.markButton)
+        self.hLayoutCtrl.addWidget(self.searchButton)
+        self.hLayoutCtrl.addWidget(self.searchRegLine)
         self.hLayoutCtrl.addWidget(self.getLabel)
         self.hLayoutCtrl.addWidget(self.getProgress)
+
+    def onSearchToggled(self, checked):
+        self.searchRegLine.setVisible(checked)
+        self.searchRegLine.setFocus(Qt.OtherFocusReason)
+
+    def onSearchEdited(self, text):
+        # Reset search results index list
+        self.srIdxList = []
+
+    def onSearchRun(self):
+        sText = self.searchRegLine.text()
+
+        if not sText:
+            return
+
+        if not self.srIdxList:
+            self.srIdxList = self.model.searchByFilename(sText)
+
+        selModel = self.dirListView.selectionModel()
+
+        try:
+            idx = self.srIdxList.pop(0)
+            selModel.clearSelection()
+            selModel.select(
+                idx,
+                QItemSelectionModel.Select | QItemSelectionModel.Rows
+            )
+            self.dirListView.scrollTo(idx)
+        except Exception:
+            messageBox('No search results')
 
     def setInfo(self, text):
         self.labelInfo.setText(text)
@@ -736,13 +592,13 @@ class IPFSHashExplorerWidget(QWidget):
             self.onDoubleClicked(currentIdx)
 
     def onCopyItemHash(self):
-        entryInfo = self.model.getEntryInfoFromIdx(
+        entryInfo = self.model.getUnixFSEntryInfoFromIdx(
             self.dirListView.currentIndex())
         if entryInfo:
             self.app.setClipboardText(entryInfo.cid)
 
     def onCopyItemPath(self):
-        entryInfo = self.model.getEntryInfoFromIdx(
+        entryInfo = self.model.getUnixFSEntryInfoFromIdx(
             self.dirListView.currentIndex())
         if entryInfo:
             self.app.setClipboardText(entryInfo.getFullPath())
@@ -760,7 +616,7 @@ class IPFSHashExplorerWidget(QWidget):
         self.gWindow.addBrowserTab().browseFsPath(path)
 
     def onDoubleClicked(self, idx):
-        entryInfo = self.model.getEntryInfoFromIdx(idx)
+        entryInfo = self.model.getUnixFSEntryInfoFromIdx(idx)
 
         if entryInfo.isDir():
             self.directoryOpenRequest.emit(self, entryInfo.cid)
@@ -784,6 +640,9 @@ class IPFSHashExplorerWidget(QWidget):
         await opener.open(entry.getFullPath(), None)
 
     def updateTree(self):
+        self.buttonRetry.hide()
+        self.model.clearModel()
+
         if self.rootPath and self.rootPath.valid:
             self.listTask = self.app.task(
                 self.listObject,
@@ -797,7 +656,7 @@ class IPFSHashExplorerWidget(QWidget):
         if len(rows) == 0:
             return
 
-        item = self.model.getEntryInfoFromIdx(rows.pop())
+        item = self.model.getUnixFSEntryInfoFromIdx(rows.pop())
         menu = QMenu(self)
 
         def pinRecursive():
@@ -865,20 +724,26 @@ class IPFSHashExplorerWidget(QWidget):
 
         try:
             self.setInfo(iLoading())
-            await self.timedList(ipfsop, objPath, parentItem,
-                                 autoexpand, timeout, True)
+
+            await self.list(ipfsop, objPath,
+                            parentItem=parentItem, autoexpand=autoexpand,
+                            resolve_type=True)
         except asyncio.TimeoutError:
             self.setInfo(iTimeoutTryNoResolve())
 
             try:
-                await self.timedList(ipfsop, objPath, parentItem,
-                                     autoexpand, timeout, False)
+                await self.list(ipfsop, objPath,
+                                parentItem=parentItem, autoexpand=autoexpand,
+                                resolve_type=False)
             except asyncio.TimeoutError:
                 # That's a dead end .. bury that hash please ..
                 self.setInfo(iTimeoutInvalidHash())
                 return
         except aioipfs.APIError as err:
             self.setInfo(iIpfsError(err.message))
+        except UnixFSTimeoutError:
+            self.setInfo(iTimeoutInvalidHash())
+            self.buttonRetry.show()
         except Exception as e:
             self.setInfo(iGeneralError(str(e)))
         else:
@@ -893,7 +758,8 @@ class IPFSHashExplorerWidget(QWidget):
         self.statusLoading(False)
 
     async def list(self, ipfsop, path, parentItem=None,
-                   autoexpand=False, resolve_type=True):
+                   autoexpand=False, resolve_type=True,
+                   genTimeout=40):
         """
         Does the actual directory listing with a streamed ls call
         """
@@ -913,61 +779,89 @@ class IPFSHashExplorerWidget(QWidget):
         else:
             eGenerator = ipfsop.listStreamed(path, resolve_type)
 
-        async for entry in eGenerator:
-            eCount += 1
-
-            rowCount = self.model.rowCount(QModelIndex())
-            rowStart = max(0, rowCount - 1)
-            rowEnd = rowStart + 1
-
-            # Set start window index for the first time
-            if wiStart is None:
-                wiStart = self.model.index(rowStart, 0, QModelIndex())
-
-            # Set end window index
-            wiEnd = self.model.index(rowEnd, 0, QModelIndex())
-
-            # Create the entry and add it to the model
-            entryInfo = EntryInfo(entry, self.rootHash)
-            entryInfo.mimeFromDb(self.app.mimeDb)
-            self.model.entries.append(entryInfo)
-
-            # Emit dataChanged() periodically
-            if divmod(eCount, 64)[1] == 0:
-                self.model.dataChanged.emit(wiStart, wiEnd)
-
-                # The model was refreshed, update the window index
-                wiStart = self.model.index(rowStart, 0, QModelIndex())
-
-            if divmod(eCount, 4)[1] == 0:
-                self.loadingCube.clip.setSpeed(
-                    min(
-                        self.loadingCube.clip.speed() + 5,
-                        400
-                    )
+        fetching = True
+        while fetching:
+            try:
+                entries = await ipfsop.waitFor(
+                    eGenerator.__anext__(),
+                    genTimeout
                 )
 
-                stCount, stLt = eCount, self.app.loop.time()
+                if entries is None:
+                    # No entries were produced
+                    raise UnixFSTimeoutError()
 
-                entriesPerSec = int(stCount / (stLt - startLt))
-                self.setInfo(iLoadedEntries(eCount, entriesPerSec))
+                for entry in entries:
+                    if entry is None:
+                        continue
 
-            # Give it some deserved sleep
-            await ipfsop.sleep(0.05)
+                    eCount += 1
+
+                    rowCount = self.model.rowCount(QModelIndex())
+                    rowStart = max(0, rowCount - 1)
+                    rowEnd = rowStart + 1
+
+                    # Set start window index for the first time
+                    if wiStart is None:
+                        wiStart = self.model.index(rowStart, 0, QModelIndex())
+
+                    # Set end window index
+                    wiEnd = self.model.index(rowEnd, 0, QModelIndex())
+
+                    # Create the entry and add it to the model
+                    entryInfo = UnixFSEntryInfo(entry, self.rootHash)
+                    entryInfo.mimeFromDb(self.app.mimeDb)
+                    self.model.entries.append(entryInfo)
+
+                    # Emit dataChanged() periodically (every 64 entries)
+                    if divmod(eCount, 64)[1] == 0:
+                        self.model.dataChanged.emit(wiStart, wiEnd)
+
+                        # The model was refreshed, update the window index
+                        wiStart = self.model.index(rowStart, 0, QModelIndex())
+
+                    if divmod(eCount, 16)[1] == 0:
+                        self.loadingCube.clip.setSpeed(
+                            min(
+                                self.loadingCube.clip.speed() + 5,
+                                400
+                            )
+                        )
+
+                        stCount, stLt = eCount, self.app.loop.time()
+
+                        entriesPerSec = int(stCount / (stLt - startLt))
+                        self.setInfo(iLoadedEntries(eCount, entriesPerSec))
+
+                    await ipfsop.sleep(0.02)
+
+                # Give it some deserved sleep
+                await ipfsop.sleep(0.05)
+
+            except StopAsyncIteration:
+                fetching = False
 
         #
         # The CID was fully listed
         # Emit dataChanged() and serialize the entries
         #
 
-        self.model.dataChanged.emit(wiStart, wiEnd)
+        if wiStart and wiEnd:
+            self.model.dataChanged.emit(wiStart, wiEnd)
+
+        _c, _de, deExists = self.app.multihashDb.pathDirEntries(
+            self.rootPath.objPath)
 
         if not deExists:
             await self.serializeEntries()
 
     async def serializeEntries(self):
-        await self.app.multihashDb.writeDirEntries(
-            self.rootPath.objPath, self.model.formatEntries())
+        fEntries = self.model.formatEntries()
+
+        if fEntries:
+            await self.app.multihashDb.writeDirEntries(
+                self.rootPath.objPath, fEntries
+            )
 
     @ipfsStatOp
     async def getResource(self, ipfsop, rPath, dest, rStat):

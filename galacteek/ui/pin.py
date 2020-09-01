@@ -1,4 +1,5 @@
 import functools
+import time
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QCoreApplication
@@ -21,6 +22,7 @@ from PyQt5.QtGui import QBrush
 from PyQt5.QtGui import QColor
 
 from galacteek import ensure
+from galacteek import partialEnsure
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs import ipfsOp
 from galacteek.core.modelhelpers import UneditableItem
@@ -124,13 +126,24 @@ class PinStatusWidget(GalacteekTab):
     def onItemRemoved(self, qname, path):
         self.removeItem(path)
 
+    def getIndexFromPath(self, path):
+        idxList = self.model.match(
+            self.model.index(0, self.COL_PATH),
+            Qt.DisplayRole,
+            path,
+            1,
+            Qt.MatchFixedString | Qt.MatchWrap
+        )
+        if len(idxList) > 0:
+            return idxList.pop()
+
     def findPinItems(self, path):
-        ret = modelSearch(self.model,
-                          search=path, columns=[self.COL_PATH])
-        if len(ret) == 0:
+        idx = self.getIndexFromPath(path)
+
+        if not idx:
             return None
 
-        itemP = self.model.itemFromIndex(ret.pop())
+        itemP = self.model.itemFromIndex(idx)
 
         if not itemP:
             return None
@@ -152,6 +165,27 @@ class PinStatusWidget(GalacteekTab):
             'itemStatus': self.model.itemFromIndex(idxStatus),
             'cancelButton': cancelButton
         }
+
+    def updatePinStatus(self, path, status, progress):
+        idx = self.getIndexFromPath(path)
+        if not idx:
+            return
+
+        itemPath = self.model.itemFromIndex(idx)
+        if itemPath and time.time() - itemPath.lastProgressUpdate < 5:
+            return
+
+        itemProgress = self.model.itemFromIndex(
+            self.model.index(idx.row(), self.COL_PROGRESS, idx.parent())
+        )
+
+        itemStatus = self.model.itemFromIndex(
+            self.model.index(idx.row(), self.COL_STATUS, idx.parent())
+        )
+
+        itemStatus.setText(status)
+        itemProgress.setText(progress)
+        itemPath.lastProgressUpdate = time.time()
 
     def onPinFinished(self, path):
         items = self.findPinItems(path)
@@ -192,37 +226,41 @@ class PinStatusWidget(GalacteekTab):
             except:
                 pass
 
-    def onCancel(self, qname, path):
+    async def onCancel(self, qname, path, *a):
         self.removeItem(path)
-        self.app.ipfsCtx.pinner.cancel(qname, path)
+        await self.app.ipfsCtx.pinner.cancel(qname, path)
 
     def onPinStatusChanged(self, qname, path, statusInfo):
         nodesProcessed = statusInfo['status'].get('Progress', iUnknown())
-        items = self.findPinItems(path)
 
-        if not items:
+        idx = self.getIndexFromPath(path)
+
+        if not idx:
+            # Register it
             btnCancel = QToolButton()
             btnCancel.setText(iCancel())
             btnCancel.clicked.connect(
-                functools.partial(self.onCancel, qname, path))
+                partialEnsure(self.onCancel, qname, path))
             btnCancel.setFixedWidth(140)
 
             itemTs = UneditableItem(str(statusInfo['ts_queued']))
             itemQ = UneditableItem(qname)
             itemP = UneditableItem(path)
             itemP.setToolTip(path)
+            itemP.lastProgressUpdate = time.time()
+
             itemStatus = UneditableItem(iPinning())
-            itemNodes = UneditableItem(str(nodesProcessed))
+            itemProgress = UneditableItem(str(nodesProcessed))
+
             itemC = UneditableItem('')
 
             self.model.invisibleRootItem().appendRow(
-                [itemTs, itemQ, itemP, itemStatus, itemNodes, itemC])
+                [itemTs, itemQ, itemP, itemStatus, itemProgress, itemC])
             idx = self.model.indexFromItem(itemC)
             self.tree.setIndexWidget(idx, btnCancel)
+            self.resort()
         else:
-            items['itemProgress'].setText(str(nodesProcessed))
-
-        self.resort()
+            self.updatePinStatus(path, iPinning(), str(nodesProcessed))
 
 
 class PinBatchTab(GalacteekTab):

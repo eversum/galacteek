@@ -1,4 +1,4 @@
-import json
+import orjson
 
 import asyncio
 import time
@@ -248,7 +248,7 @@ class JSONPubsubService(PubsubService):
         Decode JSON data contained in a pubsub message
         """
         try:
-            return json.loads(msg['data'].decode())
+            return orjson.loads(msg['data'].decode())
         except Exception:
             logger.debug('Could not decode JSON message data')
             return None

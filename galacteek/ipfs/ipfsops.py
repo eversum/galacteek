@@ -3,6 +3,7 @@ import io
 import os.path
 import os
 import json
+import orjson
 import tempfile
 import uuid
 import aiofiles
@@ -50,6 +51,10 @@ def isDict(data):
 
 
 class OperatorError(Exception):
+    pass
+
+
+class UnixFSTimeoutError(Exception):
     pass
 
 
@@ -449,9 +454,12 @@ class IPFSOperator(object):
 
         return listing['Entries']
 
-    async def filesStat(self, path):
+    async def filesStat(self, path, timeout=3):
         try:
-            return await self.client.files.stat(path)
+            return await self.waitFor(
+                self.client.files.stat(path),
+                timeout
+            )
         except aioipfs.APIError as err:
             self.debug(err.message)
             return None
@@ -474,7 +482,7 @@ class IPFSOperator(object):
     async def filesWriteJsonObject(self, path, obj, create=True,
                                    truncate=True):
         try:
-            serialized = json.dumps(obj).encode()
+            serialized = orjson.dumps(obj)
             resp = await self.filesWrite(path, serialized,
                                          create=create, truncate=truncate)
         except aioipfs.APIError as err:
@@ -495,7 +503,7 @@ class IPFSOperator(object):
                 path, str(err)))
             return None
         else:
-            return json.loads(resp.decode())
+            return orjson.loads(resp.decode())
 
     async def chroot(self, path):
         self.filesChroot = path
@@ -512,10 +520,9 @@ class IPFSOperator(object):
         else:
             raise OperatorError('No chroot provided')
 
-    async def filesCp(self, srcHash, dest):
+    async def filesCp(self, source, dest):
         try:
-            await self.client.files.cp(joinIpfs(srcHash),
-                                       dest)
+            await self.client.files.cp(source, dest)
         except aioipfs.APIError:
             return False
 
@@ -625,12 +632,6 @@ class IPFSOperator(object):
                 await self.nsCacheSet(
                     joinIpns(key), path, origin=cacheOrigin)
 
-                # Also cache the v1 version
-                v1 = ipnsKeyCidV1(key)
-                if v1:
-                    await self.nsCacheSet(
-                        joinIpns(v1), path, origin=cacheOrigin)
-
             self.debug(
                 'Publishing {path} to {dst} '
                 '(cache: {cache}/{cacheOrigin}, allowoffline: {off})'.format(
@@ -719,6 +720,16 @@ class IPFSOperator(object):
             'resolvedLast': int(time.time()),
             'cacheOrigin': origin
         }
+
+        # Cache v1
+        v1 = ipnsKeyCidV1(stripIpns(path))
+        if v1:
+            self._nsCache[joinIpns(v1)] = {
+                'resolved': resolved,
+                'resolvedLast': int(time.time()),
+                'cacheOrigin': origin
+            }
+
         await self.nsCacheSave()
 
     async def nameResolve(self, path, timeout=20, recursive=False,
@@ -758,12 +769,6 @@ class IPFSOperator(object):
             if cache and resolved:
                 await self.nsCacheSet(
                     path, resolved['Path'], origin=cacheOrigin)
-
-                # Also cache the v1 version
-                v1 = ipnsKeyCidV1(stripIpns(path))
-                if v1:
-                    await self.nsCacheSet(
-                        joinIpns(v1), resolved['Path'], origin=cacheOrigin)
 
             return resolved
 
@@ -828,6 +833,7 @@ class IPFSOperator(object):
 
         usingCache = useCache == 'always' or \
             (useCache == 'offline' and self.noPeers and 0)
+        cache = cache == 'always' or (cache == 'offline' and self.noPeers)
         rTimeout = '{t}s'.format(t=timeout) if isinstance(timeout, int) else \
             timeout
         _yieldedcn = 0
@@ -839,6 +845,11 @@ class IPFSOperator(object):
                     stream=True,
                     dht_record_count=count,
                     dht_timeout=rTimeout):
+                if cache:
+                    self.debug(f'nameResolveStream ({path}): caching {nentry}')
+                    await self.nsCacheSet(
+                        path, nentry['Path'], origin=cacheOrigin)
+
                 if debug:
                     self.debug(
                         f'nameResolveStream (timeout: {timeout}) '
@@ -1025,11 +1036,14 @@ class IPFSOperator(object):
         except BaseException:
             pass
 
-    async def listStreamed(self, path, resolve_type=True):
+    async def listStreamed(self, path, resolve_type=True, egenCount=8):
         """
-        Lists objects in a given path and yields them (streamed)
+        Lists objects in a UnixFS directory referenced by its
+        path and yields lists of entries (8 entries by yield is
+        the default).
         """
         try:
+            ePack = []
             async for listing in self.client.core.ls_streamed(
                     await self.objectPathMapper(path),
                     headers=True,
@@ -1038,18 +1052,52 @@ class IPFSOperator(object):
                 objects = listing.get('Objects', [])
 
                 for obj in objects:
-                    links = obj['Links']
-                    for lnk in links:
-                        yield lnk
-                        await self.sleep()
+                    if not isinstance(obj['Links'], list):
+                        continue
+
+                    ePack += obj['Links']
+
+                    if len(ePack) >= egenCount:
+                        yield ePack
+                        ePack.clear()
+
+                    await self.sleep()
+
+            if len(ePack) > 0:
+                # Yield remaining entries
+                yield ePack
         except GeneratorExit:
             self.debug(f'listStreamed ({path}): generator exit')
             raise
         except aioipfs.APIError as e:
             raise e
         except BaseException as err:
+            import traceback
+            traceback.print_exc()
             self.debug(str(err))
             raise err
+
+    async def listStreamedMonitored(self, path, resolve_type=True,
+                                    egenCount=16, genTimeout=10):
+        eGenerator = self.listStreamed(path, resolve_type,
+                                       egenCount=egenCount)
+
+        fetching = True
+        while fetching:
+            try:
+                entries = await self.waitFor(
+                    eGenerator.__anext__(),
+                    genTimeout
+                )
+
+                if entries is None:
+                    # No entries were produced
+                    raise UnixFSTimeoutError()
+
+                for entry in entries:
+                    yield entry
+            except StopAsyncIteration:
+                fetching = False
 
     async def objStat(self, path, timeout=30):
         try:
@@ -1269,7 +1317,7 @@ class IPFSOperator(object):
     async def jsonLoad(self, path):
         try:
             data = await self.client.cat(path)
-            return json.loads(data)
+            return orjson.loads(data)
         except aioipfs.APIError as err:
             self.debug(err.message)
             return None
@@ -1288,7 +1336,7 @@ class IPFSOperator(object):
                         try:
                             ctx = await self.client.cat(link)
                             if ctx:
-                                data.update(json.loads(ctx.decode()))
+                                data.update(orjson.loads(ctx.decode()))
                         except Exception as err:
                             self.debug('ldInline error: {}'.format(
                                 str(err)))
@@ -1340,7 +1388,7 @@ class IPFSOperator(object):
 
         try:
             data = await asyncReadFile(specPath, mode='rt')
-            return json.loads(data)
+            return orjson.loads(data)
         except Exception as err:
             self.debug(str(err))
 
@@ -1430,7 +1478,7 @@ class IPFSOperator(object):
         if not dagFile:
             return None
         try:
-            dagFile.write(json.dumps(data).encode())
+            dagFile.write(orjson.dumps(data))
         except Exception as e:
             self.debug('Cannot convert DAG object: {}'.format(str(e)))
             return None
@@ -1464,8 +1512,7 @@ class IPFSOperator(object):
             self.client.dag.get(await self.objectPathMapper(dagPath)), timeout)
 
         if output is not None:
-            return json.loads(output)
-        return None
+            return orjson.loads(output)
 
     async def dagResolve(self, dagPath):
         """
@@ -1578,6 +1625,7 @@ class IPFSOperator(object):
         async for pingReply in self.client.core.ping(peer, count=count):
             if pingReply is None:
                 break
+
             pTime = pingReply.get('Time', None)
             pSuccess = pingReply.get('Success', None)
             pText = pingReply.get('Text', '')
@@ -1587,6 +1635,8 @@ class IPFSOperator(object):
                 success='OK' if pSuccess is True else 'ERR'))
 
             yield (pTime, pSuccess, pText.strip())
+
+            await self.sleep()
 
     async def pingLowest(self, peer, count=3):
         """

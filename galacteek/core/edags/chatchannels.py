@@ -59,7 +59,7 @@ class ChannelsDAG(EvolvingDAG):
             if not self.gsetLocal.query(chan):
                 self.gsetLocal.add(chan)
 
-        async with self.lock:
+        async with self.wLock:
             self.gsetLocal.merge(set)
             self.root['channels']['all'] = self.gsetLocal.payload
 

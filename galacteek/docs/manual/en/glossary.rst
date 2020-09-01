@@ -184,7 +184,17 @@
 
         multiformats_
 
+    UnixFS
+
+        UnixFS is a protocol-buffers-based format for describing files,
+        directories, and symlinks in IPFS. This data format is used to
+        represent files and all their links and metadata in IPFS. UnixFS
+        creates a block (or a tree of blocks) of linked objects.
+
+        See the unixfs_ documentation
+
 
 .. _IPFS: ipns://ipfs.io
 .. _ENS: https://ens.domains/
 .. _multiformats: https://multiformats.io
+.. _unixfs:  https://docs.ipfs.io/concepts/file-systems/#unix-file-system-unixfs

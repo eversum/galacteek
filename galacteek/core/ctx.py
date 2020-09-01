@@ -35,6 +35,8 @@ from galacteek.ipfs.pubsub.service import PSPeersService
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs import tunnel
 
+from galacteek.core import utcDatetimeIso
+
 from galacteek.did.ipid import ipidFormatValid
 from galacteek.did.ipid import IPIdentifier
 
@@ -47,18 +49,17 @@ from galacteek.core.iphandle import SpaceHandle
 from galacteek.crypto.rsa import RSAExecutor
 
 
-class PeerCtx:
-    def __init__(self, ipfsCtx, peerId, identMsg,
+class PeerIdentityCtx:
+    def __init__(self, ipfsCtx, peerId, ipHandle,
                  ipIdentifier: IPIdentifier,
-                 pinglast=0, pingavg=0,
+                 pingavg=0,
                  validated=False,
                  authenticated=False):
         self._ipfsCtx = ipfsCtx
         self._ipid = ipIdentifier
         self.peerId = peerId
-        self.ident = identMsg
-        self.pinglast = pinglast
-        self.pingavg = pingavg
+        self.iphandle = ipHandle
+        self.pinghist = collections.deque([], 8)
         self._identLast = int(time.time())
         self._validated = validated
         self._authenticated = authenticated
@@ -67,6 +68,7 @@ class PeerCtx:
         self._avatarImage = self.defaultAvatarImage()
 
         self.sInactive = AsyncSignal(str)
+        self.sStatusChanged = AsyncSignal()
 
     @property
     def ipfsCtx(self):
@@ -86,7 +88,7 @@ class PeerCtx:
 
     @property
     def spaceHandle(self):
-        return SpaceHandle(self.ident.iphandle)
+        return SpaceHandle(self.iphandle)
 
     @property
     def identLast(self):
@@ -113,19 +115,58 @@ class PeerCtx:
         log.debug('Peer {p}@{ipid}: {msg}'.format(
             p=self.peerId, ipid=self.ipid.did, msg=msg))
 
+    def alive(self):
+        if self.ipid.local:
+            return True
+
+        try:
+            prec = self.pinghist[-1]
+            return int(time.time()) - prec[1] < (60 * 5)
+        except:
+            return False
+
+    def pingAvg(self):
+        try:
+            prec = self.pinghist[-1]
+            return prec[0]
+        except:
+            return -1
+
     @ipfsOp
     async def update(self, ipfsop):
         pass
 
     @ipfsOp
-    async def getRsaPubKey(self, op):
+    async def getRsaPubKey(self, ipfsop):
         return await self.ipid.pubKeyPemGet()
 
-    async def watch(self):
-        if self.peerUnresponsive:
-            await self.sInactive.emit(self.peerId)
-        else:
+    @ipfsOp
+    async def watch(self, ipfsop):
+        if self.ipid.local:
+            self.pinghist.append((
+                0,
+                int(time.time())
+            ))
+            return
+
+        pingAvg = await ipfsop.waitFor(
+            ipfsop.pingAvg(self.peerId, count=2), 10)
+
+        if pingAvg and pingAvg > 0:
+            self.pinghist.append((
+                int(pingAvg),
+                int(time.time())
+            ))
+
+            self.debug(f'Ping OK: {pingAvg}')
             ensureLater(120, self.watch)
+
+            await self.sStatusChanged.emit()
+        else:
+            self.debug('Could not ping peer')
+            ensureLater(60, self.watch)
+
+            await self.sStatusChanged.emit()
 
     def defaultAvatarImage(self):
         if isinstance(self.spaceHandle.vPlanet, str):
@@ -182,12 +223,19 @@ class PeerCtx:
             else:
                 log.debug(f'Could not fetch avatar for peer {self.peerId}')
 
+    def __str__(self):
+        return f'PeerIdentityCtx: handle {self.iphandle} ({self.ipid.did})'
+
 
 class Peers:
     changed = AsyncSignal()
-    peerAdded = AsyncSignal(str)
-    peerModified = AsyncSignal(str)
-    peerDidModified = AsyncSignal(str, bool)
+    peerAdded = AsyncSignal(PeerIdentityCtx)
+    peerNew = AsyncSignal(PeerIdentityCtx)
+    peerAuthenticated = AsyncSignal(PeerIdentityCtx)
+    peerModified = AsyncSignal(PeerIdentityCtx)
+    peerDidModified = AsyncSignal(PeerIdentityCtx, bool)
+
+    # Unused now
     peerLogout = AsyncSignal(str)
 
     def __init__(self, ctx):
@@ -196,10 +244,22 @@ class Peers:
         self.lock = asyncio.Lock(loop=self.app.loop)
         self.evStopWatcher = asyncio.Event()
         self._byPeerId = collections.OrderedDict()
+        self._byHandle = collections.OrderedDict()
+        self._pgScanCount = 0
+
+        self.peerAuthenticated.connectTo(self.onPeerAuthenticated)
+
+    @property
+    def pgScanCount(self):
+        return self._pgScanCount
 
     @property
     def byPeerId(self):
         return self._byPeerId
+
+    @property
+    def byHandle(self):
+        return self._byHandle
 
     @property
     def peersIds(self):
@@ -207,29 +267,119 @@ class Peers:
 
     @property
     def peersCount(self):
-        return len(self.peersIds)
+        return len(self.peersHandles)
 
     @property
     def peersHandles(self):
-        return [pCtx.ident.iphandle for peerId, pCtx in self.byPeerId.items()]
+        return [handle for handle in self.byHandle.keys()]
 
     async def unregister(self, peerId):
         async with self.lock:
             if peerId in self.byPeerId:
                 del self.byPeerId[peerId]
+
             await self.peerLogout.emit(peerId)
             await self.changed.emit()
 
     @ipfsOp
-    async def registerFromIdent(self, op, iMsg):
-        # iMsg is a PeerIdentMessage
+    async def watchNetworkGraph(self, ipfsop):
+        profile = ipfsop.ctx.currentProfile
 
-        if iMsg.peer not in self.byPeerId:
+        # First scan
+        await self.scanNetworkGraph()
+
+        if profile.dagNetwork:
+            profile.dagNetwork.dagUpdated.connectTo(self.networkGraphChanged)
+
+    async def networkGraphChanged(self, dagCid):
+        log.debug(
+            f'Network graph moved to CID: {dagCid} '
+            f'(graph scan run: {self.pgScanCount})'
+        )
+
+        await self.scanNetworkGraph()
+
+    @ipfsOp
+    async def scanNetworkGraph(self, ipfsop):
+        profile = ipfsop.ctx.currentProfile
+
+        async with profile.dagNetwork.read() as ng:
+            for peerId, peerHandles in ng.d['peers'].items():
+                for handle, hData in peerHandles.items():
+                    sHandle = SpaceHandle(handle)
+
+                    did = hData.get('did')
+
+                    log.debug(
+                        f'scanNetworkGraph: processing {handle} ({did})')
+
+                    if not sHandle.valid:
+                        continue
+
+                    # Is it in the model already ?
+                    if self.app.peersTracker.model.didRegistered(did):
+                        log.debug(f'DID {did}: already in model')
+                        continue
+
+                    ensure(self.loadDidFromGraph(
+                        ipfsop, peerId, did, sHandle))
+                    await ipfsop.sleep(0.1)
+
+                await ipfsop.sleep()
+
+        self._pgScanCount += 1
+
+    async def loadDidFromGraph(self, ipfsop, peerId: str, did: str,
+                               sHandle: str):
+        ipid = await self.app.ipidManager.load(
+            did,
+            track=True,
+            timeout=10,
+            localIdentifier=(peerId == ipfsop.ctx.node.id)
+        )
+
+        if not ipid:
+            log.debug(f'Cannot load IPID: {did}')
+            return
+
+        piCtx = PeerIdentityCtx(
+            self.ctx,
+            sHandle.peer,
+            str(sHandle),
+            ipid,
+            validated=True,
+            authenticated=True
+        )
+
+        ipid.sChanged.connectTo(partialEnsure(
+            self.onPeerDidModified, piCtx))
+        piCtx.sStatusChanged.connectTo(partialEnsure(
+            self.peerModified.emit, piCtx))
+
+        ensureLater(1, piCtx.watch)
+
+        async with self.lock:
+            self._byHandle[str(sHandle)] = piCtx
+
+            if piCtx.peerId not in self._byPeerId:
+                self._byPeerId[piCtx.peerId] = piCtx
+
+        await self.peerAdded.emit(piCtx)
+
+        log.debug(f'Loaded IPID from graph: {did}')
+
+    @ipfsOp
+    async def registerFromIdent(self, ipfsop, iMsg):
+        profile = ipfsop.ctx.currentProfile
+
+        try:
+            inGraph = await profile.dagNetwork.byDid(iMsg.personDid)
+        except Exception:
+            # network dag not ready ..
+            return
+
+        if not inGraph:
             peerValidated = False
-
-            now = int(time.time())
-            avgPing = await op.waitFor(op.pingAvg(iMsg.peer, count=2), 5)
-
             personDid = iMsg.personDid
 
             if not ipidFormatValid(personDid):
@@ -258,13 +408,13 @@ class Peers:
                         qr=iMsg.iphandleqrpngcid, peer=iMsg.peer))
                     peerValidated = True
 
-                ensure(op.ctx.pin(iMsg.iphandleqrpngcid))
+                ensure(ipfsop.ctx.pin(iMsg.iphandleqrpngcid))
 
             # Load the IPID
             ipid = await self.app.ipidManager.load(
                 personDid,
-                initialCid=iMsg.personDidCurCid,
-                track=True
+                track=True,
+                localIdentifier=(iMsg.peer == ipfsop.ctx.node.id)
             )
 
             if not ipid:
@@ -272,71 +422,114 @@ class Peers:
                 return
 
             async with self.lock:
-                pCtx = PeerCtx(self.ctx, iMsg.peer, iMsg, ipid,
-                               pingavg=avgPing if avgPing else 0,
-                               pinglast=now if avgPing else 0,
-                               validated=peerValidated
-                               )
+                piCtx = PeerIdentityCtx(
+                    self.ctx, iMsg.peer, iMsg.iphandle,
+                    ipid,
+                    validated=peerValidated
+                )
                 ipid.sChanged.connectTo(partialEnsure(
-                    self.onPeerDidModified, pCtx))
-                pCtx.sInactive.connectTo(self.onUnresponsivePeer)
+                    self.onPeerDidModified, piCtx))
+                piCtx.sInactive.connectTo(self.onUnresponsivePeer)
 
-                ensure(self.didPerformAuth(pCtx))
+                ensure(self.didPerformAuth(piCtx))
 
-                self._byPeerId[iMsg.peer] = pCtx
-                ensureLater(60, pCtx.watch)
-
-            await self.peerAdded.emit(iMsg.peer)
+                self._byHandle[iMsg.iphandle] = piCtx
+                ensureLater(10, piCtx.watch)
         else:
-            # This peer is already registered
+            # This peer is already registered in the network graph
             # What we ought to do here is just to refresh the DID document
 
             async with self.lock:
-                pCtx = self.getByPeerId(iMsg.peer)
-                if pCtx:
+                piCtx = self.getByHandle(iMsg.iphandle)
+
+                if piCtx:
+                    self._byPeerId[piCtx.peerId] = piCtx
+
                     log.debug('Updating ident for peer {}'.format(iMsg.peer))
-                    pCtx.ident = iMsg
+                    piCtx.ident = iMsg
 
-                    log.debug('Refreshing DID: {}'.format(pCtx.ipid))
-                    await pCtx.ipid.refresh()
+                    log.debug('Refreshing DID: {}'.format(piCtx.ipid))
+                    await piCtx.ipid.refresh()
 
-                    await self.peerModified.emit(iMsg.peer)
+                    await self.peerModified.emit(piCtx)
 
         await self.changed.emit()
 
     @ipfsOp
-    async def didPerformAuth(self, ipfsop, peerCtx):
-        ipid = peerCtx.ipid
+    async def didPerformAuth(self, ipfsop, piCtx):
+        ipid = piCtx.ipid
 
         if not ipid.local:
             # DID Auth
             for attempt in range(0, 3):
                 log.debug('DID auth: {did} (attempt: {a})'.format(
                     did=ipid.did, a=attempt))
+
                 if not await self.app.ipidManager.didAuthenticate(
-                        ipid, peerCtx.ident.peer):
+                        ipid, piCtx.peerId):
                     log.debug('DID auth failed for DID: {}'.format(ipid.did))
                     await ipfsop.sleep(5)
                     continue
                 else:
                     log.debug('DID auth success for DID: {}'.format(ipid.did))
-                    peerCtx._authenticated = True
+                    piCtx._authenticated = True
+
+                    # Authenticated
+                    await self.peerAuthenticated.emit(piCtx)
 
                     # Peering
-                    await self.peeringAdd(peerCtx)
+                    await self.peeringAdd(piCtx)
                     break
         else:
             # We control this DID
-            peerCtx._authenticated = True
+            piCtx._authenticated = True
+            await self.peerAuthenticated.emit(piCtx)
 
-    async def peeringAdd(self, pCtx):
+    @ipfsOp
+    async def onPeerAuthenticated(self, ipfsop, piCtx: PeerIdentityCtx):
+        """
+        DID auth was successfull for a peer, store the handle
+        and DID in the graph, and create the initial IPLD
+        link for the DID document (diddoc)
+        """
+
+        profile = ipfsop.ctx.currentProfile
+        did = piCtx.ipid.did
+        handle = str(piCtx.spaceHandle)
+
+        async with profile.dagNetwork as g:
+            pData = g.root['peers'].setdefault(piCtx.peerId, {})
+
+            if handle in pData:
+                # This handle is already registered for this peer
+                # This can happen if a peer created 2 IPIDs with
+                # the same handle after losing the profile's data
+
+                log.debug(f'{handle} already in the graph, overwriting')
+
+            pData[handle] = {
+                'did': did,
+                'diddoc': {},
+                'dateregistered': utcDatetimeIso(),
+                'datedidauth': utcDatetimeIso(),
+                'datelastseen': utcDatetimeIso(),
+                'flags': 0
+            }
+
+            # Link the DID document in the graph
+            if piCtx.ipid.docCid:
+                pData[handle]['diddoc'] = g.ipld(piCtx.ipid.docCid)
+
+            log.debug(f'Authenticated {handle} ({did}) in the peers graph')
+
+    async def peeringAdd(self, piCtx: PeerIdentityCtx):
         """
         Register the peer in go-ipfs Peering.Peers
         This way we make sure galacteek peers are always peered well
         """
 
         if self.app.ipfsd:
-            await self.app.ipfsd.ipfsConfigPeeringAdd(pCtx.peerId)
+            await self.app.ipfsd.ipfsConfigPeeringAdd(piCtx.peerId)
 
     @ipfsOp
     async def validateQr(self, ipfsop, qrCid, iMsg):
@@ -374,13 +567,20 @@ class Peers:
 
         return False
 
-    async def onPeerDidModified(self, peerCtx, didCid):
-        log.debug('DID modified for peer: {}'.format(peerCtx.peerId))
-        await self.peerDidModified.emit(peerCtx.peerId, True)
+    @ipfsOp
+    async def onPeerDidModified(self, ipfsop, piCtx: PeerIdentityCtx,
+                                didCid: str):
+        log.debug('DID modified for peer: {}'.format(piCtx.peerId))
+
+        profile = ipfsop.ctx.currentProfile
+        await profile.dagNetwork.didUpdateObj(piCtx.ipid.did, didCid)
+
+        await self.peerDidModified.emit(piCtx, True)
 
     async def onUnresponsivePeer(self, peerId):
-        pCtx = self.getByPeerId(peerId)
-        if pCtx:
+        # Unused
+        piCtx = self.getByPeerId(peerId)
+        if piCtx:
             log.debug('{} unresponsive ..'.format(peerId))
             await self.unregister(peerId)
 
@@ -392,6 +592,9 @@ class Peers:
 
     def getByPeerId(self, peerId):
         return self._byPeerId.get(peerId, None)
+
+    def getByHandle(self, handle):
+        return self._byHandle.get(handle, None)
 
     def peerRegistered(self, peerId):
         return peerId in self.peersIds
@@ -416,9 +619,9 @@ class Node(QObject):
         return self._idFull
 
     @ipfsOp
-    async def init(self, op):
-        self._idFull = await op.client.core.id()
-        self._id = await op.nodeId()
+    async def init(self, ipfsop):
+        self._idFull = await ipfsop.client.core.id()
+        self._id = await ipfsop.nodeId()
 
 
 class PubsubMaster(QObject):
@@ -457,7 +660,7 @@ class PubsubMaster(QObject):
         [await service.start() for topic, service in self.services.items()]
 
     @ipfsOp
-    async def init(self, op):
+    async def init(self, ipfsop):
         pass
 
 
@@ -496,10 +699,10 @@ class P2PServices(QObject):
         await service.start()
 
     @ipfsOp
-    async def init(self, op):
+    async def init(self, ipfsop):
         from galacteek.ipfs.p2pservices import didauth
 
-        if not await op.hasCommand('p2p') is True:
+        if not await ipfsop.hasCommand('p2p') is True:
             log.debug('No P2P streams support')
             return
 
@@ -719,15 +922,15 @@ class IPFSContext(QObject):
             return False
 
     @ipfsOp
-    async def importSoftIdent(self, op):
-        added = await op.addString(gSoftIdent)
+    async def importSoftIdent(self, ipfsop):
+        added = await ipfsop.addString(gSoftIdent)
         if added is not None:
             self.softIdent = added
 
     @ipfsOp
-    async def galacteekPeers(self, op):
+    async def galacteekPeers(self, ipfsop):
         if self.softIdent is not None:
-            return await op.whoProvides(self.softIdent['Hash'])
+            return await ipfsop.whoProvides(self.softIdent['Hash'])
         else:
             return []
 
