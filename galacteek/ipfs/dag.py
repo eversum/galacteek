@@ -1,6 +1,7 @@
 import asyncio
 import os.path
 import aiorwlock
+from cachetools import TTLCache
 
 from async_generator import async_generator, yield_, yield_from_
 
@@ -17,6 +18,8 @@ from galacteek.ipfs import pb
 from galacteek.core.asynclib import async_enterable
 from galacteek.core.jtraverse import traverseParser
 from galacteek.core import utcDatetimeIso
+
+from galacteek.core.asynccache import selfcachedcoromethod
 
 
 class DAGObj:
@@ -289,6 +292,7 @@ class EvolvingDAG(QObject, DAGOperations):
         self.loop = loop if loop else asyncio.get_event_loop()
         self.lock = aiorwlock.RWLock(loop=loop)
         self.loaded = asyncio.Future()
+        self.cache = TTLCache(128, 120)
 
         self._curMetaEntry = None
         self._dagRoot = None
@@ -528,6 +532,13 @@ class EvolvingDAG(QObject, DAGOperations):
         """
         return DAGPortal(dagCid=self.dagCid, dagRoot=self.dagRoot,
                          lock=self.rLock)
+
+    @async_enterable
+    @selfcachedcoromethod('cache')
+    async def portalToPath(self, path):
+        resolved = await self.resolve(path=path)
+        if resolved:
+            return DAGPortal(dagCid=resolved)
 
     @async_enterable
     async def portal(self):

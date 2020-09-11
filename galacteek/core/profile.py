@@ -42,6 +42,10 @@ from galacteek.core.userdag import UserDAG
 from galacteek.core.userdag import UserWebsite
 from galacteek.core.edags.chatchannels import ChannelsDAG
 from galacteek.core.edags.ngraph import PeersGraphDAG
+
+from galacteek.core.edags.seeds import SeedsEDag
+from galacteek.core.edags.seeds import MegaSeedsEDag
+
 from galacteek.core import utcDatetimeIso
 
 from galacteek.crypto.qrcode import IPFSQrEncoder
@@ -544,7 +548,8 @@ class UserProfile(QObject):
             self.pathDWebApps,
             self.pathTmp,
             self.pathEncryptedFiles,
-            self.pathEDagsPyramids
+            self.pathEDagsPyramids,
+            self.pathEDagsSeeds
         ]
 
     @property
@@ -624,6 +629,10 @@ class UserProfile(QObject):
         return os.path.join(self.pathData, 'edags')
 
     @property
+    def pathEDagsSeeds(self):
+        return os.path.join(self.pathData, 'seeds')
+
+    @property
     def pathEDagsPyramids(self):
         return os.path.join(self.pathEDags, 'pyramids')
 
@@ -664,8 +673,12 @@ class UserProfile(QObject):
         return os.path.join(self.pathEDags, 'network.edag')
 
     @property
-    def pathEdagShares(self):
-        return os.path.join(self.pathEDags, 'shares.edag')
+    def pathEdagSeedsMain(self):
+        return os.path.join(self.pathEDagsSeeds, 'smain.edag')
+
+    @property
+    def pathEdagSeedsAll(self):
+        return os.path.join(self.pathEDagsSeeds, 'mega.edag')
 
     @property
     def pathMDagShares(self):
@@ -721,12 +734,22 @@ class UserProfile(QObject):
             autoUpdateDates=True
         )
 
+        self.dagSeedsMain = SeedsEDag(
+            self.pathEdagSeedsMain, loop=self.ctx.loop
+        )
+        self.dagSeedsAll = MegaSeedsEDag(
+            self.pathEdagSeedsAll, loop=self.ctx.loop
+        )
+
         ensure(self.dagUser.load())
         await self.dagUser.loaded
 
         await self.dagChatChannels.load()
 
         await self.dagNetwork.load()
+
+        await self.dagSeedsMain.load()
+        await self.dagSeedsAll.load()
 
         await self.ipHandles.load()
 

@@ -13,6 +13,7 @@ from galacteek.ipfs.pubsub import TOPIC_MAIN
 from galacteek.ipfs.pubsub import TOPIC_PEERS
 from galacteek.ipfs.pubsub import TOPIC_CHAT
 from galacteek.ipfs.pubsub import TOPIC_HASHMARKS
+from galacteek.ipfs.pubsub import TOPIC_DAGEXCH
 
 from galacteek.ipfs.pubsub.messages.core import MarksBroadcastMessage
 from galacteek.ipfs.pubsub.messages.core import PeerIdentMessageV3
@@ -22,6 +23,8 @@ from galacteek.ipfs.pubsub.messages.core import PeerIpHandleChosen
 from galacteek.ipfs.pubsub.messages.chat import ChatRoomMessage
 from galacteek.ipfs.pubsub.messages.chat import ChatStatusMessage
 from galacteek.ipfs.pubsub.messages.chat import ChatChannelsListMessage
+
+from galacteek.ipfs.pubsub.messages.dagexch import DAGExchangeMessage
 
 from galacteek.ipfs.wrappers import ipfsOp
 
@@ -621,3 +624,60 @@ class PSChatChannelService(JSONLDPubsubService):
 
         sMsg.peerCtx = peerCtx
         gHub.publish(self.psKey, sMsg)
+
+
+class PSDAGExchangeService(JSONPubsubService):
+    def __init__(self, ipfsCtx, client, **kw):
+        super().__init__(ipfsCtx, client, topic=TOPIC_DAGEXCH,
+                         runPeriodic=True,
+                         filterSelfMessages=False, **kw)
+
+    async def processJsonMessage(self, sender, msg):
+        msgType = msg.get('msgtype', None)
+
+        peerCtx = self.ipfsCtx.peers.getByPeerId(sender)
+        if not peerCtx:
+            self.debug('Message from unregistered peer: {}'.format(
+                sender))
+            return
+
+        if msgType == DAGExchangeMessage.TYPE:
+            await self.handleExchangeMessage(sender, msg)
+
+    @ipfsOp
+    async def handleExchangeMessage(self, ipfsop, sender, msg):
+        eMsg = DAGExchangeMessage(msg)
+        if not eMsg.valid():
+            self.debug('Invalid channels message')
+            return
+
+        if eMsg.dagClass == 'seeds':
+            await self.handleSeedsExchangeMessage(sender, eMsg)
+
+    @ipfsOp
+    async def handleSeedsExchangeMessage(self, ipfsop, sender, eMsg):
+        profile = ipfsop.ctx.currentProfile
+
+        if eMsg.dagId == 'main':
+            print('LINK', sender, eMsg.dagCid)
+            dag = profile.dagSeedsAll
+
+            await dag.link(sender, eMsg.dagCid)
+
+            print('YEAH', eMsg)
+
+
+    @ipfsOp
+    async def periodic(self, ipfsop):
+        while True:
+            await asyncio.sleep(10)
+
+            if ipfsop.ctx.currentProfile:
+                seedsDag = ipfsop.ctx.currentProfile.dagSeedsMain
+
+                test = await ipfsop.addString('test')
+                await seedsDag.seed('test', [test['Hash']])
+
+                eMsg = DAGExchangeMessage.make(
+                    'seeds', seedsDag.dagCid, 'main')
+                await self.send(eMsg)

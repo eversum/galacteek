@@ -13,7 +13,7 @@ glogger.basicConfig(level='DEBUG')
 
 @pytest.fixture(scope='function')
 def localipfsclient(event_loop):
-    client = aioipfs.AsyncIPFS(loop=event_loop, host='127.0.0.1', port=5001)
+    client = aioipfs.AsyncIPFS(loop=event_loop, host='127.0.0.1', port=5042)
     yield client
 
 

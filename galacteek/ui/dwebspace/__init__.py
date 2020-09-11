@@ -25,6 +25,7 @@ from galacteek.ui import ipfssearch
 from galacteek.ui import textedit
 from galacteek.ui import mediaplayer
 from galacteek.ui import pin
+from galacteek.ui import seeds
 
 from galacteek.ui.helpers import getIcon
 from galacteek.ui.helpers import getPlanetIcon
@@ -382,9 +383,12 @@ class WorkspaceFiles(TabbedWorkspace):
             fileManager=fileManager
         )
 
+        self.seedsTab = seeds.SeedsTrackerTab(self.app.mainWindow)
+
         icon = getIcon('folder-open.png')
 
         self.wsRegisterTab(self.fileManagerTab, iFileManager(), icon)
+        self.wsRegisterTab(self.seedsTab, 'Seeds', icon)
 
         self.wsAddAction(fileManager.addFilesAction)
         self.wsAddAction(fileManager.addDirectoryAction)

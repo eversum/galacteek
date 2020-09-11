@@ -33,6 +33,7 @@ from galacteek.ipfs.pubsub.service import PSMainService
 from galacteek.ipfs.pubsub.service import PSChatService
 from galacteek.ipfs.pubsub.service import PSHashmarksExchanger
 from galacteek.ipfs.pubsub.service import PSPeersService
+from galacteek.ipfs.pubsub.service import PSDAGExchangeService
 
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs import tunnel
@@ -911,6 +912,10 @@ class IPFSContext(QObject):
         psServiceChat = PSChatService(self, self.app.ipfsClient,
                                       scheduler=self.app.scheduler)
         self.pubsub.reg(psServiceChat)
+
+        self.pubsub.reg(
+                PSDAGExchangeService(self, self.app.ipfsClient,
+                    scheduler=self.app.scheduler))
 
         if pubsubHashmarksExch and 0:
             psServiceMarks = PSHashmarksExchanger(
