@@ -75,6 +75,11 @@ Screencasts
 
     Filemanager drag-and-drop
 
+.. figure:: https://raw.githubusercontent.com/pinnaculum/galacteek/master/share/screencasts/filesharing.gif
+    :align: center
+
+    File sharing
+
 .. figure:: https://raw.githubusercontent.com/pinnaculum/galacteek/master/share/screencasts/pyramid-drop1.gif
     :align: center
 
@@ -113,6 +118,7 @@ for more information).
 - Distributed chat with pubsub (chat channels syncronized with CRDT+DAG)
 - File manager with drag-and-drop support and timeframes (per-day view
   of files in the MFS)
+- File sharing
 - Search content with the ipfs-search_ search engine as well as with cyber_
 - Built-in blog with Atom feeds
 - Webcam to IPFS capture (image and videos)

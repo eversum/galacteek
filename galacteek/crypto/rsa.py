@@ -1,6 +1,7 @@
 import asyncio
 import concurrent.futures
 import functools
+import base64
 
 from io import BytesIO
 
@@ -32,7 +33,7 @@ class RSAExecutor(object):
     async def importKey(self, keyData):
         return await self._exec(lambda: RSA.import_key(keyData))
 
-    async def genKeys(self, keysize=2048):
+    async def genKeys(self, keysize=4096):
         """
         Generate RSA keys of the given keysize (2048 bits by default)
         and return a tuple containing the PEM-encoded private and public key
@@ -106,7 +107,7 @@ class RSAExecutor(object):
         try:
             key = RSA.import_key(privRsaKey)
             h = SHA256.new(message)
-            log.debug('Generaring PSS signature')
+            log.debug('Generating PSS signature')
 
             signature = pss.new(key).sign(h)
 
@@ -121,6 +122,15 @@ class RSAExecutor(object):
                        rsaPubKey):
         return await self._exec(self._pssVerif, message, signature,
                                 rsaPubKey)
+
+    async def pssVerif64(self, message: bytes, signature64: bytes,
+                         rsaPubKey):
+        try:
+            decoded = base64.b64decode(signature64)
+            return await self._exec(self._pssVerif, message, decoded,
+                                    rsaPubKey)
+        except Exception as err:
+            log.debug(f'Exception on PSS64 verif: {err}')
 
     def _pssVerif(self, message: bytes, signature, rsaPubKey):
         try:

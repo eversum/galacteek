@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import QHeaderView
 from PyQt5.QtWidgets import QToolButton
 
 from PyQt5.QtGui import QTextCursor
+from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt
 
 from galacteek.core import datetimeIsoH
@@ -79,6 +80,9 @@ class PubsubSnifferWidget(GalacteekTab):
         )
 
         msgView = QTextBrowser(dlg)
+        msgView.setFontFamily('Montserrat')
+        msgView.setFontWeight(QFont.DemiBold)
+        msgView.setFontPointSize(12)
         layout.addWidget(msgView)
         msgView.insertPlainText(
             json.dumps(msgJson, indent=4))

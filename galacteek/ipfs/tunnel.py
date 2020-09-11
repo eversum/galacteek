@@ -113,6 +113,11 @@ class P2PListener(object):
             try:
                 protocol = await self.protocol()
 
+                log.debug(
+                    f'P2PListener: closing listener with proto: {protocol}')
+
+                await self.client.p2p.listener_close(protocol)
+
                 addr = await self.client.p2p.listener_open(
                     protocol, listenAddress)
             except aioipfs.APIError as err:

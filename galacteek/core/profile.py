@@ -42,6 +42,10 @@ from galacteek.core.userdag import UserDAG
 from galacteek.core.userdag import UserWebsite
 from galacteek.core.edags.chatchannels import ChannelsDAG
 from galacteek.core.edags.ngraph import PeersGraphDAG
+
+from galacteek.core.edags.seeds import SeedsEDag
+from galacteek.core.edags.seeds import MegaSeedsEDag
+
 from galacteek.core import utcDatetimeIso
 
 from galacteek.crypto.qrcode import IPFSQrEncoder
@@ -72,7 +76,7 @@ class OrbitalProfileConfig(MutableIPFSJson):
 
 
 class IPHandlesDAG(EvolvingDAG):
-    def initDag(self):
+    async def initDag(self, ipfsop):
         return {
             'iphandles': []
         }
@@ -85,7 +89,7 @@ class IPHandlesDAG(EvolvingDAG):
 class UserProfileEDAG(EvolvingDAG):
     IDENTFLAG_READONLY = 1 << 1
 
-    def initDag(self):
+    async def initDag(self, ipfsop):
         now = utcDatetimeIso()
 
         return {
@@ -383,19 +387,24 @@ class DIDRsaKeyStore:
         self.__root = _storeRoot
         self.__profile = profile
 
-    def _privateKeyForDid(self, did):
-        from Cryptodome.PublicKey import RSA
-
+    def _privateKeyPathForDid(self, did):
         match = didIdentRe.match(did)
         if not match:
             return None
 
-        privKeyPath = os.path.join(
+        return os.path.join(
             self.__root,
             'rsa_{0}_ipid_{1}_priv.key'.format(
                 self.__profile, match.group('id')
             )
         )
+
+    def _privateKeyForDid(self, did):
+        from Cryptodome.PublicKey import RSA
+
+        privKeyPath = self._privateKeyPathForDid(did)
+        if not privKeyPath:
+            return
 
         if os.path.isfile(privKeyPath):
             try:
@@ -405,6 +414,11 @@ class DIDRsaKeyStore:
                 return None
             else:
                 return privKey
+
+
+class UserProfileStatus(QObject):
+    def __init__(self, parent):
+        super(UserProfileStatus, self).__init__(parent)
 
 
 class UserProfile(QObject):
@@ -424,6 +438,9 @@ class UserProfile(QObject):
         self._name = name
         self._rootDir = rootDir
         self._initialized = False
+
+        self._status = 'Available'
+        self._statusMessage = ''
 
         self.keyRoot = 'galacteek.{}.root'.format(self.name)
         self.keyRootId = None
@@ -447,8 +464,6 @@ class UserProfile(QObject):
         self._dagUser = None
 
         self.userInfo = None
-        self.ipHandles = IPHandlesDAG(
-            self.edagMetadataPath('iphandles'), offline=True)
 
         self.orbitalConfigMfs = None
         self.orbitalCfgMap = None
@@ -469,6 +484,14 @@ class UserProfile(QObject):
     @property
     def initialized(self):
         return self._initialized
+
+    @property
+    def status(self):
+        return self._status
+
+    @property
+    def statusMessage(self):
+        return self._statusMessage
 
     @property
     def rsaExec(self):
@@ -544,7 +567,8 @@ class UserProfile(QObject):
             self.pathDWebApps,
             self.pathTmp,
             self.pathEncryptedFiles,
-            self.pathEDagsPyramids
+            self.pathEDagsPyramids,
+            self.pathEDagsSeeds
         ]
 
     @property
@@ -624,6 +648,10 @@ class UserProfile(QObject):
         return os.path.join(self.pathData, 'edags')
 
     @property
+    def pathEDagsSeeds(self):
+        return os.path.join(self.pathEDags, 'seeds')
+
+    @property
     def pathEDagsPyramids(self):
         return os.path.join(self.pathEDags, 'pyramids')
 
@@ -664,8 +692,12 @@ class UserProfile(QObject):
         return os.path.join(self.pathEDags, 'network.edag')
 
     @property
-    def pathEdagShares(self):
-        return os.path.join(self.pathEDags, 'shares.edag')
+    def pathEdagSeedsMain(self):
+        return os.path.join(self.pathEDagsSeeds, 'ipseeds_main.edag')
+
+    @property
+    def pathEdagSeedsAll(self):
+        return os.path.join(self.pathEDagsSeeds, 'ipseeds_main_mega.edag')
 
     @property
     def pathMDagShares(self):
@@ -708,7 +740,7 @@ class UserProfile(QObject):
 
         if not await ipfsop.hasDagCommand():
             self.userLogInfo('No DAG API! ..')
-            return
+            raise ProfileError('No DAG API')
 
         self.userLogInfo('Loading DAG ..')
         self._dagUser = UserDAG(self.pathUserDagMeta, loop=self.ctx.loop)
@@ -721,14 +753,32 @@ class UserProfile(QObject):
             autoUpdateDates=True
         )
 
+        # Seeds
+        self.dagSeedsMain = SeedsEDag(
+            self.pathEdagSeedsMain, loop=self.ctx.loop,
+            cipheredMeta=True
+        )
+        self.dagSeedsAll = MegaSeedsEDag(
+            self.pathEdagSeedsAll, loop=self.ctx.loop,
+            cipheredMeta=True
+        )
+
         ensure(self.dagUser.load())
         await self.dagUser.loaded
 
+        # Chat channels
         await self.dagChatChannels.load()
 
+        # Network EDAG
         await self.dagNetwork.load()
 
-        await self.ipHandles.load()
+        # Seeds EDAGs
+        await self.dagSeedsMain.load()
+        await self.dagSeedsAll.load()
+
+        # Allow these EDAGs to be signed
+        self.ctx.p2p.dagExchService.allowEDag(self.dagSeedsMain)
+        self.ctx.p2p.dagExchService.allowEDag(self.dagSeedsAll)
 
         self.dagUser.dagCidChanged.connect(self.onDagChange)
         ensure(self.publishDag(allowOffline=True, reschedule=True))

@@ -70,6 +70,7 @@ from .clipboard import iCopyCIDToClipboard
 from .clipboard import iCopyPathToClipboard
 from .clipboard import iCopyPubGwUrlToClipboard
 from .dialogs import MFSImportOptionsDialog
+from .dialogs import NewSeedDialog
 
 import aioipfs
 
@@ -395,6 +396,15 @@ class AddFilesAction(QWidgetAction):
         return btn
 
 
+class NewSeedAction(QWidgetAction):
+    def createWidget(self, parent):
+        btn = QToolButton(parent)
+        btn.setToolTip(iAddFiles())
+        btn.setIcon(getIcon('fileshare.png'))
+        btn.clicked.connect(lambda: self.trigger())
+        return btn
+
+
 class FileManager(QWidget):
     statusReady = 0
     statusBusy = 1
@@ -433,10 +443,16 @@ class FileManager(QWidget):
             self,
             tooltip=iRefresh()
         )
+        self.newSeedAction = FileManagerButtonAction(
+            getIcon('fileshare.png'),
+            self,
+            tooltip=iShareFiles()
+        )
 
         self.addFilesAction.triggered.connect(self.onAddFilesClicked)
         self.addDirectoryAction.triggered.connect(self.onAddDirClicked)
         self.refreshAction.triggered.connect(self.onRefreshClicked)
+        self.newSeedAction.triggered.connect(partialEnsure(self.onCreateSeed))
 
         self.fsCtrlToolBar.addAction(self.addFilesAction)
         self.fsCtrlToolBar.addAction(self.addDirectoryAction)
@@ -903,7 +919,7 @@ class FileManager(QWidget):
             elem.setEnabled(flag)
 
         if self.model and self.displayedItem is self.model.itemEncrypted:
-            self.ui.addDirectoryButton.setEnabled(False)
+            self.addDirectoryAction.setEnabled(False)
 
     def showCancel(self, show=True):
         self.ui.cancelButton.setVisible(show)
@@ -960,6 +976,9 @@ class FileManager(QWidget):
             self.displayedItem.offline = checked
 
         self.ui.offlineButton.setToolTip(iOfflineModeToolTip())
+
+    async def onCreateSeed(self, *a):
+        await runDialogAsync(NewSeedDialog)
 
     async def onClose(self):
         if not self.isBusy:
@@ -1135,6 +1154,7 @@ class FileManager(QWidget):
         nameItem = self.model.getNameItemFromIdx(idx)
         dataHash = self.model.getHashFromIdx(idx)
         ipfsPath = nameItem.ipfsPath
+        topParent = nameItem.topParent()
         menu = QMenu(self)
         actionsMenu = QMenu('Object', menu)
         actionsMenu.setIcon(getIcon('ipfs-logo-128-white.png'))
@@ -1265,6 +1285,12 @@ class FileManager(QWidget):
 
         # Delete/unlink
         menu.addSeparator()
+
+        if topParent and isinstance(topParent, MFSRootItem):
+            menu.addAction(
+                'Rename', functools.partial(
+                    self.renameFile, nameItem))
+
         menu.addAction(
             getIcon('clear-all.png'),
             iUnlinkFileOrDir(), partialEnsure(
@@ -1297,6 +1323,15 @@ class FileManager(QWidget):
         menu.addMenu(publishMenu)
 
         menu.exec(self.mfsTree.mapToGlobal(point))
+
+    @ipfsOp
+    async def seedObject(self, ipfsop, ipfsPath):
+        profile = ipfsop.ctx.currentProfile
+
+        await profile.dagSeedsMain.seed(
+            ipfsPath.basename,
+            [ipfsPath.objPath]
+        )
 
     @ipfsOp
     async def buildDidPublishMenu(self, ipfsop, menu, ipfsPath):
@@ -1590,6 +1625,39 @@ class FileManager(QWidget):
         self._importTask = self.app.task(
             self.addDirectory, path, options)
         self.ui.cancelButton.show()
+
+    def renameFile(self, item):
+        name = inputTextLong(
+            'Rename', 'Filename',
+            item.entry['Name']
+        )
+        if name:
+            ensure(self._renameFile(item, name))
+
+    @ipfsOp
+    async def _renameFile(self, ipfsop, item, name):
+        baseDir = os.path.dirname(item.path)
+        newPath = os.path.join(baseDir, name)
+
+        if await ipfsop.filesLookup(baseDir, name):
+            return await messageBoxAsync(
+                'A file with this name already exists')
+
+        if await ipfsop.filesMv(item.path, newPath):
+            # Purge from model
+            cid = item.entry['Hash']
+
+            if item.parentItem:
+                # Recursive CID purge
+                await item.parentItem.purgeCidRecursive(cid)
+            else:
+                await modelhelpers.modelDeleteAsync(
+                    self.model, cid,
+                    role=self.model.CidRole
+                )
+            self.updateTree()
+        else:
+            await messageBoxAsync('Could not rename file')
 
     async def scheduleUnlink(self, item, cid):
         reply = await questionBoxAsync(

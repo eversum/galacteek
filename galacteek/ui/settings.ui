@@ -367,6 +367,16 @@
               </property>
              </widget>
             </item>
+            <item row="9" column="0">
+             <widget class="QCheckBox" name="keepDaemonRunning">
+              <property name="toolTip">
+               <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Always keep the IPFS daemon running.&lt;/p&gt;&lt;p&gt;This ensures that your files are still accessible even when galacteek is not running.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+              </property>
+              <property name="text">
+               <string>Keep IPFS daemon running</string>
+              </property>
+             </widget>
+            </item>
            </layout>
           </widget>
          </item>

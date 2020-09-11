@@ -1,6 +1,7 @@
 SOURCES = galacteek/application.py \
 	galacteek/appsettings.py \
 	galacteek/ui/browser.py \
+	galacteek/ui/camera.py \
 	galacteek/ui/chat.py \
 	galacteek/ui/clipboard.py \
 	galacteek/ui/colors.py \
@@ -25,6 +26,7 @@ SOURCES = galacteek/application.py \
 	galacteek/ui/pyramids.py \
 	galacteek/ui/quickaccess.py \
 	galacteek/ui/resource.py \
+	galacteek/ui/seeds.py \
 	galacteek/ui/settings.py \
 	galacteek/ui/textedit.py \
 	galacteek/ui/userwebsite.py \
@@ -35,6 +37,9 @@ FORMS += galacteek/ui/addkeydialog.ui \
 	galacteek/ui/addfeeddialog.ui \
 	galacteek/ui/atomfeeds.ui \
 	galacteek/ui/browsertab.ui \
+	galacteek/ui/camera.ui \
+	galacteek/ui/chatchannelnew.ui \
+	galacteek/ui/chatchannelslist.ui \
 	galacteek/ui/chatroom.ui \
 	galacteek/ui/dagview.ui \
 	galacteek/ui/donatedialog.ui \
@@ -45,11 +50,15 @@ FORMS += galacteek/ui/addkeydialog.ui \
 	galacteek/ui/iptagsmanager.ui \
 	galacteek/ui/keys.ui\
 	galacteek/ui/mediaplaylist.ui \
+	galacteek/ui/mfsoptionsdialog.ui \
+	galacteek/ui/newseeddialog.ui \
 	galacteek/ui/profileeditdialog.ui \
 	galacteek/ui/peersmgr.ui \
 	galacteek/ui/batchpinlist.ui \
 	galacteek/ui/qschemecreatemapping.ui \
-	galacteek/ui/settings.ui
+	galacteek/ui/seeds.ui \
+	galacteek/ui/settings.ui \
+	galacteek/ui/timeframeselector.ui
 
 TRANSLATIONS = share/translations/galacteek_en.ts \
 		share/translations/galacteek_fr.ts \

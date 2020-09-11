@@ -17,6 +17,7 @@ from galacteek.ipfs.cidhelpers import IPFSPath
 
 
 from galacteek.database.models.core import *
+from galacteek.database.models.seeds import *
 
 databaseLock = asyncio.Lock()
 
@@ -413,3 +414,42 @@ async def ipnsFeedsNeedSync(minutes=10):
         (Q(resolvenext__lt=maxdate) | Q(resolvenext__isnull=True))
 
     return await IPNSFeed.filter(filter).order_by('-resolvedlast')
+
+
+async def seedAdd(cid: str):
+    seed = IPSeed(dagCid=cid)
+    await seed.save()
+    return seed
+
+
+async def seedGet(cid: str):
+    return await IPSeed.filter(dagCid=cid).first()
+
+
+async def seedDelete(cid: str):
+    try:
+        await IPSeed.filter(dagCid=cid).first().delete()
+        return True
+    except Exception:
+        return False
+
+
+async def seedGetObject(seed, objIdx: int):
+    return await IPSeedObject.filter(
+        seed__dagCid=seed.dagCid, objIndex=objIdx).first()
+
+
+async def seedConfigObject(seed, objIdx: int, pin=True, download=False):
+    obj = await seedGetObject(seed, objIdx)
+    if not obj:
+        obj = IPSeedObject(
+            seed=seed, objIndex=objIdx, pin=pin, download=download)
+        await obj.save()
+    else:
+        obj.pin = pin
+        obj.download = download
+        await obj.save()
+
+
+async def seedsAll():
+    return await IPSeed.all()

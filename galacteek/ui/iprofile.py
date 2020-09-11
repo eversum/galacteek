@@ -12,6 +12,8 @@ from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QDialog
 from PyQt5.QtWidgets import QToolButton
 from PyQt5.QtWidgets import QToolTip
+from PyQt5.QtWidgets import QActionGroup
+from PyQt5.QtWidgets import QAction
 
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtGui import QImage
@@ -92,6 +94,34 @@ class ProfileButton(PopupToolButton):
         self.sMenu.setToolTipsVisible(True)
         self.sMenu.setIcon(getIcon('ipservice.png'))
         self.menu.addMenu(self.sMenu)
+
+        self.setupStatusMenu()
+
+    def setupStatusMenu(self):
+        self.statusMenu = QMenu('Status', self.menu)
+        self.statusMenu.setIcon(getIcon('lifeline-arrow.png'))
+
+        self.pStatusGroup = QActionGroup(self)
+        self.pStatusGroup.triggered.connect(self.onStatusChanged)
+
+        for idx, status in enumerate(
+                ['Available', 'Sleeping', 'Busy', 'Away', 'In a meeting']):
+            action = QAction(status, self.pStatusGroup)
+            action.setCheckable(True)
+            if idx == 0:
+                action.setChecked(True)
+
+            self.pStatusGroup.addAction(action)
+
+        self.statusMenu.addActions(self.pStatusGroup.actions())
+        self.menu.addSeparator()
+        self.menu.addMenu(self.statusMenu)
+
+    def onStatusChanged(self, action):
+        if not self.curProfile:
+            return
+
+        self.curProfile._status = action.text()
 
     async def changeProfile(self, profile):
         self.curProfile = profile

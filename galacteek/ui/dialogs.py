@@ -1,4 +1,5 @@
 import aioipfs
+import os.path
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QDialog
@@ -13,8 +14,10 @@ from PyQt5.QtWidgets import QGridLayout
 from PyQt5.QtWidgets import QFormLayout
 from PyQt5.QtWidgets import QAbstractItemView
 from PyQt5.QtWidgets import QPushButton
+from PyQt5.QtWidgets import QToolButton
 from PyQt5.QtWidgets import QCheckBox
 from PyQt5.QtWidgets import QSpinBox
+from PyQt5.QtWidgets import QTreeWidgetItem
 
 from PyQt5.QtCore import QSize
 from PyQt5.QtCore import QFile
@@ -33,6 +36,7 @@ from PyQt5.QtGui import QRegExpValidator
 
 from galacteek import GALACTEEK_NAME
 from galacteek import ensure
+from galacteek import partialEnsure
 from galacteek import logUser
 from galacteek import database
 
@@ -42,6 +46,7 @@ from galacteek.core.iptags import ipTagsFormat
 from galacteek.ipfs import cidhelpers
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.wrappers import ipfsOp
+from galacteek.ipfs.cidhelpers import IPFSPath
 
 from . import ui_addhashmarkdialog
 from . import ui_addfeeddialog
@@ -50,6 +55,7 @@ from . import ui_donatedialog
 from . import ui_qschemecreatemapping
 from . import ui_iptagsmanager
 from . import ui_mfsoptionsdialog
+from . import ui_newseeddialog
 
 from .helpers import *
 from .widgets import ImageWidget
@@ -180,7 +186,7 @@ class AddHashmarkDialog(QDialog):
         title = self.ui.title.text()
 
         if len(title) == 0:
-            return messageBox(iNoTitleProvided())
+            return await messageBoxAsync(iNoTitleProvided())
 
         share = self.ui.share.isChecked()
         newCat = self.ui.newCategory.text()
@@ -1063,3 +1069,234 @@ class MFSImportOptionsDialog(QDialog):
 
     def reject(self):
         self.done(0)
+
+
+class NewSeedDialog(QDialog):
+    COL_NAME = 0
+    COL_PINREQ_MIN = 1
+    COL_PINREQ_TARGET = 2
+    COL_PINREQ_PATH = 3
+    COL_PINREQ_ACTIONS = 4
+
+    def __init__(self, parent=None):
+        super().__init__(parent, Qt.WindowStaysOnTopHint)
+        self.app = QApplication.instance()
+
+        self.ui = ui_newseeddialog.Ui_NewSeedDialog()
+        self.ui.setupUi(self)
+        self.iconSelector = IconSelector(self)
+
+        self.ui.gridLayout.addWidget(self.iconSelector, 2, 1, Qt.AlignCenter)
+
+        self.setMinimumWidth(
+            self.app.desktopGeometry.width() / 2
+        )
+
+        self.setAcceptDrops(True)
+
+        self.ui.files.setAcceptDrops(True)
+        self.ui.files.hideColumn(3)
+        self.ui.files.header().resizeSection(
+            0, self.width() / 3)
+        self.ui.buttonBox.accepted.connect(partialEnsure(self.addSeed))
+        self.ui.buttonBox.rejected.connect(lambda: self.done(1))
+
+        self.ui.labelDrop.setTextFormat(Qt.RichText)
+        self.ui.labelDrop.setText(
+            '<b>Drag-and-drop files below (or load from the clipboard)</b>')
+        self.ui.fromClipboardButton.clicked.connect(
+            self.onLoadFromClipboard)
+
+        self.ui.name.setValidator(
+            QRegExpValidator(QRegExp(r"[\w\-_()\[\]\s\.,]+"))
+        )
+
+    def onLoadFromClipboard(self):
+        from .clipboard import iClipboardEmpty
+
+        clipItem = self.app.clipTracker.current
+
+        if clipItem:
+            fileName = ''
+            if not clipItem.ipfsPath.isRoot:
+                fileName = clipItem.ipfsPath.basename
+
+            self.registerFile(
+                clipItem.ipfsPath,
+                fileName
+            )
+        else:
+            messageBox(iClipboardEmpty())
+
+    def dragEnterEvent(self, event):
+        event.accept()
+
+    def dropEvent(self, event):
+        event.accept()
+        mimeData = event.mimeData()
+
+        if mimeData is None:
+            return
+
+        mfsNameEnc = mimeData.data('ipfs/mfs-entry-name')
+
+        if mimeData.hasUrls():
+            url = mimeData.urls()[0]
+            if not url.isValid():
+                return
+
+            path = IPFSPath(url.toString())
+
+            if mfsNameEnc:
+                fileName = mfsNameEnc.data().decode()
+            else:
+                fileName = ''
+                if not path.isRoot:
+                    fileName = path.basename
+
+            self.registerFile(path, fileName)
+
+            if not self.ui.name.text():
+                _root, _ext = os.path.splitext(fileName)
+                self.ui.name.setText(_root)
+
+    def registerFile(self, path, fileName):
+        root = self.ui.files.invisibleRootItem()
+
+        item = QTreeWidgetItem([fileName, '', '', path.objPath])
+        item.setFlags(
+            Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable)
+        root.addChild(item)
+
+        pinReqMin = QSpinBox()
+        pinReqMin.setMinimum(5)
+        pinReqMin.setMaximum(10000)
+        pinReqMin.setValue(10)
+        pinReqMin.setSingleStep(5)
+        pinReqMin.setMaximumWidth(64)
+
+        pinReqTarget = QSpinBox()
+        pinReqTarget.setMinimum(10)
+        pinReqTarget.setMaximum(100000)
+        pinReqTarget.setValue(20)
+        pinReqTarget.setSingleStep(5)
+        pinReqTarget.setMaximumWidth(64)
+
+        def targetValChanged(pMin, pTarget, val):
+            if pTarget.value() < pMin.value():
+                pTarget.setValue(pMin.value())
+
+        def minValChanged(pMin, pTarget, val):
+            if pMin.value() > pTarget.value():
+                pMin.setValue(pTarget.value())
+
+        pinReqTarget.valueChanged.connect(
+            lambda val: targetValChanged(
+                pinReqMin, pinReqTarget, val))
+        pinReqMin.valueChanged.connect(
+            lambda val: minValChanged(
+                pinReqMin, pinReqTarget, val))
+
+        removeB = QToolButton()
+        removeB.setIcon(getIcon('cancel.png'))
+        removeB.clicked.connect(
+            lambda checked: root.removeChild(item))
+
+        self.ui.files.setItemWidget(item, 1, pinReqMin)
+        self.ui.files.setItemWidget(item, 2, pinReqTarget)
+        self.ui.files.setItemWidget(item, 4, removeB)
+        item.setToolTip(0, str(path))
+
+    @ipfsOp
+    async def addSeed(self, ipfsop, *a):
+        profile = ipfsop.ctx.currentProfile
+
+        seedName = self.ui.name.text()
+
+        if not seedName:
+            return await messageBoxAsync('Please specify a seed name')
+
+        root = self.ui.files.invisibleRootItem()
+        if root.childCount() == 0:
+            return await messageBoxAsync(
+                "You need to include at least one file/directory")
+
+        files = []
+        pRMins = []
+        pRTargets = []
+        aCount = 0
+        cumulSize = 0
+
+        self.setEnabled(False)
+
+        for cidx in range(0, root.childCount()):
+            item = root.child(cidx)
+            if not item:
+                continue
+
+            oname = item.data(0, Qt.DisplayRole)
+            opath = item.data(3, Qt.DisplayRole)
+            preqmin = self.ui.files.itemWidget(item, 1)
+            preqtarget = self.ui.files.itemWidget(item, 2)
+
+            if not IPFSPath(opath).valid:
+                continue
+
+            try:
+                mType, stat = await self.app.rscAnalyzer(
+                    opath)
+            except Exception:
+                continue
+
+            if not stat or not mType:
+                continue
+
+            # TODO
+            # pin request ranges
+
+            pMin = preqmin.value()
+            pTarget = preqtarget.value()
+
+            pRMins.append(pMin)
+            pRTargets.append(pTarget)
+
+            files.append({
+                'name': oname,
+                'path': opath,
+                'mimetype': str(mType),
+                'stat': stat,
+                'pinrequest': {
+                    'minprovs': pMin,
+                    'targetprovs': pTarget
+                },
+                'link': {
+                    '/': stat['Hash']
+                } if stat else None
+            })
+
+            aCount += 1
+            cumulSize += stat['CumulativeSize']
+            await ipfsop.sleep()
+
+        if aCount == 0:
+            self.setEnabled(True)
+            return await messageBoxAsync(
+                "Could not add any files")
+
+        try:
+            cid = await profile.dagSeedsMain.seed(
+                seedName, files,
+                description=self.ui.description.text(),
+                icon=self.iconSelector.iconCid,
+                cumulativeSize=cumulSize,
+                pinReqMin=min(pRMins),
+                pinReqTarget=round(sum(pRTargets) / len(pRTargets))
+            )
+        except Exception as err:
+            self.setEnabled(True)
+            await messageBoxAsync(f'Error creating seed object: {err}')
+        else:
+            self.done(1)
+
+            if cid:
+                await messageBoxAsync('Published seed !')

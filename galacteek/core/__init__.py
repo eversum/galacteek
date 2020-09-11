@@ -1,5 +1,6 @@
 import uuid
 import socket
+import re
 
 from datetime import datetime
 from datetime import timezone
@@ -40,6 +41,18 @@ def parseDate(date):
             return duparser.parse(date)
         except Exception:
             pass
+
+
+def validMimeType(mime):
+    if isinstance(mime, str):
+        # doesn't parse attributes
+        return re.match(r'^[\w-]{1,32}/[\w-]{1,256}$', mime)
+
+    return False
+
+
+def doubleUid4():
+    return str(uuid.uuid4()) + str(uuid.uuid4())
 
 
 def isoformat(dt, sep=' ', timespec='seconds'):

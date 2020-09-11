@@ -1,6 +1,7 @@
 import asyncio
 import os.path
 import aiorwlock
+from cachetools import TTLCache
 
 from async_generator import async_generator, yield_, yield_from_
 
@@ -18,6 +19,8 @@ from galacteek.core.asynclib import async_enterable
 from galacteek.core.jtraverse import traverseParser
 from galacteek.core import utcDatetimeIso
 
+from galacteek.core.asynccache import selfcachedcoromethod
+
 
 class DAGObj:
     def __init__(self, data):
@@ -25,6 +28,10 @@ class DAGObj:
 
 
 class DAGRewindException(Exception):
+    pass
+
+
+class DAGError(Exception):
     pass
 
 
@@ -42,6 +49,17 @@ class DAGEditor(object):
 
     async def __aexit__(self, *args):
         await self.dag.sync()
+
+
+class DeadEnd(object):
+    def __init__(self):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
 
 
 class DAGOperations:
@@ -71,8 +89,12 @@ class DAGOperations:
 
     @ipfsOp
     async def cat(self, op, path):
-        return await op.client.cat(
-            os.path.join(self.dagCid, path))
+        try:
+            return await op.client.cat(
+                os.path.join(self.dagCid, path))
+        except aioipfs.APIError as err:
+            self.debug(f'Cat error ({path}): {err.message}')
+            return None
 
     @ipfsOp
     async def list(self, op, path=''):
@@ -161,6 +183,22 @@ class DAGOperations:
 
         return await ipfsop.ldInline(await self.get())
 
+    @ipfsOp
+    async def expand(self, ipfsop):
+        """
+        Perform a JSON-LD expansion
+        """
+
+        try:
+            async with ipfsop.ldOps() as ld:
+                return await ld.expandDocument(await self.get(path=''))
+        except Exception as err:
+            self.debug('Error expanding document: {}'.format(
+                str(err)))
+
+    async def __aexit__(self, *args):
+        pass
+
     ipld = mkLink
 
 
@@ -173,7 +211,7 @@ class DAGPortal(QObject, DAGOperations):
     loaded = pyqtSignal(str)
 
     def __init__(self, dagCid=None, dagRoot=None, offline=False,
-                 parent=None, lock=None):
+                 parent=None, lock=None, timeoutLoad=10):
         super().__init__(parent)
         self._dagCid = dagCid
         self._dagRoot = dagRoot
@@ -181,6 +219,7 @@ class DAGPortal(QObject, DAGOperations):
         self.lock = lock if lock else asyncio.Lock()
         self.evLoaded = asyncio.Event()
         self.offline = offline
+        self.timeoutLoad = timeoutLoad
 
     @property
     def d(self):
@@ -223,8 +262,12 @@ class DAGPortal(QObject, DAGOperations):
         return asyncio.wait_for(self.evLoaded.wait(), timeout)
 
     @ipfsOp
-    async def load(self, op, timeout=10):
-        self._dagRoot = await op.waitFor(op.dagGet(self.dagCid), timeout)
+    async def load(self, op, timeout=None):
+        self._dagRoot = await op.waitFor(
+            op.dagGet(self.dagCid),
+            timeout if timeout else self.timeoutLoad
+        )
+
         if self.dagRoot:
             self.evLoaded.set()
             self.loaded.emit(self.dagCid)
@@ -246,7 +289,7 @@ class DAGPortal(QObject, DAGOperations):
         if self.dagRoot is None:
             await self.load()
             if self.dagRoot is None:
-                raise Exception('Cannot load dag')
+                raise DAGError('Cannot load dag')
 
         return self
 
@@ -276,19 +319,19 @@ class EvolvingDAG(QObject, DAGOperations):
     dagCidChanged = pyqtSignal(str)
     metadataEntryChanged = pyqtSignal()
 
-    dagUpdated = AsyncSignal(str)
-    available = AsyncSignal(object)
-
     keyCidLatest = 'cidlatest'
 
     def __init__(self, dagMetaMfsPath, dagMetaHistoryMax=12, offline=False,
                  unpinOnUpdate=False, autoPreviousNode=True,
-                 autoUpdateDates=False, loop=None):
+                 cipheredMeta=False,
+                 autoUpdateDates=False, loop=None,
+                 portalCacheTtl=60):
         super().__init__()
 
         self.loop = loop if loop else asyncio.get_event_loop()
         self.lock = aiorwlock.RWLock(loop=loop)
         self.loaded = asyncio.Future()
+        self.portalCache = TTLCache(1, portalCacheTtl)
 
         self._curMetaEntry = None
         self._dagRoot = None
@@ -300,6 +343,11 @@ class EvolvingDAG(QObject, DAGOperations):
         self._unpinOnUpdate = unpinOnUpdate
         self._autoPrevious = autoPreviousNode
         self._autoUpdateDates = autoUpdateDates
+        self._cipheredMeta = cipheredMeta
+
+        self.dagUpdated = AsyncSignal(str)
+        self.available = AsyncSignal(object)
+
         self.changed.connect(lambda: ensure(self.ipfsSave()))
 
     @property
@@ -353,7 +401,7 @@ class EvolvingDAG(QObject, DAGOperations):
         log.debug('EDAG ({meta}): {msg}'.format(
             meta=self.dagMetaMfsPath, msg=msg))
 
-    def initDag(self):
+    async def initDag(self, ipfsop):
         return {}
 
     def updateDagSchema(self, dag):
@@ -365,7 +413,11 @@ class EvolvingDAG(QObject, DAGOperations):
     @ipfsOp
     async def loadDag(self, op):
         self.debug('Loading DAG metadata file')
-        meta = await op.filesReadJsonObject(self.dagMetaMfsPath)
+
+        if self._cipheredMeta:
+            meta = await op.rsaAgent.decryptMfsJson(self.dagMetaMfsPath)
+        else:
+            meta = await op.filesReadJsonObject(self.dagMetaMfsPath)
 
         self.debug('Metadata is {}'.format(meta))
         if meta is not None:
@@ -393,7 +445,7 @@ class EvolvingDAG(QObject, DAGOperations):
                 self.keyCidLatest: None,
                 'history': []
             }
-            self._dagRoot = self.initDag()
+            self._dagRoot = await self.initDag(op)
             self.updateDagSchema(self.dagRoot)
             await self.ipfsSave()
             self.loaded.set_result(True)
@@ -453,8 +505,16 @@ class EvolvingDAG(QObject, DAGOperations):
     async def saveNewCid(self, ipfsop, cid):
         # Save the new CID and update the metadata
         self.dagCid = cid
-        await ipfsop.filesWriteJsonObject(self.dagMetaMfsPath,
-                                          self.dagMeta)
+
+        if self._cipheredMeta:
+            await ipfsop.rsaAgent.encryptJsonToMfs(
+                self.dagMeta,
+                self.dagMetaMfsPath
+            )
+
+        else:
+            await ipfsop.filesWriteJsonObject(self.dagMetaMfsPath,
+                                              self.dagMeta)
         entry = await ipfsop.filesStat(self.dagMetaMfsPath)
         if entry:
             self.curMetaEntry = entry
@@ -528,6 +588,15 @@ class EvolvingDAG(QObject, DAGOperations):
         """
         return DAGPortal(dagCid=self.dagCid, dagRoot=self.dagRoot,
                          lock=self.rLock)
+
+    @async_enterable
+    @selfcachedcoromethod('portalCache')
+    async def portalToPath(self, path, dagClass=DAGPortal):
+        resolved = await self.resolve(path=path)
+        if resolved:
+            return dagClass(dagCid=resolved)
+        else:
+            raise DAGError(f'Cannot find {path} in DAG {self.dagCid}')
 
     @async_enterable
     async def portal(self):

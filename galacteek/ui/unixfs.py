@@ -268,7 +268,7 @@ class IPFSDirectoryListView(QListView):
         self.setSpacing(5)
         self.setUniformItemSizes(True)
         self.viewModeList()
-        self.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.setDragDropMode(QAbstractItemView.DragOnly)
         self.setDragEnabled(True)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -653,9 +653,10 @@ class IPFSHashExplorerWidget(QWidget):
         selModel = self.dirListView.selectionModel()
         rows = selModel.selectedRows()
 
-        if len(rows) == 0:
-            return
+        if len(rows) == 1:
+            return self.singleContextMenu(point, rows)
 
+    def singleContextMenu(self, point, rows):
         item = self.model.getUnixFSEntryInfoFromIdx(rows.pop())
         menu = QMenu(self)
 

@@ -138,9 +138,9 @@ class WebsiteAddPostTab(GalacteekTab):
         self.title.setAlignment(Qt.AlignCenter)
         self.title.textEdited.connect(self.onTitleEdited)
 
-        regexp = QRegExp(r"[\w_-\s.,\"']+")
+        regexp = QRegExp(r"[\w_-\s.,:;\"'?]+")
         self.title.setValidator(QRegExpValidator(regexp))
-        self.title.setMaxLength(92)
+        self.title.setMaxLength(128)
 
         titleLayout = QHBoxLayout()
         titleLayout.setSpacing(64)

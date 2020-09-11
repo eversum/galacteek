@@ -1,7 +1,10 @@
 import json
+import orjson
+import base64
 from io import BytesIO
 
 from galacteek.ipfs.wrappers import ipfsOp
+from galacteek.ipfs.cidhelpers import cidValid
 from galacteek.core.asynclib import asyncReadFile
 from galacteek import log
 
@@ -20,10 +23,27 @@ class IpfsRSAAgent:
     def __init__(self, rsaExecutor, pubKeyPem, privKeyPath):
         self.rsaExec = rsaExecutor
         self.pubKeyPem = pubKeyPem
+        self._pubKeyCidCached = None
         self.privKeyPath = privKeyPath
 
     def debug(self, msg):
         log.debug('RSA Agent: {0}'.format(msg))
+
+    @property
+    def pubKeyCidCached(self):
+        return self._pubKeyCidCached
+
+    @ipfsOp
+    async def pubKeyCid(self, ipfsop):
+        if self.pubKeyCidCached and cidValid(self.pubKeyCidCached):
+            return self.pubKeyCidCached
+
+        try:
+            entry = await ipfsop.addBytes(self.pubKeyPem)
+            self._pubKeyCidCached = entry['Hash']
+            return self.pubKeyCidCached
+        except Exception as err:
+            self.debug(f'Cannot import pubkey: {err}')
 
     async def encrypt(self, data, pubKey):
         return await self.rsaExec.encryptData(
@@ -75,6 +95,15 @@ class IpfsRSAAgent:
             self.debug('IPFS error {}'.format(err.message))
 
     @ipfsOp
+    async def encryptJsonToMfs(self, op, obj, mfsPath):
+        try:
+            return await self.encryptToMfs(
+                orjson.dumps(obj), mfsPath
+            )
+        except aioipfs.APIError as err:
+            self.debug('IPFS error {}'.format(err.message))
+
+    @ipfsOp
     async def decryptIpfsObject(self, op, data):
         privKey = await self.__rsaReadPrivateKey()
         try:
@@ -114,6 +143,29 @@ class IpfsRSAAgent:
     async def pssSign(self, op, message):
         return await self.rsaExec.pssSign(
             message, await self.__rsaReadPrivateKey())
+
+    @ipfsOp
+    async def pssSignImport(self, op, message, pin=False):
+        signed = await self.rsaExec.pssSign(
+            message, await self.__rsaReadPrivateKey())
+
+        if signed:
+            try:
+                entry = await op.addBytes(signed, pin=pin)
+                return entry['Hash']
+            except Exception:
+                return None
+
+    @ipfsOp
+    async def pssSign64(self, op, message):
+        """
+        :rtype: str
+        """
+
+        signed = await self.pssSign(message)
+
+        if isinstance(signed, bytes):
+            return base64.b64encode(signed).decode()
 
     async def __rsaReadPrivateKey(self):
         return await asyncReadFile(self.privKeyPath)

@@ -249,7 +249,13 @@ class DAGViewer(GalacteekTab):
                     dictItem.setExpanded(True)
                 else:
                     dictItem = QTreeWidgetItem(item)
-                    dictItem.setText(0, dkey)
+                    if len(dkey) > 32:
+                        dictItem.setText(0, dkey[0:32] + ' ....')
+                    else:
+                        dictItem.setText(0, dkey)
+
+                    dictItem.setToolTip(0, dkey)
+
                     dictItem.setExpanded(True)
 
                     if isinstance(dval, str):

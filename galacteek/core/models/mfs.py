@@ -67,11 +67,66 @@ class MFSItem(UneditableItem):
     def hasCid(self, cid):
         return cid in self._cidCache
 
+    def cidCacheClear(self):
+        self._cidCache.clear()
+
     def purgeCid(self, cid):
         try:
             self._cidCache.remove(cid)
         except Exception:
             pass
+
+    def topParent(self):
+        try:
+            parent = self
+            prev = None
+
+            while parent:
+                prev = parent
+                parent = parent.parentItem
+
+            return prev
+        except Exception:
+            return None
+
+    async def purgeCidRecursive(self, cid):
+        """
+        Purge a CID from the model. Look for the top-parent
+        item in the model (MFSRootItem) and from this item,
+        purge the CID of the folder we gotta purge
+
+        This is used when renaming a file inside the MFS.
+        """
+
+        try:
+            self.purgeCid(cid)
+
+            await modelDeleteAsync(
+                self.model(), cid,
+                role=self.model().CidRole
+            )
+
+            parent = self
+            prev = None
+
+            while parent:
+                if isinstance(parent, MFSRootItem):
+                    # We hit the floor
+
+                    if prev:
+                        parent.purgeCid(prev.cidString)
+
+                        await modelDeleteAsync(
+                            self.model(), prev.cidString,
+                            role=self.model().CidRole
+                        )
+                    break
+                else:
+                    parent.cidCacheClear()
+                    prev = parent
+                    parent = parent.parentItem
+        except Exception as err:
+            print(str(err))
 
     def storeEntry(self, nameItem, sizeItem):
         if nameItem.cidString:
@@ -374,6 +429,11 @@ class MFSItemModel(QStandardItemModel):
 
             if nameItem:
                 mimedata.setUrls([nameItem.qIpfsUrl])
+
+                # Inventing MIME types
+                mimedata.setData(
+                    'ipfs/mfs-entry-name',
+                    nameItem.text().encode())
                 break
 
         return mimedata

@@ -20,6 +20,12 @@
       <layout class="QHBoxLayout" name="horizontalLayout_2">
        <item>
         <widget class="QTextBrowser" name="chatLog">
+         <property name="font">
+          <font>
+           <family>Helvetica</family>
+           <pointsize>18</pointsize>
+          </font>
+         </property>
          <property name="focusPolicy">
           <enum>Qt::NoFocus</enum>
          </property>

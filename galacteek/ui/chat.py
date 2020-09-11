@@ -8,12 +8,12 @@ from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWidgets import QDialog
 from PyQt5.QtWidgets import QToolButton
 
-from PyQt5.QtGui import QTextCursor
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QObject
 from PyQt5.QtCore import QSortFilterProxyModel
 from PyQt5.QtCore import QRegExp
 
+from PyQt5.QtGui import QTextCursor
 from PyQt5.QtGui import QStandardItemModel
 from PyQt5.QtGui import QRegExpValidator
 from PyQt5.QtGui import QStandardItem
@@ -67,7 +67,7 @@ class ChatChannels(QObject):
         dagChannels.register(channel)
 
     @ipfsOp
-    async def joinChannel(self, ipfsop, channel):
+    async def joinChannel(self, ipfsop, channel, chanSticky=False):
         topic = chatChannelTopic(channel)
         service = ipfsop.ctx.pubsub.byTopic(topic)
 
@@ -86,7 +86,9 @@ class ChatChannels(QObject):
         w = self.channelWidgets.get(channel)
         if not w:
             self.channelWidgets[channel] = w = ChatRoomWidget(
-                channel, service, self.app.mainWindow)
+                channel, service, self.app.mainWindow,
+                sticky=chanSticky
+            )
 
         ensure(w.startHeartbeatTask())
         ensureLater(1, w.sendStatusJoin)
@@ -251,8 +253,8 @@ class ParticipantsModel(QStandardItemModel):
 
 
 class ChatRoomWidget(GalacteekTab):
-    def __init__(self, channel, psService, gWindow):
-        super(ChatRoomWidget, self).__init__(gWindow)
+    def __init__(self, channel, psService, gWindow, sticky=False):
+        super(ChatRoomWidget, self).__init__(gWindow, sticky=sticky)
 
         self.lock = asyncio.Lock()
 

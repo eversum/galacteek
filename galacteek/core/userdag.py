@@ -58,7 +58,7 @@ class UserDAG(EvolvingDAG):
 
         return changed
 
-    def initDag(self):
+    async def initDag(self, ipfsop):
         return {
             'index.html': 'Blank',
             'media': {

@@ -1428,10 +1428,10 @@ class EDAGBuildingPyramidController(MultihashPyramidToolButton):
 
         profile = ipfsop.ctx.currentProfile
         self.edagMetaPath = profile.edagPyramidMetadataPath(self.pyramid.uuid)
-        await self.initDag()
+        await self.initializeDag()
 
     @ipfsOp
-    async def initDag(self, ipfsop):
+    async def initializeDag(self, ipfsop):
         self.debug('Loading EDAG from MFS metadata: {}'.format(
             self.edagMetaPath))
 
@@ -1439,7 +1439,7 @@ class EDAGBuildingPyramidController(MultihashPyramidToolButton):
         ensure(self.edag.load())
         await self.edag.loaded
 
-        await self.initDagExtra(self.edag)
+        await self.initializeDagExtra(self.edag)
 
         self.edag.dagCidChanged.connect(self.onPyramidDagCidChanged)
 
@@ -1448,7 +1448,7 @@ class EDAGBuildingPyramidController(MultihashPyramidToolButton):
             self.pyramidion = mark
 
     @ipfsOp
-    async def initDagExtra(self, ipfsop, edag):
+    async def initializeDagExtra(self, ipfsop, edag):
         pass
 
     def onPyramidDagCidChanged(self, cidStr):
@@ -1600,7 +1600,7 @@ class GalleryPyramidController(EDAGBuildingPyramidController):
                 objPath, minWebProfile='ipfs'))
 
     @ipfsOp
-    async def initDagExtra(self, ipfsop, edag):
+    async def initializeDagExtra(self, ipfsop, edag):
         if 'index.html' not in edag.root:
             entry = await ipfsRender(self.app.jinjaEnv,
                                      'imggallery/gallery-dag.html',

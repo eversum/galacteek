@@ -4,8 +4,13 @@ import asyncio
 import re
 import json
 import signal
+import aioipfs
+import aiofiles
+import orjson
+import psutil
 
 from galacteek import log
+from galacteek.core import utcDatetimeIso
 
 
 def boolarg(arg):
@@ -130,6 +135,7 @@ class AsyncIPFSDaemon(object):
     """
 
     def __init__(self, repopath, goIpfsPath='ipfs',
+                 statusPath=None,
                  apiport=DEFAULT_APIPORT,
                  swarmport=DEFAULT_SWARMPORT,
                  swarmportQuic=DEFAULT_SWARMPORT,
@@ -140,6 +146,7 @@ class AsyncIPFSDaemon(object):
                  pubsubRouter='floodsub', namesysPubsub=False,
                  pubsubSigning=False, offline=False,
                  fileStore=False,
+                 detached=True, autoRestart=True,
                  p2pStreams=True, migrateRepo=False, routingMode='dht',
                  gwWritable=False, storageMax=20, debug=False, loop=None):
 
@@ -147,6 +154,9 @@ class AsyncIPFSDaemon(object):
         self.exitFuture = asyncio.Future(loop=self.loop)
         self.startedFuture = asyncio.Future(loop=self.loop)
         self.repopath = repopath
+        self.statusPath = statusPath
+        self.detached = detached
+        self.autoRestart = autoRestart
         self.goIpfsPath = goIpfsPath
         self.apiport = apiport
         self.gatewayport = gatewayport
@@ -173,6 +183,21 @@ class AsyncIPFSDaemon(object):
         self.debug = debug
 
         self._procPid = None
+        self._process = None
+        self.daemonClient = self.client()
+
+    @property
+    def process(self):
+        return self._process
+
+    @process.setter
+    def process(self, p):
+        if p:
+            log.debug(f'go-ipfs process changed, PID: {p.pid}')
+        else:
+            log.debug('go-ipfs process reset')
+
+        self._process = p
 
     @property
     def pid(self):
@@ -301,18 +326,140 @@ class AsyncIPFSDaemon(object):
         if self.offline:
             args.append('--offline')
 
-        f = self.loop.subprocess_exec(
-            lambda: IPFSDProtocol(self.loop, self.exitFuture,
-                                  self.startedFuture,
-                                  debug=self.debug),
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE)
+        pCreationFlags = 0
+
+        if self.detached:
+            f = self.loop.subprocess_exec(
+                lambda: IPFSDProtocol(self.loop, self.exitFuture,
+                                      self.startedFuture,
+                                      debug=self.debug),
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                start_new_session=True,
+                close_fds=False,
+                creationflags=pCreationFlags)
+        else:
+            f = self.loop.subprocess_exec(
+                lambda: IPFSDProtocol(self.loop, self.exitFuture,
+                                      self.startedFuture,
+                                      debug=self.debug),
+                *args,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                creationflags=pCreationFlags)
+
         self.transport, self.proto = await f
 
         self._procPid = self.transport.get_pid()
-        self.setProcLimits(self.pid, nice=self.nice)
+        self.process = psutil.Process(self._procPid)
+        self.setProcLimits(self.process, nice=self.nice)
         return True
+
+    async def watchProcess(self):
+        while True:
+            await asyncio.sleep(30)
+
+            try:
+                status = self.process.status()
+                log.debug(f'go-ipfs (PID: {self.process.pid}): '
+                          f'status: {status}')
+            except psutil.NoSuchProcess as err:
+                log.debug(f'go-ipfs (PID: {self.process.pid}): '
+                          f'NoSuchProcess error: {err}')
+
+                if self.autoRestart is True:
+                    log.debug(f'go-ipfs (PID: {self.process.pid}): '
+                              'Restarting!')
+                    self._procPid = None
+                    self.process = None
+                    await self.start()
+                    await asyncio.sleep(10)
+            except Exception as err:
+                if not self.process:
+                    # Understandable ..
+                    # We could be in the process of restarting
+                    continue
+                else:
+                    log.debug(f'go-ipfs (PID: {self.process.pid}): '
+                              f'Unknown error: {err}')
+                    continue
+            else:
+                if status in [
+                        psutil.STATUS_STOPPED,
+                        psutil.STATUS_ZOMBIE,
+                        psutil.STATUS_DEAD]:
+                    log.debug(f'go-ipfs (PID: {self.process.pid}): '
+                              f'seems to be stopped ?')
+                    if self.autoRestart is True:
+                        self._procPid = None
+                        self.process = None
+                        await self.start()
+                        await asyncio.sleep(10)
+
+            await self.writeStatus()
+
+    async def writeStatus(self):
+        client = self.daemonClient
+
+        try:
+            ident = await client.core.id()
+
+            if self.process and ident:
+                # Remember orjson.dumps returns bytes
+
+                async with aiofiles.open(self.statusPath, 'w+b') as fd:
+                    await fd.write(orjson.dumps({
+                        'ident': ident,
+                        'pid': self.process.pid,
+                        'status': self.process.status(),
+                        'date': utcDatetimeIso()
+                    }))
+
+                return True
+            else:
+                raise Exception(
+                    "Could not get ident, what's going on ?")
+        except aioipfs.APIError:
+            return False
+        except Exception as e:
+            log.debug(f'Status write error: {e}, postponing')
+            return False
+
+    def client(self):
+        return aioipfs.AsyncIPFS(host='127.0.0.1',
+                                 port=self.apiport, loop=self.loop)
+
+    async def loadStatus(self):
+        client = self.daemonClient
+        try:
+            async with aiofiles.open(self.statusPath, 'r') as fd:
+                status = orjson.loads(await fd.read())
+                assert 'ident' in status
+                assert 'pid' in status
+
+            proc = psutil.Process(status['pid'])
+
+            if proc.status() in [
+                    psutil.STATUS_RUNNING,
+                    psutil.STATUS_SLEEPING]:
+                ident = await client.core.id()
+                assert ident['ID'] == status['ident']['ID']
+
+                self._procPid = proc.pid
+                self.process = proc
+                return True, client
+            else:
+                return False, None
+        except aioipfs.APIError as e:
+            log.debug(f'Error loading status: {e.message}')
+            return False, None
+        except psutil.NoSuchProcess:
+            log.debug('Process is gone')
+            return False, None
+        except Exception:
+            log.debug('Error loading status')
+            return False, None
 
     async def ipfsConfig(self, param, value):
         return await ipfsConfig(self.goIpfsPath, param, value)
@@ -352,20 +499,13 @@ class AsyncIPFSDaemon(object):
             json.dumps(pList)
         )
 
-    def setProcLimits(self, pid, nice=20):
-        try:
-            import psutil
-        except ImportError:
-            return
-
-        log.debug('Applying limits to process: {pid}'.format(pid=pid))
+    def setProcLimits(self, process, nice=20):
+        log.debug(f'Applying limits to process: {process.pid}')
 
         try:
-            proc = psutil.Process(pid)
-            proc.nice(nice)
+            process.nice(nice)
         except Exception:
-            log.debug('Could not apply limits to process {pid}'.format(
-                pid=pid))
+            log.debug(f'Could not apply limits to process {process.pid}')
 
     def stop(self):
         log.debug('Stopping IPFS daemon')

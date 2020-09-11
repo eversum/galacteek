@@ -15,6 +15,7 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QObject
 from PyQt5.QtCore import QEvent
+from PyQt5.QtCore import QSize
 
 from galacteek.ui.peers import PeersManager
 from galacteek import partialEnsure
@@ -25,6 +26,7 @@ from galacteek.ui import ipfssearch
 from galacteek.ui import textedit
 from galacteek.ui import mediaplayer
 from galacteek.ui import pin
+from galacteek.ui import seeds
 
 from galacteek.ui.helpers import getIcon
 from galacteek.ui.helpers import getPlanetIcon
@@ -61,6 +63,7 @@ class MainTabBar(QTabBar):
         self.setAcceptDrops(True)
         self.setObjectName('wsTabBar')
         self.tabWidget = parent
+        self.setIconSize(QSize(24, 24))
 
     def dragEnterEvent(self, event):
         event.accept()
@@ -143,7 +146,26 @@ WS_MISC = 'misc'
 
 
 class BaseWorkspace(QWidget):
+    def __init__(self, stack,
+                 name,
+                 description=None,
+                 section='default',
+                 icon=None,
+                 acceptsDrops=False):
+        super().__init__(parent=stack)
+
+        self.acceptsDrops = acceptsDrops
+
+        self.wsName = name
+        self.wsDescription = description
+        self.wsSection = section
+        self.wsAttached = False
+        self.defaultAction = None
+
     def setupWorkspace(self):
+        pass
+
+    async def handleObjectDrop(self, ipfsPath):
         pass
 
 
@@ -152,14 +174,13 @@ class TabbedWorkspace(BaseWorkspace):
                  name,
                  description=None,
                  section='default',
-                 icon=None):
-        super().__init__(parent=stack)
-
-        self.wsName = name
-        self.wsDescription = description
-        self.wsSection = section
-        self.wsAttached = False
-        self.defaultAction = None
+                 icon=None,
+                 acceptsDrops=False):
+        super(TabbedWorkspace, self).__init__(
+            stack, name, description=description,
+            section=section, icon=icon,
+            acceptsDrops=acceptsDrops
+        )
 
         self.wsTagRules = []
         self.wsActions = {}
@@ -382,18 +403,26 @@ class WorkspaceFiles(TabbedWorkspace):
             fileManager=fileManager
         )
 
+        self.seedsTab = seeds.SeedsTrackerTab(self.app.mainWindow)
+
         icon = getIcon('folder-open.png')
 
         self.wsRegisterTab(self.fileManagerTab, iFileManager(), icon)
+        self.wsRegisterTab(self.seedsTab, iFileSharing(),
+                           getIcon('fileshare.png'))
 
         self.wsAddAction(fileManager.addFilesAction)
         self.wsAddAction(fileManager.addDirectoryAction)
+        self.wsAddAction(fileManager.newSeedAction)
 
         self.actionGc = self.wsAddCustomAction(
             'gc', getIcon('clear-all.png'),
             iGarbageCollectRun(),
             partialEnsure(self.onRunGC)
         )
+
+    async def seedsSetup(self):
+        await self.seedsTab.loadSeeds()
 
     async def onRunGC(self):
         tab = self.wsFindTabWithId('gcrunner')
@@ -421,7 +450,8 @@ class WorkspaceFiles(TabbedWorkspace):
 class WorkspaceMultimedia(TabbedWorkspace):
     def __init__(self, stack):
         super().__init__(stack, WS_MULTIMEDIA, icon=getIcon('multimedia.png'),
-                         description='Multimedia')
+                         description='Multimedia',
+                         acceptsDrops=True)
 
     def setupWorkspace(self):
         super().setupWorkspace()
@@ -446,6 +476,10 @@ class WorkspaceMultimedia(TabbedWorkspace):
 
     def onAddMplayerTab(self):
         return self.mPlayerTab()
+
+    async def handleObjectDrop(self, ipfsPath):
+        tab = self.mPlayerTab()
+        tab.queueFromPath(ipfsPath.objPath)
 
 
 class WorkspaceSearch(TabbedWorkspace):
@@ -522,9 +556,15 @@ class WorkspacePeers(TabbedWorkspace):
                          description='Network')
 
     def setupWorkspace(self):
+        from galacteek.ui import chat
+
         super().setupWorkspace()
 
         pMgrTab = PeersManager(self.app.mainWindow, self.app.peersTracker)
+
+        # Chat center button
+        self.chatCenterButton = chat.ChatCenterButton(
+            parent=self.toolBarActions)
 
         self.wsRegisterTab(
             pMgrTab, iPeers(),
@@ -534,7 +574,7 @@ class WorkspacePeers(TabbedWorkspace):
         self.atomFeedsViewWidget = AtomFeedsView(self.app.modelAtomFeeds)
 
         self.wsAddWidget(self.app.mainWindow.atomButton)
-        self.wsAddWidget(self.app.mainWindow.chatCenterButton)
+        self.wsAddWidget(self.chatCenterButton)
 
     def onShowAtomFeeds(self):
         name = iAtomFeeds()
@@ -546,6 +586,17 @@ class WorkspacePeers(TabbedWorkspace):
         tab = AtomFeedsViewTab(self, view=self.atomFeedsViewWidget)
         self.wsRegisterTab(tab, name,
                            getIcon('atom-feed.png'), current=True)
+
+    async def chatJoinDefault(self):
+        chanWidget = await self.chatCenterButton.chans.joinChannel(
+            '#galacteek', chanSticky=False)
+
+        self.wsRegisterTab(
+            chanWidget,
+            '#galacteek',
+            icon=getIcon('qta:mdi.chat-outline'),
+            current=False
+        )
 
 
 class WorkspaceMisc(TabbedWorkspace):

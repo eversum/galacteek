@@ -321,8 +321,8 @@ class AtomFeedsDatabase(QObject):
                     if path.valid:
                         log.debug('Atom: autopinning {id}'.format(
                             id=entry.id))
-                        ensure(
-                            ipfsop.ctx.pin(path.objPath, qname='atom')
+                        ensure(ipfsop.pin(
+                            path.objPath, recursive=False, timeout=20)
                         )
             else:
                 for exent in entries:

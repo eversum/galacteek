@@ -26,6 +26,9 @@ class AsyncSignal(UserList):
         return '<AsyncSignal({id}): signature: {!r}>'.format(
             list(self._sig), id='no id')
 
+    def count(self):
+        return len(self)
+
     def disconnect(self, cbk):
         try:
             for receiver in self:

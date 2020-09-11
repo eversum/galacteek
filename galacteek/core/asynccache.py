@@ -73,3 +73,27 @@ def cachedcoromethod(cache, key=keys.hashkey):
         return wraps(method)(wrapper)
 
     return decorator
+
+
+def selfcachedcoromethod(cachename, key=keys.hashkey):
+    def decorator(method):
+        async def wrapper(self, *args, **kwargs):
+            cache = getattr(self, cachename, LRUCache(16))
+            k = key(*args, **kwargs)
+            try:
+                return cache[k]
+            except KeyError:
+                pass
+
+            value = await method(self, *args, **kwargs)
+
+            try:
+                cache[k] = value
+            except ValueError:
+                pass
+
+            return value
+
+        return wraps(method)(wrapper)
+
+    return decorator

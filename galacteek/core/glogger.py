@@ -28,6 +28,8 @@ class ColorizedHandler(ColorizedStderrHandler):
             return 'darkred'
         elif record.module.startswith('galacteek.core'):
             return 'red'
+        elif record.module.startswith('galacteek.crypto'):
+            return 'green'
         elif record.module.startswith('galacteek.ipfs'):
             return 'turquoise'
         elif record.module.startswith('galacteek.did'):

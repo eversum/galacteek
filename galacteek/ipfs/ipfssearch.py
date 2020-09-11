@@ -1,4 +1,3 @@
-from urllib.parse import quote
 
 from galacteek import log
 
@@ -43,8 +42,8 @@ async def searchPage(query, page, filters={}, sslverify=True):
     }
 
     for fkey, fvalue in filters.items():
-        params['q'] += quote(' {fkey}:{fvalue}'.format(
-            fkey=fkey, fvalue=fvalue))
+        params['q'] += ' {fkey}:{fvalue}'.format(
+            fkey=fkey, fvalue=fvalue)
 
     async with aiohttp.ClientSession() as session:
         async with session.get('https://{host}/v1/search'.format(

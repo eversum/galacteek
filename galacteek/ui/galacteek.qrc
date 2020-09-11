@@ -51,6 +51,7 @@
     <file>../../share/icons/pyramid-hierarchy.png</file>
     <file>../../share/icons/pyramid-orange.png</file>
     <file>../../share/icons/sweethome.png</file>
+    <file>../../share/icons/lifeline-arrow.png</file>
     <file>../../share/icons/text-editor.png</file>
     <file>../../share/icons/mimetypes/ipfs-dag-pb.png</file>
     <file>../../share/icons/save-file.png</file>
@@ -74,6 +75,7 @@
     <file>../../share/icons/mimetypes/unknown.png</file>
     <file>../../share/icons/mimetypes/video-x-generic.png</file>
     <file>../../share/icons/mimetypes/image-x-generic.png</file>
+    <file>../../share/icons/mimetypes/image-png.png</file>
     <file>../../share/icons/mimetypes/inode-directory.png</file>
     <file>../../share/icons/mimetypes/application-pdf.png</file>
     <file>../../share/icons/mimetypes/application-wasm.png</file>
@@ -147,6 +149,7 @@
     <file>../../share/icons/galacteek.png</file>
     <file>../../share/icons/hashmark-black.png</file>
     <file>../../share/icons/peers.png</file>
+    <file>../../share/icons/fileshare.png</file>
     <file>../../share/icons/ipfs-cube-64.png</file>
     <file>../../share/icons/unknown-file.png</file>
     <file>../../share/icons/expand.png</file>

@@ -15,6 +15,7 @@ import async_timeout
 import time
 import aiojobs
 import shutil
+import signal
 from pathlib import Path
 from filelock import FileLock
 
@@ -112,38 +113,6 @@ from galacteek.core.ipfsmarks import IPFSMarks
 from yarl import URL
 
 import aioipfs
-
-# IPFS daemon messages
-
-
-def iIpfsDaemonStarted():
-    return QCoreApplication.translate('Galacteek', 'IPFS daemon started')
-
-
-def iIpfsDaemonGwStarted():
-    return QCoreApplication.translate('Galacteek',
-                                      "IPFS daemon's gateway started")
-
-
-def iIpfsDaemonReady():
-    return QCoreApplication.translate('Galacteek', 'IPFS daemon is ready')
-
-
-def iIpfsDaemonProblem():
-    return QCoreApplication.translate('Galacteek',
-                                      'Problem starting IPFS daemon')
-
-
-def iIpfsDaemonInitProblem():
-    return QCoreApplication.translate(
-        'Galacteek',
-        'Problem initializing the IPFS daemon (check the ports configuration)')
-
-
-def iIpfsDaemonWaiting(count):
-    return QCoreApplication.translate(
-        'Galacteek',
-        'IPFS daemon: waiting for connection (try {0})'.format(count))
 
 
 def ipfsVersion():
@@ -678,10 +647,13 @@ class GalacteekApplication(QApplication):
                 self.getIpfsOperator(), *args, **kw))
 
     def getIpfsOperator(self):
-        """ Returns a new IPFSOperator with the currently active IPFS client"""
-        return IPFSOperator(self.ipfsClient, ctx=self.ipfsCtx,
-                            debug=self.debugEnabled,
-                            nsCachePath=self.nsCacheLocation)
+        """
+        Returns a new GalacteekOperator with the currently
+        active IPFS client
+        """
+        return GalacteekOperator(self.ipfsClient, ctx=self.ipfsCtx,
+                                 debug=self.debugEnabled,
+                                 nsCachePath=self.nsCacheLocation)
 
     def getIpfsConnectionParams(self):
         mgr = self.settingsMgr
@@ -707,12 +679,14 @@ class GalacteekApplication(QApplication):
         rpcUrl = mgr.getSetting(CFG_SECTION_ETHEREUM, CFG_KEY_RPCURL)
         return EthereumConnectionParams(rpcUrl, provType=provType)
 
-    async def updateIpfsClient(self):
+    async def updateIpfsClient(self, client=None):
         from galacteek.ipfs import ConnectionError
 
-        connParams = self.getIpfsConnectionParams()
-        client = aioipfs.AsyncIPFS(host=connParams.host,
-                                   port=connParams.apiPort, loop=self.loop)
+        if not client:
+            connParams = self.getIpfsConnectionParams()
+            client = aioipfs.AsyncIPFS(host=connParams.host,
+                                       port=connParams.apiPort, loop=self.loop)
+
         self.ipfsClient = client
         self.ipfsCtx.ipfsClient = client
         self.ipfsOpMain = self.getIpfsOperator()
@@ -872,8 +846,19 @@ class GalacteekApplication(QApplication):
 
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
 
+        loop.add_signal_handler(
+            signal.SIGINT,
+            functools.partial(self.signalHandler, 'SIGINT'),
+        )
+
         self.loop = loop
         return loop
+
+    def signalHandler(self, signame):
+        self.debug(f'Handling signal: {signame}')
+
+        if signame == 'SIGINT':
+            ensure(self.exitApp())
 
     def task(self, fn, *args, **kw):
         return self.loop.create_task(fn(*args, **kw))
@@ -916,6 +901,8 @@ class GalacteekApplication(QApplication):
 
         self._ipfsBinLocation = os.path.join(qtDataLocation, 'ipfs-bin')
         self._ipfsDataLocation = os.path.join(self.dataLocation, 'ipfs')
+        self._ipfsdStatusLocation = os.path.join(
+            self.dataLocation, 'ipfsd.status')
         self._orbitDataLocation = os.path.join(self.dataLocation, 'orbitdb')
         self._mHashDbLocation = os.path.join(self.dataLocation, 'mhashmetadb')
         self._sqliteDbLocation = os.path.join(self.dataLocation, 'db.sqlite')
@@ -990,6 +977,7 @@ class GalacteekApplication(QApplication):
 
         self._ipfsd = asyncipfsd.AsyncIPFSDaemon(
             self.ipfsDataLocation, goIpfsPath=goIpfsPath,
+            statusPath=self._ipfsdStatusLocation,
             apiport=sManager.getInt(section, CFG_KEY_APIPORT),
             swarmport=sManager.getInt(section, CFG_KEY_SWARMPORT),
             swarmportQuic=sManager.getInt(section, CFG_KEY_SWARMPORT_QUIC),
@@ -1005,6 +993,7 @@ class GalacteekApplication(QApplication):
             pubsubSigning=sManager.isTrue(section, CFG_KEY_PUBSUB_USESIGNING),
             fileStore=sManager.isTrue(section, CFG_KEY_FILESTORE),
             nice=sManager.getInt(section, CFG_KEY_NICE),
+            detached=sManager.isTrue(section, CFG_KEY_IPFSD_DETACHED),
             pubsubEnable=pubsubEnabled, corsEnable=corsEnabled,
             migrateRepo=migrateRepo,
             debug=self.cmdArgs.goipfsdebug,
@@ -1014,6 +1003,16 @@ class GalacteekApplication(QApplication):
         await self.scheduler.spawn(self.startIpfsdTask(self.ipfsd))
 
     async def startIpfsdTask(self, ipfsd):
+        if ipfsd.detached:
+            running, client = await ipfsd.loadStatus()
+            if running and client:
+                log.debug('Daemon was already running')
+                self.systemTrayMessage('IPFS', iIpfsDaemonResumed())
+
+                await self.updateIpfsClient(client)
+                await self.scheduler.spawn(self.ipfsd.watchProcess())
+                return
+
         started = await ipfsd.start()
 
         if started is False:
@@ -1046,7 +1045,8 @@ class GalacteekApplication(QApplication):
                     break
 
         if running is True:
-            ensure(self.updateIpfsClient())
+            await self.updateIpfsClient()
+            await self.scheduler.spawn(self.ipfsd.watchProcess())
         else:
             logUser.info(iIpfsDaemonInitProblem())
 
@@ -1145,7 +1145,15 @@ class GalacteekApplication(QApplication):
         appStarter.startProcess(pArgs)
 
     def onExit(self):
-        ensure(self.exitApp())
+        if self.ipfsd and not self.settingsMgr.changed and self.ipfsd.detached:
+            keepRun = questionBox(
+                'ipfsd',
+                iIpfsDaemonKeepRunningAsk()
+            )
+        else:
+            keepRun = False
+
+        ensure(self.exitApp(detachIpfsd=keepRun))
 
     async def shutdownScheduler(self):
         # It ain't that bad. STFS with dignity
@@ -1162,7 +1170,7 @@ class GalacteekApplication(QApplication):
                 log.debug(f'Scheduler went down (try: {stry})')
                 return
 
-    async def exitApp(self):
+    async def exitApp(self, detachIpfsd=False):
         self._shuttingDown = True
 
         self.lock.release()
@@ -1192,7 +1200,12 @@ class GalacteekApplication(QApplication):
             await self.ipfsClient.close()
 
         if self.ipfsd:
-            self.ipfsd.stop()
+            await self.ipfsd.writeStatus()
+            await self.ipfsd.daemonClient.close()
+
+            if detachIpfsd is False:
+                self.debug('Stopping IPFS daemon (not detached)')
+                self.ipfsd.stop()
 
         self.mainWindow.close()
 

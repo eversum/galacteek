@@ -16,7 +16,7 @@ class ChannelsDAG(EvolvingDAG):
         self.available.connectTo(self.onAvailable)
         subscriber.add_async_listener(keyChatChannels, self.onChatChannels)
 
-    def initDag(self):
+    async def initDag(self, ipfsop):
         return {
             'channels': {
                 'all': [

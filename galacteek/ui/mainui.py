@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QTextEdit
 from PyQt5.QtWidgets import QLineEdit
 from PyQt5.QtWidgets import QStackedWidget
+from PyQt5.QtWidgets import QToolTip
 
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import Qt
@@ -59,7 +60,6 @@ from . import textedit
 from . import unixfs
 from . import ipfssearch
 from . import eventlog
-from . import chat
 
 from .dids import DIDExplorer
 from .clips import RotatingCubeClipSimple
@@ -81,6 +81,7 @@ from .widgets import PopupToolButton
 from .widgets import HashmarkMgrButton
 from .widgets import HashmarksSearcher
 from .widgets import AnimatedLabel
+from .widgets import URLDragAndDropProcessor
 from .dialogs import *
 from ..appsettings import *
 from .i18n import *
@@ -363,6 +364,10 @@ class WorkspacesToolBar(QToolBar):
         self.wsButtons = {}
         self.wsPlanetsToolBar = QToolBar()
         self.wsPlanetsToolBarAdded = False
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, ev):
+        ev.accept()
 
     def add(self, btn, dst='default'):
         if dst == 'default':
@@ -394,15 +399,41 @@ class WorkspacesToolBar(QToolBar):
                 wsButton.repaint()
 
 
-class WorkspaceSwitchButton(QToolButton):
+class WorkspaceSwitchButton(QToolButton, URLDragAndDropProcessor):
     def __init__(self, workspace, parent=None):
         super().__init__(parent)
         self.setCheckable(True)
         self.workspace = workspace
         self.setIcon(workspace.wsIcon)
         self.setObjectName('wsSwitchButton')
+        self.setProperty("dropping", "false")
+        self.setAcceptDrops(True)
 
         self.setToolTip(workspace.wsToolTip())
+
+        self.ipfsObjectDropped.connect(self.onObjDropped)
+
+    def flashToolTip(self):
+        QToolTip.showText(
+            self.mapToGlobal(QPoint(0, 0)),
+            self.workspace.wsToolTip())
+
+    def dragEnterEvent(self, event):
+        if self.workspace.acceptsDrops:
+            self.setProperty("dropping", "true")
+            self.setStyle(QApplication.style())
+            self.flashToolTip()
+            event.accept()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self.setProperty("dropping", "false")
+        self.setStyle(QApplication.style())
+        super().dragLeaveEvent(event)
+
+    def onObjDropped(self, path):
+        ensure(self.workspace.handleObjectDrop(path))
 
     def checkStateSet(self):
         super(WorkspaceSwitchButton, self).checkStateSet()
@@ -830,9 +861,6 @@ class MainWindow(QMainWindow):
             parent=self.toolbarMain
         )
 
-        # Chat center button
-        self.chatCenterButton = chat.ChatCenterButton(parent=self.toolbarMain)
-
         # Atom
         self.atomButton = AtomFeedsToolbarButton()
 
@@ -850,8 +878,11 @@ class MainWindow(QMainWindow):
         menu.addAction(getIcon('lock-and-key.png'), iKeys(),
                        self.onIpfsKeysClicked)
         menu.addSeparator()
-        menu.addAction(self.psniffAction)
-        menu.addSeparator()
+
+        if self.app.debugEnabled:
+            menu.addAction(self.psniffAction)
+            menu.addSeparator()
+
         menu.addAction(iClearHistory(), self.onClearHistory)
 
         self.settingsToolButton.setMenu(menu)
@@ -864,7 +895,13 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         menu.addMenu(self.menuManual)
         menu.addSeparator()
-        menu.addAction('Donate', self.onHelpDonate)
+
+        dMenu = QMenu('Donate', self)
+        dMenu.addAction('With Liberapay', self.onHelpDonateLiberaPay)
+        dMenu.addAction('With Github Sponsors', self.onHelpDonateGSponsors)
+        dMenu.addAction('With Patreon', self.onHelpDonatePatreon)
+        menu.addMenu(dMenu)
+
         menu.addAction('About', self.onAboutGalacteek)
         self.helpToolButton.setMenu(menu)
 
@@ -1203,6 +1240,12 @@ class MainWindow(QMainWindow):
         await self.hashmarkMgrButton.updateIcons()
         await self.qaToolbar.init()
 
+        with self.stack.workspaceCtx(WS_FILES, show=False) as ws:
+            await ws.seedsSetup()
+
+        with self.stack.workspaceCtx(WS_PEERS, show=False) as ws:
+            await ws.chatJoinDefault()
+
         self.enableButtons()
 
     @ipfsOp
@@ -1488,10 +1531,17 @@ class MainWindow(QMainWindow):
             else:
                 ws.wsRegisterTab(keys.KeysTab(self), iKeys(), current=True)
 
-    def onHelpDonate(self):
-        tab = self.app.mainWindow.addBrowserTab(workspace=WS_MISC)
-        tab.enterUrl(
-            QUrl('https://github.com/sponsors/pinnaculum'))
+    def onHelpDonateGSponsors(self):
+        tab = self.app.mainWindow.addBrowserTab(workspace='@Earth')
+        tab.enterUrl(QUrl('https://github.com/sponsors/pinnaculum'))
+
+    def onHelpDonateLiberaPay(self):
+        tab = self.app.mainWindow.addBrowserTab(workspace='@Earth')
+        tab.enterUrl(QUrl('https://liberapay.com/galacteek'))
+
+    def onHelpDonatePatreon(self):
+        tab = self.app.mainWindow.addBrowserTab(workspace='@Earth')
+        tab.enterUrl(QUrl('https://patreon.com/galacteek'))
 
     def addBrowserTab(self, label='No page loaded', pinBrowsed=False,
                       minProfile=None, current=True,
@@ -1518,7 +1568,7 @@ class MainWindow(QMainWindow):
     def quit(self):
         # Qt and application exit
         self.saveUiSettings()
-        ensure(self.app.exitApp())
+        self.app.onExit()
 
     def saveUiSettings(self):
         self.app.settingsMgr.setSetting(

@@ -9,7 +9,11 @@ import uuid
 import aiofiles
 import shutil
 import pkg_resources
+import asyncio
+import aiohttp
 
+from aiohttp.web_exceptions import HTTPOk
+from yarl import URL
 from pathlib import Path
 from datetime import datetime
 from cachetools import TTLCache
@@ -26,6 +30,7 @@ from galacteek.ipfs.cidhelpers import cidConvertBase32
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.cidhelpers import ipnsKeyCidV1
 from galacteek.ipfs.multi import multiAddrTcp4
+from galacteek.ipfs.stat import StatInfo
 
 from galacteek.core.asynccache import amlrucache
 from galacteek.core.asynccache import cachedcoromethod
@@ -41,7 +46,7 @@ from galacteek import logUser
 from galacteek import AsyncSignal
 
 import aioipfs
-import asyncio
+
 
 GFILES_ROOT_PATH = '/galacteek/'
 
@@ -134,14 +139,29 @@ class TunnelDialerContext(object):
         if self.maddr:
             return multiAddrTcp4(self.maddr)[0]
 
+    @property
+    def failed(self):
+        return self.maddr is None
+
+    def httpUrl(self, path):
+        return str(URL.build(
+            host=self.maddrHost,
+            port=self.maddrPort,
+            scheme='http',
+            path=path
+        ))
+
     async def __aenter__(self):
         self.operator.debug('Tunnel dialer: {0} {1} {2}: enter'.format(
             self.protocol, self.maddrHost, self.maddrPort))
+        self.session = aiohttp.ClientSession()
         return self
 
     async def __aexit__(self, *args):
         self.operator.debug('Tunnel dialer: {0} {1} {2}: aexit'.format(
             self.protocol, self.maddrHost, self.maddrPort))
+
+        await self.session.close()
 
         if not self.operator.ctx:
             return
@@ -346,6 +366,7 @@ class IPFSOperator(object):
             return None
         except asyncio.CancelledError:
             self.debug('Cancelled coroutine {0}'.format(fncall))
+            raise
 
     @amlrucache
     async def daemonConfig(self):
@@ -523,6 +544,14 @@ class IPFSOperator(object):
     async def filesCp(self, source, dest):
         try:
             await self.client.files.cp(source, dest)
+        except aioipfs.APIError:
+            return False
+
+        return True
+
+    async def filesMv(self, source, dest):
+        try:
+            await self.client.files.mv(source, dest)
         except aioipfs.APIError:
             return False
 
@@ -990,6 +1019,28 @@ class IPFSOperator(object):
                 return False
         return await self.waitFor(_pin(path, recursive), timeout)
 
+    async def pin2(self, path, recursive=True, timeout=3600):
+        try:
+            async for pinStatus in self.client.pin.add(
+                    path, recursive=recursive):
+                self.debug('Pin status: {0} {1}'.format(
+                    path, pinStatus))
+                pins = pinStatus.get('Pins', None)
+                progress = pinStatus.get('Progress', None)
+
+                yield path, 0, progress
+
+                if pins is None:
+                    continue
+
+                if isinstance(pins, list) and len(pins) > 0:
+                    # Ya estamos
+                    yield path, 1, progress
+
+        except aioipfs.APIError as err:
+            self.debug('Pin error: {}'.format(err.message))
+            yield path, -1, None
+
     async def unpin(self, obj):
         """
         Unpin an object
@@ -1111,6 +1162,9 @@ class IPFSOperator(object):
             return None
         else:
             return stat
+
+    async def objStatInfo(self, path, **kw):
+        return StatInfo(await self.objStat(path, **kw))
 
     async def objStatCtxUpdate(self, path, timeout=30):
         exStat = self.objStatCtxGet(path)
@@ -1471,7 +1525,7 @@ class IPFSOperator(object):
                         if fPath.valid:
                             yield (str(fPath), path)
 
-    async def dagPut(self, data, pin=False, offline=False):
+    async def dagPut(self, data, pin=True, offline=False):
         """
         Create a new DAG object from data and returns the root CID of the DAG
         """
@@ -1514,6 +1568,18 @@ class IPFSOperator(object):
 
         if output is not None:
             return orjson.loads(output)
+
+    async def dagStatBlocks(self, cid, timeout=360):
+        # TODO
+        # { 'Size': .., 'NumBlocks': ... }
+
+        last = None
+
+        async for stat in self.client.dag.stat(cid, progress=True):
+            last = stat
+
+        if last:
+            return last['NumBlocks']
 
     async def dagResolve(self, dagPath):
         """
@@ -1562,7 +1628,7 @@ class IPFSOperator(object):
             self.debug('findProviders: unknown error: {}'.format(
                 str(gerr)))
 
-    async def whoProvides(self, key, numproviders=20, timeout=20):
+    async def whoProvides(self, path, numproviders=20, timeout=20):
         """
         Return a list of peers which provide a given key, using the DHT
         'findprovs' API call.
@@ -1577,12 +1643,19 @@ class IPFSOperator(object):
 
         peers = []
         try:
+            resolved = await self.resolve(path)
+
+            if not resolved:
+                raise Exception(f'Cannot resolve {path}')
+
             await self.waitFor(
-                self.findProviders(key, peers, True,
+                self.findProviders(resolved, peers, True,
                                    numproviders), timeout)
         except asyncio.TimeoutError:
             # It timed out ? Return what we got
             self.debug('whoProvides: timed out')
+            return peers
+        except Exception:
             return peers
 
         return peers
@@ -1683,6 +1756,30 @@ class IPFSOperator(object):
             return float((sum(received) / len(received)) / 1000000)
         else:
             return 0
+
+    async def rsaPubKeyCheckImport(self, pubKeyCid: str):
+        from galacteek.ipfs import kilobytes
+        try:
+            pubKeyStatInfo = await self.objStatInfo(pubKeyCid)
+            if not pubKeyStatInfo.valid or \
+                    pubKeyStatInfo.dataLargerThan(kilobytes(32)):
+                return False
+
+            pubKeyPem = await self.catObject(pubKeyCid, timeout=15)
+
+            if not pubKeyPem:
+                raise Exception(
+                    f'Cannot fetch pubkey with CID: {pubKeyCid}')
+
+            await self.pin(pubKeyCid, recursive=False, timeout=10)
+
+            return pubKeyPem
+        except aioipfs.APIError as err:
+            self.debug(err.message)
+            return None
+        except Exception as err:
+            self.debug(f'Err: {err}')
+            return None
 
     async def versionNum(self):
         try:
@@ -1796,3 +1893,46 @@ class IPFSOpRegistry:
     @staticmethod
     def getDefault():
         return IPFSOpRegistry._registry.get(IPFSOpRegistry._key_default)
+
+
+class GalacteekOperator(IPFSOperator):
+    """
+    Extend IPFSOperator with stuff specific to galacteek
+    like P2P tunnel calls
+    """
+
+    async def didPing(self, peerId, did, token):
+        """
+        Does a POST on /didping on the didauth-vc-pss P2P service
+
+        Returns a tuple (ms, pongPayload)
+        """
+        req = {
+            'did': did,
+            'ident_token': token
+        }
+
+        try:
+            async with self.p2pDialer(
+                    peerId, 'didauth-vc-pss',
+                    addressAuto=True) as sCtx:
+                if sCtx.failed:
+                    raise Exception(f'Cannot ping {peerId}')
+
+                startt = self.client.loop.time()
+                async with sCtx.session.post(
+                        sCtx.httpUrl('/didping'),
+                        json=req) as resp:
+
+                    diff = self.client.loop.time() - startt
+                    if resp.status != HTTPOk.status_code:
+                        raise Exception('DID Auth error')
+
+                    payload = await resp.json()
+                    assert isinstance(payload['didpong'], dict)
+                    assert did in payload['didpong']
+
+                    return diff * 1000, payload
+        except Exception as err:
+            log.debug(f'didPing error: {err}')
+            return -1, None

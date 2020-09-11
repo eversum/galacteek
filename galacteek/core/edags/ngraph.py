@@ -3,7 +3,7 @@ from galacteek.ipfs.dag import EvolvingDAG
 
 
 class PeersGraphDAG(EvolvingDAG):
-    def initDag(self):
+    async def initDag(self, ipfsop):
         return {
             'peers': {},
             'datecreated': utcDatetimeIso(),

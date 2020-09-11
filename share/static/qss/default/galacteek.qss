@@ -207,6 +207,11 @@ QToolButton#wsSwitchButton::checked {
     background-color: #eec146;
 }
 
+QToolBar#mainToolBar QToolButton {
+    min-width: 32px;
+    min-height: 32px;
+}
+
 QLabel#linkInfos {
     color: black;
     font: 12pt "Inter UI";
@@ -470,8 +475,8 @@ QPushButton {
 }
 
 QPushButton::hover {
-    background-color: #eec146;
     border: 2px solid #8f8f91;
+    background-color: #4a9ea1;
 }
 
 /* Close button in the UnixFS explorer */
@@ -483,4 +488,17 @@ QPushButton#unixFsBackButton {
 QTextEdit#ipfsGcLog {
     background-color: #F0F7F7;
     font: 14pt "Inter UI";
+}
+
+/* Progressbar +/
+
+QProgressBar:horizontal {
+    border: 1px solid gray;
+    border-radius: 5px;
+    text-align: center;
+}
+
+QProgressBar::chunk:horizontal {
+    text-align: center;
+    background-color: #4b9fa2;
 }
