@@ -31,6 +31,10 @@ class DAGRewindException(Exception):
     pass
 
 
+class DAGError(Exception):
+    pass
+
+
 class DAGEditor(object):
     def __init__(self, dag):
         self.dag = dag
@@ -45,6 +49,17 @@ class DAGEditor(object):
 
     async def __aexit__(self, *args):
         await self.dag.sync()
+
+
+class DeadEnd(object):
+    def __init__(self):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
 
 
 class DAGOperations:
@@ -74,8 +89,12 @@ class DAGOperations:
 
     @ipfsOp
     async def cat(self, op, path):
-        return await op.client.cat(
-            os.path.join(self.dagCid, path))
+        try:
+            return await op.client.cat(
+                os.path.join(self.dagCid, path))
+        except aioipfs.APIError as err:
+            self.debug(f'Cat error ({path}): {err.message}')
+            return None
 
     @ipfsOp
     async def list(self, op, path=''):
@@ -163,6 +182,22 @@ class DAGOperations:
         # In-line the JSON-LD contexts in the DAG for JSON-LD usage
 
         return await ipfsop.ldInline(await self.get())
+
+    @ipfsOp
+    async def expand(self, ipfsop):
+        """
+        Perform a JSON-LD expansion
+        """
+
+        try:
+            async with ipfsop.ldOps() as ld:
+                return await ld.expandDocument(await self.get(path=''))
+        except Exception as err:
+            self.debug('Error expanding document: {}'.format(
+                str(err)))
+
+    async def __aexit__(self, *args):
+        pass
 
     ipld = mkLink
 
@@ -279,20 +314,18 @@ class EvolvingDAG(QObject, DAGOperations):
     dagCidChanged = pyqtSignal(str)
     metadataEntryChanged = pyqtSignal()
 
-    dagUpdated = AsyncSignal(str)
-    available = AsyncSignal(object)
-
     keyCidLatest = 'cidlatest'
 
     def __init__(self, dagMetaMfsPath, dagMetaHistoryMax=12, offline=False,
                  unpinOnUpdate=False, autoPreviousNode=True,
+                 cipheredMeta=False,
                  autoUpdateDates=False, loop=None):
         super().__init__()
 
         self.loop = loop if loop else asyncio.get_event_loop()
         self.lock = aiorwlock.RWLock(loop=loop)
         self.loaded = asyncio.Future()
-        self.cache = TTLCache(128, 120)
+        self.cache = TTLCache(1, 5)
 
         self._curMetaEntry = None
         self._dagRoot = None
@@ -304,6 +337,11 @@ class EvolvingDAG(QObject, DAGOperations):
         self._unpinOnUpdate = unpinOnUpdate
         self._autoPrevious = autoPreviousNode
         self._autoUpdateDates = autoUpdateDates
+        self._cipheredMeta = cipheredMeta
+
+        self.dagUpdated = AsyncSignal(str)
+        self.available = AsyncSignal(object)
+
         self.changed.connect(lambda: ensure(self.ipfsSave()))
 
     @property
@@ -369,7 +407,11 @@ class EvolvingDAG(QObject, DAGOperations):
     @ipfsOp
     async def loadDag(self, op):
         self.debug('Loading DAG metadata file')
-        meta = await op.filesReadJsonObject(self.dagMetaMfsPath)
+
+        if self._cipheredMeta:
+            meta = await op.rsaAgent.decryptMfsJson(self.dagMetaMfsPath)
+        else:
+            meta = await op.filesReadJsonObject(self.dagMetaMfsPath)
 
         self.debug('Metadata is {}'.format(meta))
         if meta is not None:
@@ -457,8 +499,16 @@ class EvolvingDAG(QObject, DAGOperations):
     async def saveNewCid(self, ipfsop, cid):
         # Save the new CID and update the metadata
         self.dagCid = cid
-        await ipfsop.filesWriteJsonObject(self.dagMetaMfsPath,
-                                          self.dagMeta)
+
+        if self._cipheredMeta:
+            await ipfsop.rsaAgent.encryptJsonToMfs(
+                self.dagMeta,
+                self.dagMetaMfsPath
+            )
+
+        else:
+            await ipfsop.filesWriteJsonObject(self.dagMetaMfsPath,
+                                              self.dagMeta)
         entry = await ipfsop.filesStat(self.dagMetaMfsPath)
         if entry:
             self.curMetaEntry = entry
@@ -535,10 +585,12 @@ class EvolvingDAG(QObject, DAGOperations):
 
     @async_enterable
     @selfcachedcoromethod('cache')
-    async def portalToPath(self, path):
+    async def portalToPath(self, path, dagClass=DAGPortal):
         resolved = await self.resolve(path=path)
         if resolved:
-            return DAGPortal(dagCid=resolved)
+            return dagClass(dagCid=resolved)
+        else:
+            raise DAGError(f'Cannot find {path} in DAG {self.dagCid}')
 
     @async_enterable
     async def portal(self):

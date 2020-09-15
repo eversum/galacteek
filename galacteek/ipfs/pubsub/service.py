@@ -630,6 +630,7 @@ class PSDAGExchangeService(JSONPubsubService):
     def __init__(self, ipfsCtx, client, **kw):
         super().__init__(ipfsCtx, client, topic=TOPIC_DAGEXCH,
                          runPeriodic=True,
+                         maxMsgTsDiff=60,
                          filterSelfMessages=False, **kw)
 
     async def processJsonMessage(self, sender, msg):
@@ -658,26 +659,27 @@ class PSDAGExchangeService(JSONPubsubService):
     async def handleSeedsExchangeMessage(self, ipfsop, sender, eMsg):
         profile = ipfsop.ctx.currentProfile
 
-        if eMsg.dagId == 'main':
-            print('LINK', sender, eMsg.dagCid)
+        if eMsg.dagName == 'main':
             dag = profile.dagSeedsAll
-
-            await dag.link(sender, eMsg.dagCid)
-
-            print('YEAH', eMsg)
-
+            await dag.link(
+                sender, eMsg.dagUid, eMsg.dagCid,
+                local=(sender == ipfsop.ctx.node.id)
+            )
 
     @ipfsOp
     async def periodic(self, ipfsop):
         while True:
-            await asyncio.sleep(10)
+            await asyncio.sleep(30)
 
             if ipfsop.ctx.currentProfile:
                 seedsDag = ipfsop.ctx.currentProfile.dagSeedsMain
-
-                test = await ipfsop.addString('test')
-                await seedsDag.seed('test', [test['Hash']])
+                seedsDagAll = ipfsop.ctx.currentProfile.dagSeedsAll
 
                 eMsg = DAGExchangeMessage.make(
-                    'seeds', seedsDag.dagCid, 'main')
+                    'seeds',
+                    seedsDag.dagCid,
+                    seedsDagAll.dagCid,
+                    'main',
+                    seedsDag.uid
+                )
                 await self.send(eMsg)

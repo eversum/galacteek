@@ -35,6 +35,8 @@ CFG_KEY_STORAGEMAX = 'storagemax'  # integer, max storage in Gb
 CFG_KEY_CORS = 'cors'
 CFG_KEY_ROUTINGMODE = 'routingmode'
 CFG_KEY_NICE = 'nice'
+CFG_KEY_IPFSD_DETACHED = 'detached'
+CFG_KEY_IPFSD_DETACHED_DONTASK = 'detached_dontask'
 
 # Browser
 CFG_KEY_HOMEURL = 'homeurl'
@@ -111,6 +113,8 @@ def setDefaultSettings(gApp):
     sManager.setDefaultSetting(section, CFG_KEY_NICE, 20)
     sManager.setDefaultTrue(section, CFG_KEY_CORS)
     sManager.setDefaultTrue(section, CFG_KEY_ENABLED)
+    sManager.setDefaultTrue(section, CFG_KEY_IPFSD_DETACHED)
+    sManager.setDefaultFalse(section, CFG_KEY_IPFSD_DETACHED_DONTASK)
     sManager.setDefaultFalse(section, CFG_KEY_NAMESYS_PUBSUB)
     sManager.setDefaultTrue(section, CFG_KEY_PUBSUB_USESIGNING)
     sManager.setDefaultTrue(section, CFG_KEY_HTTPGWWRITABLE)
@@ -179,6 +183,7 @@ class SettingsManager(object):
 
     def __init__(self, path=None):
         self.settings = QSettings(path, QSettings.IniFormat)
+        self.changed = False
 
     def sync(self):
         """ Synchronize settings to disk """
@@ -279,6 +284,10 @@ class SettingsManager(object):
     @property
     def ppApiPlugins(self):
         return self.isTrue(CFG_SECTION_BROWSER, CFG_KEY_PPAPIPLUGINS)
+
+    @property
+    def downloadsPath(self):
+        return self.getSetting(CFG_SECTION_BROWSER, CFG_KEY_DLPATH)
 
     @property
     def mainWindowGeometry(self):

@@ -98,12 +98,15 @@ class TabContext(object):
 
 
 class GalacteekTab(QWidget):
-    def __init__(self, gWindow, parent=None, sticky=False, ctx=None):
+    def __init__(self, gWindow, parent=None,
+                 vLayout=True, sticky=False, ctx=None):
         super(GalacteekTab, self).__init__(parent)
 
         self.app = QApplication.instance()
-        self.vLayout = QVBoxLayout(self)
-        self.setLayout(self.vLayout)
+
+        if vLayout is True:
+            self.vLayout = QVBoxLayout(self)
+            self.setLayout(self.vLayout)
 
         self.gWindow = gWindow
         self._workspace = None

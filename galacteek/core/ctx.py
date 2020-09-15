@@ -914,8 +914,8 @@ class IPFSContext(QObject):
         self.pubsub.reg(psServiceChat)
 
         self.pubsub.reg(
-                PSDAGExchangeService(self, self.app.ipfsClient,
-                    scheduler=self.app.scheduler))
+            PSDAGExchangeService(self, self.app.ipfsClient,
+                                 scheduler=self.app.scheduler))
 
         if pubsubHashmarksExch and 0:
             psServiceMarks = PSHashmarksExchanger(

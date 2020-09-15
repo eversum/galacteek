@@ -15,6 +15,7 @@ from PyQt5.QtWidgets import QLabel
 from PyQt5.QtWidgets import QTextEdit
 from PyQt5.QtWidgets import QLineEdit
 from PyQt5.QtWidgets import QStackedWidget
+from PyQt5.QtWidgets import QToolTip
 
 from PyQt5.QtCore import QCoreApplication
 from PyQt5.QtCore import Qt
@@ -81,6 +82,7 @@ from .widgets import PopupToolButton
 from .widgets import HashmarkMgrButton
 from .widgets import HashmarksSearcher
 from .widgets import AnimatedLabel
+from .widgets import URLDragAndDropProcessor
 from .dialogs import *
 from ..appsettings import *
 from .i18n import *
@@ -363,6 +365,10 @@ class WorkspacesToolBar(QToolBar):
         self.wsButtons = {}
         self.wsPlanetsToolBar = QToolBar()
         self.wsPlanetsToolBarAdded = False
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, ev):
+        ev.accept()
 
     def add(self, btn, dst='default'):
         if dst == 'default':
@@ -394,15 +400,41 @@ class WorkspacesToolBar(QToolBar):
                 wsButton.repaint()
 
 
-class WorkspaceSwitchButton(QToolButton):
+class WorkspaceSwitchButton(QToolButton, URLDragAndDropProcessor):
     def __init__(self, workspace, parent=None):
         super().__init__(parent)
         self.setCheckable(True)
         self.workspace = workspace
         self.setIcon(workspace.wsIcon)
         self.setObjectName('wsSwitchButton')
+        self.setProperty("dropping", "false")
+        self.setAcceptDrops(True)
 
         self.setToolTip(workspace.wsToolTip())
+
+        self.ipfsObjectDropped.connect(self.onObjDropped)
+
+    def flashToolTip(self):
+        QToolTip.showText(
+            self.mapToGlobal(QPoint(0, 0)),
+            self.workspace.wsToolTip())
+
+    def dragEnterEvent(self, event):
+        if self.workspace.acceptsDrops:
+            self.setProperty("dropping", "true")
+            self.setStyle(QApplication.style())
+            self.flashToolTip()
+            event.accept()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self.setProperty("dropping", "false")
+        self.setStyle(QApplication.style())
+        super().dragLeaveEvent(event)
+
+    def onObjDropped(self, path):
+        ensure(self.workspace.handleObjectDrop(path))
 
     def checkStateSet(self):
         super(WorkspaceSwitchButton, self).checkStateSet()
@@ -850,8 +882,11 @@ class MainWindow(QMainWindow):
         menu.addAction(getIcon('lock-and-key.png'), iKeys(),
                        self.onIpfsKeysClicked)
         menu.addSeparator()
-        menu.addAction(self.psniffAction)
-        menu.addSeparator()
+
+        if self.app.debugEnabled:
+            menu.addAction(self.psniffAction)
+            menu.addSeparator()
+
         menu.addAction(iClearHistory(), self.onClearHistory)
 
         self.settingsToolButton.setMenu(menu)
@@ -1203,6 +1238,9 @@ class MainWindow(QMainWindow):
         await self.hashmarkMgrButton.updateIcons()
         await self.qaToolbar.init()
 
+        with self.stack.workspaceCtx(WS_FILES) as ws:
+            await ws.seedsSetup()
+
         self.enableButtons()
 
     @ipfsOp
@@ -1518,7 +1556,7 @@ class MainWindow(QMainWindow):
     def quit(self):
         # Qt and application exit
         self.saveUiSettings()
-        ensure(self.app.exitApp())
+        self.app.onExit()
 
     def saveUiSettings(self):
         self.app.settingsMgr.setSetting(

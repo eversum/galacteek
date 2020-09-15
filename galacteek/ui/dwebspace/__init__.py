@@ -15,6 +15,7 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QObject
 from PyQt5.QtCore import QEvent
+from PyQt5.QtCore import QSize
 
 from galacteek.ui.peers import PeersManager
 from galacteek import partialEnsure
@@ -62,6 +63,7 @@ class MainTabBar(QTabBar):
         self.setAcceptDrops(True)
         self.setObjectName('wsTabBar')
         self.tabWidget = parent
+        self.setIconSize(QSize(24, 24))
 
     def dragEnterEvent(self, event):
         event.accept()
@@ -144,7 +146,26 @@ WS_MISC = 'misc'
 
 
 class BaseWorkspace(QWidget):
+    def __init__(self, stack,
+                 name,
+                 description=None,
+                 section='default',
+                 icon=None,
+                 acceptsDrops=False):
+        super().__init__(parent=stack)
+
+        self.acceptsDrops = acceptsDrops
+
+        self.wsName = name
+        self.wsDescription = description
+        self.wsSection = section
+        self.wsAttached = False
+        self.defaultAction = None
+
     def setupWorkspace(self):
+        pass
+
+    async def handleObjectDrop(self, ipfsPath):
         pass
 
 
@@ -153,14 +174,13 @@ class TabbedWorkspace(BaseWorkspace):
                  name,
                  description=None,
                  section='default',
-                 icon=None):
-        super().__init__(parent=stack)
-
-        self.wsName = name
-        self.wsDescription = description
-        self.wsSection = section
-        self.wsAttached = False
-        self.defaultAction = None
+                 icon=None,
+                 acceptsDrops=False):
+        super(TabbedWorkspace, self).__init__(
+            stack, name, description=description,
+            section=section, icon=icon,
+            acceptsDrops=acceptsDrops
+        )
 
         self.wsTagRules = []
         self.wsActions = {}
@@ -388,16 +408,21 @@ class WorkspaceFiles(TabbedWorkspace):
         icon = getIcon('folder-open.png')
 
         self.wsRegisterTab(self.fileManagerTab, iFileManager(), icon)
-        self.wsRegisterTab(self.seedsTab, 'Seeds', icon)
+        self.wsRegisterTab(self.seedsTab, iFileSharing(),
+                           getIcon('fileshare.png'))
 
         self.wsAddAction(fileManager.addFilesAction)
         self.wsAddAction(fileManager.addDirectoryAction)
+        self.wsAddAction(fileManager.newSeedAction)
 
         self.actionGc = self.wsAddCustomAction(
             'gc', getIcon('clear-all.png'),
             iGarbageCollectRun(),
             partialEnsure(self.onRunGC)
         )
+
+    async def seedsSetup(self):
+        await self.seedsTab.loadSeeds()
 
     async def onRunGC(self):
         tab = self.wsFindTabWithId('gcrunner')
@@ -425,7 +450,8 @@ class WorkspaceFiles(TabbedWorkspace):
 class WorkspaceMultimedia(TabbedWorkspace):
     def __init__(self, stack):
         super().__init__(stack, WS_MULTIMEDIA, icon=getIcon('multimedia.png'),
-                         description='Multimedia')
+                         description='Multimedia',
+                         acceptsDrops=True)
 
     def setupWorkspace(self):
         super().setupWorkspace()
@@ -450,6 +476,10 @@ class WorkspaceMultimedia(TabbedWorkspace):
 
     def onAddMplayerTab(self):
         return self.mPlayerTab()
+
+    async def handleObjectDrop(self, ipfsPath):
+        tab = self.mPlayerTab()
+        tab.queueFromPath(ipfsPath.objPath)
 
 
 class WorkspaceSearch(TabbedWorkspace):

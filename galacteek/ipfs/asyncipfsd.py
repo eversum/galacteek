@@ -4,6 +4,10 @@ import asyncio
 import re
 import json
 import signal
+import aioipfs
+import aiofiles
+import orjson
+import psutil
 
 from galacteek import log
 
@@ -130,6 +134,7 @@ class AsyncIPFSDaemon(object):
     """
 
     def __init__(self, repopath, goIpfsPath='ipfs',
+                 statusPath=None,
                  apiport=DEFAULT_APIPORT,
                  swarmport=DEFAULT_SWARMPORT,
                  swarmportQuic=DEFAULT_SWARMPORT,
@@ -140,6 +145,7 @@ class AsyncIPFSDaemon(object):
                  pubsubRouter='floodsub', namesysPubsub=False,
                  pubsubSigning=False, offline=False,
                  fileStore=False,
+                 detached=True,
                  p2pStreams=True, migrateRepo=False, routingMode='dht',
                  gwWritable=False, storageMax=20, debug=False, loop=None):
 
@@ -147,6 +153,8 @@ class AsyncIPFSDaemon(object):
         self.exitFuture = asyncio.Future(loop=self.loop)
         self.startedFuture = asyncio.Future(loop=self.loop)
         self.repopath = repopath
+        self.statusPath = statusPath
+        self.detached = detached
         self.goIpfsPath = goIpfsPath
         self.apiport = apiport
         self.gatewayport = gatewayport
@@ -301,18 +309,69 @@ class AsyncIPFSDaemon(object):
         if self.offline:
             args.append('--offline')
 
+        pCreationFlags = 0
+
         f = self.loop.subprocess_exec(
             lambda: IPFSDProtocol(self.loop, self.exitFuture,
                                   self.startedFuture,
                                   debug=self.debug),
             *args,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE)
+            stderr=asyncio.subprocess.PIPE,
+            creationflags=pCreationFlags)
+
         self.transport, self.proto = await f
 
         self._procPid = self.transport.get_pid()
         self.setProcLimits(self.pid, nice=self.nice)
         return True
+
+    async def writeStatus(self, client):
+        try:
+            ident = await client.core.id()
+        except aioipfs.APIError:
+            return False
+        else:
+            async with aiofiles.open(self.statusPath, 'w+b') as fd:
+                await fd.write(orjson.dumps({
+                    'ident': ident,
+                    'pid': self._procPid
+                }))
+
+            return True
+
+    async def client(self):
+        return aioipfs.AsyncIPFS(host='127.0.0.1',
+                                 port=self.apiport, loop=self.loop)
+
+    async def loadStatus(self):
+        client = await self.client()
+        try:
+            async with aiofiles.open(self.statusPath, 'r') as fd:
+                status = orjson.loads(await fd.read())
+                assert 'ident' in status
+                assert 'pid' in status
+
+            proc = psutil.Process(status['pid'])
+
+            if proc.status() in ['running', 'sleeping']:
+                ident = await client.core.id()
+                assert ident['ID'] == status['ident']['ID']
+                return True, client
+            else:
+                return False, None
+        except aioipfs.APIError as e:
+            log.debug(f'Error loading status: {e.message}')
+            await client.close()
+            return False, None
+        except psutil.NoSuchProcess:
+            log.debug('Process is gone')
+            await client.close()
+            return False, None
+        except Exception:
+            log.debug('Error loading status')
+            await client.close()
+            return False, None
 
     async def ipfsConfig(self, param, value):
         return await ipfsConfig(self.goIpfsPath, param, value)

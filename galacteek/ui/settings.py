@@ -91,6 +91,8 @@ class SettingsDialog(QDialog):
 
         self.setChecked(self.ui.checkBoxQuic,
                         self.sManager.isTrue(section, CFG_KEY_SWARM_QUIC))
+        self.setChecked(self.ui.keepDaemonRunning,
+                        self.sManager.isTrue(section, CFG_KEY_IPFSD_DETACHED))
 
         self.ui.ipfsdApiPort.setValue(
             self.getS(section, CFG_KEY_APIPORT, int))
@@ -209,6 +211,8 @@ class SettingsDialog(QDialog):
                                   self.isChecked(self.ui.namesysPubsub))
         self.sManager.setBoolFrom(section, CFG_KEY_FILESTORE,
                                   self.isChecked(self.ui.fileStore))
+        self.sManager.setBoolFrom(section, CFG_KEY_IPFSD_DETACHED,
+                                  self.isChecked(self.ui.keepDaemonRunning))
 
         section = CFG_SECTION_IPFSCONN1
         self.setS(section, CFG_KEY_HOST, self.ui.customIpfsHost.text())
@@ -264,6 +268,8 @@ class SettingsDialog(QDialog):
             self.sManager.urlHistoryEnabled)
 
         self.sManager.sync()
+        self.sManager.changed = True
+
         ensure(self.applySettings())
         self.done(1)
 

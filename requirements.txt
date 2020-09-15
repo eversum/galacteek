@@ -1,7 +1,7 @@
 aiodns>=2.0.0
 aiofiles>=0.4.0
 aiohttp>=3.4.4
-aioipfs>=0.4.10
+aioipfs>=0.5.0
 aiojobs>=0.2.2
 aiopubsub>=2.1.5
 aiorwlock>=0.6.0
@@ -26,6 +26,7 @@ multiaddr>=0.0.8
 orjson>=3,<4
 pillow>=6.0.0
 protobuf==3.6.1
+psutil>=5.7.2
 py-multibase==1.0.1
 py-multicodec==0.2.1
 py-multihash>=0.2.3

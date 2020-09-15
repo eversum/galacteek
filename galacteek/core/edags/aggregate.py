@@ -1,8 +1,11 @@
 import os.path
+import hashlib
 
 from galacteek.ipfs.dag import EvolvingDAG
 from galacteek.ipfs import ipfsOp
+from galacteek.ipfs.cidhelpers import stripIpfs
 from galacteek.core.asynccache import cachedcoromethod
+from galacteek.core import utcDatetimeIso
 from cachetools import TTLCache
 
 
@@ -26,11 +29,6 @@ def _merge_dictionaries(dict1, dict2):
 
 
 class AggregateDAG(EvolvingDAG):
-    def __init__(self, *args, **kw):
-        super().__init__(*args, **kw)
-
-        self.available.connectTo(self.onAvailable)
-
     def initDag(self):
         return {
             'nodes': {}
@@ -40,17 +38,47 @@ class AggregateDAG(EvolvingDAG):
     def nodes(self):
         return self.root['nodes']
 
-    async def onAvailable(self, obj):
-        pass
+    @ipfsOp
+    async def analyze(self, ipfsop, peerId, dagCid):
+        return True
 
     @ipfsOp
-    async def link(self, ipfsop, peerId, dagCid):
-        if await ipfsop.pin(dagCid, recursive=True):
-            async with self as dag:
-                if peerId in dag.root['nodes']:
-                    del dag.root['nodes'][peerId]
+    async def link(self, ipfsop, peerId, dagUid, dagCid, local=False):
+        self.debug(f'Branching for {peerId}')
 
-                dag.root['nodes'][peerId] = self.mkLink(dagCid)
+        if not local:
+            if not await ipfsop.pin(dagCid, recursive=True, timeout=120):
+                self.debug(f'Branching for {peerId}: PIN {dagCid}: FAILED')
+                return False
+            else:
+                self.debug(f'Branching for {peerId}: PIN {dagCid}: OK')
+
+        valid = await self.analyze(peerId, dagCid)
+
+        if not valid:
+            self.debug(f'Invalid DAG: {dagCid}')
+            return False
+        else:
+            self.debug(f'DAG is valid: {dagCid}')
+
+        m = hashlib.sha3_256()
+        m.update(f'{peerId}:{dagUid}'.encode())
+        linkId = m.hexdigest()
+
+        r = await self.resolve(f'nodes/{linkId}/link')
+        self.debug(f'Branching for {peerId}: has {r}')
+
+        if r and stripIpfs(r) == dagCid:
+            self.debug(f'Branching for {peerId}: already at latest')
+            return
+
+        async with self as dag:
+            dag.root['nodes'][linkId] = {
+                'datebranched': utcDatetimeIso(),
+                'link': self.ipld(dagCid)
+            }
+
+        return True
 
     async def peerNode(self, peerId):
         if peerId in self.nodes:

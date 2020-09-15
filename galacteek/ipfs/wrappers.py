@@ -43,9 +43,10 @@ class ipfsClassW:
         except GeneratorExit:
             log.debug('GeneratorExit: {inst}'.format(
                 inst=inst))
-            return None
+            raise
         except asyncio.CancelledError:
             log.debug('IPFSOp cancelled: {name}'.format(name=self.__name__))
+            raise
         except RuntimeError as e:
             log.debug('IPFSOp runtime err: {}'.format(str(e)))
         except ClientConnectorError as e:

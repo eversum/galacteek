@@ -27,6 +27,7 @@ from galacteek.ipfs.cidhelpers import stripIpfs
 from galacteek.ipfs.cidhelpers import joinIpns
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.dag import DAGOperations
+from galacteek.ipfs.encrypt import IpfsRSAAgent
 from galacteek.did import ipidIdentRe
 from galacteek.did import didExplode
 from galacteek.did import normedUtcDate
@@ -387,6 +388,33 @@ class IPIdentifier(DAGOperations):
             # Reset expanded cache
             self.message('LRU cache reset')
             del self.cache[cacheKey]
+
+    @ipfsOp
+    async def rsaAgent(self, ipfsop):
+        curProfile = ipfsop.ctx.currentProfile
+
+        if self.local:
+            privKeyPath = curProfile._didKeyStore._privateKeyPathForDid(
+                self.did)
+            if not privKeyPath:
+                return
+
+            pubKeyPem = await self.pubKeyPemGet(idx=0)
+
+            return IpfsRSAAgent(ipfsop.ctx.rsaExec, pubKeyPem, privKeyPath)
+
+    @ipfsOp
+    async def pssSign64(self, ipfsop, message: bytes):
+        agent = await self.rsaAgent()
+        if agent:
+            return await agent.pssSign64(message)
+
+    @ipfsOp
+    async def pssVerif(self, ipfsop, message: bytes, signature: bytes):
+        pubKeyPem = await self.pubKeyPemGet(idx=0)
+        if pubKeyPem:
+            return await ipfsop.ctx.rsaExec.pssVerif(
+                message, signature, pubKeyPem)
 
     @ipfsOp
     async def inline(self, ipfsop, path=''):

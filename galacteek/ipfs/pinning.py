@@ -207,17 +207,17 @@ class PinningMaster(object):
                 if pinned != pItem['status']:
                     pItem['status'] = pinned
                     self.ipfsCtx.pinItemStatusChanged.emit(qname, path, pItem)
-                else:
-                    if pins is None and progress is None and not lastPTime:
-                        # Never received any progress status yet
-                        stalledCn += 1
 
-                    if stalledCn >= self._maxStalledMessages:
-                        self.debug('{0}: stalled (removing)'.format(path))
-                        await self.pathDelete(path)
-                        return (path, 2, 'Stalled')
+                if pins is None and progress is None and not lastPTime:
+                    # Never received any progress status yet
+                    stalledCn += 1
 
-                    await asyncio.sleep(1)
+                if stalledCn >= self._maxStalledMessages:
+                    self.debug('{0}: stalled (removing)'.format(path))
+                    await self.pathDelete(path)
+                    return (path, 2, 'Stalled')
+
+                await asyncio.sleep(1)
         except aioipfs.APIError as err:
             self.debug('Pinning error {path}: {msg}'.format(
                 path=path, msg=err.message))

@@ -1,136 +1,214 @@
+import uuid
 
+from galacteek import ensure
+from galacteek import log
 from galacteek.ipfs.dag import EvolvingDAG
+from galacteek.ipfs.dag import DAGPortal
+from galacteek.ipfs.dag import DAGError
 from galacteek.ipfs.wrappers import ipfsOp
+from galacteek.ipfs.cidhelpers import cidValid
 from galacteek.core.edags.aggregate import AggregateDAG
+from galacteek.core import utcDatetimeIso
 
-import re
+
+class SeedsPortal(DAGPortal):
+    @property
+    def description(self):
+        return self.d['seed']['description']
+
+    @property
+    def name(self):
+        return self.d['seed']['name']
+
+    async def objects3(self):
+        try:
+            for name, descr in self.d['seed']['objects'].items():
+                yield name, descr
+        except Exception:
+            pass
+
+    async def icon(self):
+        return await self.cat('seed/icon')
+
+    async def objects(self):
+        try:
+            for idx, obj in enumerate(self.d['seed']['objects']):
+                yield idx, obj
+        except Exception:
+            pass
+
+    async def objects2(self):
+        try:
+            objs = await self.get('seed/objects')
+            for name, descr in objs.items():
+                yield name, descr
+        except Exception:
+            pass
 
 
 class SeedsEDag(EvolvingDAG):
     def initDag(self):
         return {
-            'seeds': {}
+            'params': {
+                'seeduid': str(uuid.uuid4()) + str(uuid.uuid4()),
+            },
+            'signature': None,
+            'c': {
+                'seeds': {},
+                'leaves': {}
+            }
         }
 
-    async def seedO(self, name: str, cid: str):
-        comps = name.split()
-
-        async with self as dagw:
-            cur = dagw.root['seeds']
-
-            for comp in comps:
-                cur = cur.setdefault(comp, {})
-
-            cur['/'] = cid
+    @property
+    def uid(self):
+        return self.root['params']['seeduid']
 
     @ipfsOp
-    async def seed(self, ipfsop, name: str, objectsPaths: list):
-        comps = name.split()
+    async def _clear(self, ipfsop):
+        async with self as d:
+            d.root['c']['seeds'] = {}
 
-        dEntry = await ipfsop.dagPut({
-            'author': 'blah',
-            'objects': objectsPaths
-        })
+    @ipfsOp
+    async def seed(self, ipfsop, name: str,
+                   objectsInfo: list,
+                   section='all',
+                   description='',
+                   icon=None,
+                   author=None,
+                   creatorDid=None,
+                   license=None
+                   ):
 
-        async with self as dagw:
-            cur = dagw.root['seeds']
+        profile = ipfsop.ctx.currentProfile
 
-            for comp in comps:
-                cur = cur.setdefault(comp, {})
+        ipid = await profile.userInfo.ipIdentifier()
+        if not ipid:
+            raise Exception('No IPID found')
 
-            if not '_sl' in cur:
-                cur['_sl'] = []
+        signedName = await ipid.pssSign64(name.encode())
 
-            cur['_sl'].append({
-                '/': dEntry
-            })
+        seedCid = await ipfsop.dagPut({
+            'formatv': 0,
+            'seed': {
+                'name': name,
+                'dateCreated': utcDatetimeIso(),
+                'dateModified': utcDatetimeIso(),
+                'icon': self.ipld(icon) if icon else None,
+                'license': self.ipld(license) if license else None,
+                'author': author,
+                'creatorDid': creatorDid,
+                'description': description,
+                'pinRequest': {
+                    'minproviders': 10
+                },
+                'objects': objectsInfo
+            },
+            'parent': None,
+            'namesignature': {
+                'pss': signedName.decode()
+            }
+        }, pin=True)
 
-            if 0:
-                cur['__sdescr'] = {
-                    'date': 'now',
-                    '/': cid
-                }
+        if seedCid:
+            try:
+                cidSign = await ipid.pssSign64(seedCid.encode())
+
+                async with self as dagw:
+                    s = dagw.root['c']['seeds'].setdefault(section, {})
+                    cur = s.setdefault(name, [])
+                    cur.append({
+                        '_metadata': {
+                            'datecreated': utcDatetimeIso(),
+                            'icon': self.ipld(icon) if icon else None,
+                            'signature': cidSign.decode()
+                        },
+                        'seedlink': dagw.ipld(seedCid)
+                    })
+
+                return seedCid
+            except Exception as err:
+                log.debug(f'Error creating seed: {err}')
+                raise err
 
 
 class MegaSeedsEDag(AggregateDAG):
-    async def _searchSubDag(self, pdag, root, comps, path=None):
-        clen = len(comps)
-        cur = root
-        path = path if path else []
-
-        #for idx, comp in enumerate(comps):
-        for idx in range(0, clen):
-            try:
-                comp = comps.pop(0)
-            except:
-                break
-
-            path.append(comp)
-
-            print(idx, comp, comps)
-            lkeys = [key for key in cur.keys() if not key.startswith('_')]
+    async def _searchSubDag(self, pdag, root, regexp, path=None):
+        for sname, section in root.items():
+            lkeys = [key for key in section.keys() if not key.startswith('_')]
 
             for key in lkeys:
-                ma = re.search(comp, key)
+                ma = regexp.search(key)
 
                 if not ma:
                     continue
 
-                print('match', comp, key)
+                seeds = section[key]
 
-                if len(comps) == 0:
-                    #link = await self.resolve(key)
-                    #link = cur[key].get('/')
-                    #descr = cur[key].get('__sdescr')
-                    descr = cur[key].get('_sl', [])
+                for idx, entry in enumerate(seeds):
+                    meta = entry['_metadata']
 
-                    for entry in descr:
-                        link = entry.get('/')
-                        print('found link', key, descr, link)
-                        if link:
-                            yield path, link
-                else:
-                    async for found in self._searchSubDag(pdag, cur[key],
-                            comps, path=path):
-                        yield found
+                    link = entry['seedlink'].get('/')
+                    if cidValid(link):
+                        yield sname, key, meta['datecreated'], link
 
-    async def _searchSubDag_NO(self, pdag, root, comps):
-        clen = len(comps)
-        cur = root
-
-        for idx in range(0, clen):
-            try:
-                comp = comps.pop(0)
-            except:
-                print('WTF', idx)
-                break
-
-            found = False
-            print(idx, comp, comps)
-            lkeys = cur.keys()
-
-            for key in lkeys:
-                ma = re.search(comp, key)
-
-                if not ma:
-                    continue
-
-                print('match', comp, key)
-                found = True
-                cur = cur[key]
-
-            if not found:
-                break
-
-            if len(comps) == 0:
-                link = cur.get('/')
-                print('empty at', cur, link)
-                if link:
-                    yield link
-
-    async def search(self, name):
-        comps = name.split()
+    async def search(self, regexp):
         for peer in self.nodes:
-            async with self.portalToPath('nodes/' + peer) as pdag:
-                async for found in self._searchSubDag(pdag, pdag.root['seeds'], comps):
-                    yield found
+            try:
+                async with self.portalToPath(
+                        f'nodes/{peer}/link', dagClass=SeedsPortal) as pdag:
+                    async for found in self._searchSubDag(
+                            pdag,
+                            pdag.root['c']['seeds'],
+                            regexp):
+                        yield found
+            except DAGError:
+                log.debug(f'Searching on node {peer} failed')
+                continue
+            except Exception:
+                raise
+
+    async def getSeed(self, seedCid):
+        try:
+            portal = SeedsPortal(dagCid=seedCid)
+            await portal.load()
+            return portal
+        except Exception:
+            pass
+
+    async def expandSeed(self, seedCid):
+        try:
+            portal = DAGPortal(dagCid=seedCid)
+            async with portal as seed:
+                return await seed.expand()
+        except Exception:
+            return
+
+    @ipfsOp
+    async def _clear(self, ipfsop):
+        async with self as d:
+            d.root['nodes'] = {}
+
+    @ipfsOp
+    async def analyze(self, ipfsop, peerId, dagCid):
+        # Pin seeds descriptors
+
+        try:
+            log.debug(f'Analyzing DAG: {dagCid} for {peerId}')
+            async with SeedsPortal(dagCid=dagCid) as pdag:
+                for sname, section in pdag.root['c']['seeds'].items():
+                    lkeys = [key for key in section.keys() if
+                             not key.startswith('_')]
+                    for key in lkeys:
+                        seeds = section[key]
+
+                        for idx, entry in enumerate(seeds):
+                            path = f'c/seeds/{sname}/{key}/{idx}/seedlink'
+                            resolved = await pdag.resolve(path)
+                            if resolved:
+                                ensure(ipfsop.pin(resolved, timeout=30))
+
+                    await ipfsop.sleep()
+        except DAGError:
+            return False
+        else:
+            return True

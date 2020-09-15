@@ -374,6 +374,11 @@ class MFSItemModel(QStandardItemModel):
 
             if nameItem:
                 mimedata.setUrls([nameItem.qIpfsUrl])
+
+                # Inventing MIME types
+                mimedata.setData(
+                    'ipfs/mfs-entry-name',
+                    nameItem.entry['Name'].encode())
                 break
 
         return mimedata

@@ -13,8 +13,10 @@ from PyQt5.QtWidgets import QGridLayout
 from PyQt5.QtWidgets import QFormLayout
 from PyQt5.QtWidgets import QAbstractItemView
 from PyQt5.QtWidgets import QPushButton
+from PyQt5.QtWidgets import QToolButton
 from PyQt5.QtWidgets import QCheckBox
 from PyQt5.QtWidgets import QSpinBox
+from PyQt5.QtWidgets import QTreeWidgetItem
 
 from PyQt5.QtCore import QSize
 from PyQt5.QtCore import QFile
@@ -33,6 +35,7 @@ from PyQt5.QtGui import QRegExpValidator
 
 from galacteek import GALACTEEK_NAME
 from galacteek import ensure
+from galacteek import partialEnsure
 from galacteek import logUser
 from galacteek import database
 
@@ -42,6 +45,7 @@ from galacteek.core.iptags import ipTagsFormat
 from galacteek.ipfs import cidhelpers
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.wrappers import ipfsOp
+from galacteek.ipfs.cidhelpers import IPFSPath
 
 from . import ui_addhashmarkdialog
 from . import ui_addfeeddialog
@@ -50,6 +54,7 @@ from . import ui_donatedialog
 from . import ui_qschemecreatemapping
 from . import ui_iptagsmanager
 from . import ui_mfsoptionsdialog
+from . import ui_newseeddialog
 
 from .helpers import *
 from .widgets import ImageWidget
@@ -1063,3 +1068,126 @@ class MFSImportOptionsDialog(QDialog):
 
     def reject(self):
         self.done(0)
+
+
+class NewSeedDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.app = QApplication.instance()
+
+        self.ui = ui_newseeddialog.Ui_NewSeedDialog()
+        self.ui.setupUi(self)
+        self.iconSelector = IconSelector(self)
+
+        self.ui.gridLayout.addWidget(self.iconSelector, 2, 1, Qt.AlignCenter)
+
+        self.setMinimumWidth(
+            self.app.desktopGeometry.width() / 3
+        )
+
+        self.setAcceptDrops(True)
+
+        self.ui.files.setAcceptDrops(True)
+        self.ui.files.hideColumn(2)
+        self.ui.buttonBox.accepted.connect(partialEnsure(self.addSeed))
+        self.ui.buttonBox.rejected.connect(lambda: self.done(1))
+
+    def dragEnterEvent(self, event):
+        event.accept()
+
+    def dropEvent(self, event):
+        root = self.ui.files.invisibleRootItem()
+
+        event.accept()
+        mimeData = event.mimeData()
+
+        if mimeData is None:
+            return
+
+        mfsNameEnc = mimeData.data('ipfs/mfs-entry-name')
+        if not mfsNameEnc:
+            return
+
+        mfsName = mfsNameEnc.data().decode()
+
+        if mimeData.hasUrls():
+            url = mimeData.urls()[0]
+            if not url.isValid():
+                return
+
+            path = IPFSPath(url.toString())
+
+            item = QTreeWidgetItem([mfsName, '', path.objPath])
+            root.addChild(item)
+
+            pinReq = QSpinBox(self)
+            pinReq.setMinimum(5)
+            pinReq.setMaximum(10000)
+            pinReq.setValue(10)
+            pinReq.setSingleStep(10)
+
+            removeB = QToolButton()
+            removeB.setIcon(getIcon('cancel.png'))
+            removeB.clicked.connect(
+                lambda checked: root.removeChild(item))
+
+            self.ui.files.setItemWidget(item, 1, pinReq)
+            self.ui.files.setItemWidget(item, 3, removeB)
+            item.setToolTip(0, str(path))
+
+            if not self.ui.name.text():
+                self.ui.name.setText(mfsName)
+
+    @ipfsOp
+    async def addSeed(self, ipfsop, *a):
+        profile = ipfsop.ctx.currentProfile
+
+        seedName = self.ui.name.text()
+
+        root = self.ui.files.invisibleRootItem()
+        if root.childCount() == 0:
+            self.done(0)
+            return messageBox('NOPE')
+
+        files = {}
+        files = []
+
+        for cidx in range(0, root.childCount()):
+            item = root.child(cidx)
+            oname = item.data(0, Qt.DisplayRole)
+            opath = item.data(2, Qt.DisplayRole)
+            preq = self.ui.files.itemWidget(item, 1)
+
+            stat = await ipfsop.objStat(opath)
+
+            if not stat:
+                continue
+
+            files.append({
+                'name': oname,
+                'path': opath,
+                'stat': stat,
+                'pinrequest': {
+                    'minprovs': preq.value()
+                },
+                'link': {
+                    '/': stat['Hash']
+                } if stat else None
+            })
+
+            await ipfsop.sleep()
+
+        try:
+            cid = await profile.dagSeedsMain.seed(
+                seedName, files,
+                description=self.ui.description.text(),
+                icon=self.iconSelector.iconCid
+            )
+        except Exception:
+            messageBox('Error creating seed object')
+            self.done(0)
+        else:
+            self.done(1)
+
+            if cid:
+                messageBox('Published seed !')

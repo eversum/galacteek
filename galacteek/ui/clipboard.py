@@ -56,6 +56,8 @@ from .helpers import runDialog
 from .helpers import disconnectSig
 from .helpers import sizeFormat
 from .helpers import playSound
+from .helpers import inputText
+from .helpers import inputTextLong
 from .widgets import PopupToolButton
 from .widgets import DownloadProgressButton
 from .dialogs import ChooseProgramDialog
@@ -749,11 +751,18 @@ class ClipboardItemButton(PopupToolButton):
             self.mfsMenu.setEnabled(False)
 
     def onCopyToMfs(self, action):
-        ensure(self.copyToMfs(action.data()))
+        if not self.item.ipfsPath.subPath:
+            basename = inputText('Name', 'Link with filename')
+        else:
+            basename = inputTextLong(
+                'Name', 'Link with filename',
+                text=os.path.basename(self.item.ipfsPath.subPath))
+
+        ensure(self.copyToMfs(action.data(), basename))
 
     @ipfsOp
-    async def copyToMfs(self, ipfsop, mfsItem):
-        dest = os.path.join(mfsItem.path, self.item.ipfsPath.basename)
+    async def copyToMfs(self, ipfsop, mfsItem, basename):
+        dest = os.path.join(mfsItem.path, basename)
 
         try:
             await ipfsop.client.files.cp(

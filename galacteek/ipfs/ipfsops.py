@@ -346,6 +346,7 @@ class IPFSOperator(object):
             return None
         except asyncio.CancelledError:
             self.debug('Cancelled coroutine {0}'.format(fncall))
+            raise
 
     @amlrucache
     async def daemonConfig(self):
@@ -990,6 +991,28 @@ class IPFSOperator(object):
                 return False
         return await self.waitFor(_pin(path, recursive), timeout)
 
+    async def pin2(self, path, recursive=True, timeout=3600):
+        try:
+            async for pinStatus in self.client.pin.add(
+                    path, recursive=recursive):
+                self.debug('Pin status: {0} {1}'.format(
+                    path, pinStatus))
+                pins = pinStatus.get('Pins', None)
+                progress = pinStatus.get('Progress', None)
+
+                yield path, 0, progress
+
+                if pins is None:
+                    continue
+
+                if isinstance(pins, list) and len(pins) > 0:
+                    # Ya estamos
+                    yield path, 1, progress
+
+        except aioipfs.APIError as err:
+            self.debug('Pin error: {}'.format(err.message))
+            yield path, -1, None
+
     async def unpin(self, obj):
         """
         Unpin an object
@@ -1471,7 +1494,7 @@ class IPFSOperator(object):
                         if fPath.valid:
                             yield (str(fPath), path)
 
-    async def dagPut(self, data, pin=False, offline=False):
+    async def dagPut(self, data, pin=True, offline=False):
         """
         Create a new DAG object from data and returns the root CID of the DAG
         """
@@ -1562,7 +1585,7 @@ class IPFSOperator(object):
             self.debug('findProviders: unknown error: {}'.format(
                 str(gerr)))
 
-    async def whoProvides(self, key, numproviders=20, timeout=20):
+    async def whoProvides(self, path, numproviders=20, timeout=20):
         """
         Return a list of peers which provide a given key, using the DHT
         'findprovs' API call.
@@ -1577,12 +1600,19 @@ class IPFSOperator(object):
 
         peers = []
         try:
+            resolved = await self.resolve(path)
+
+            if not resolved:
+                raise Exception(f'Cannot resolve {path}')
+
             await self.waitFor(
-                self.findProviders(key, peers, True,
+                self.findProviders(resolved, peers, True,
                                    numproviders), timeout)
         except asyncio.TimeoutError:
             # It timed out ? Return what we got
             self.debug('whoProvides: timed out')
+            return peers
+        except Exception:
             return peers
 
         return peers

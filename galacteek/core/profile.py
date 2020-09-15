@@ -387,19 +387,24 @@ class DIDRsaKeyStore:
         self.__root = _storeRoot
         self.__profile = profile
 
-    def _privateKeyForDid(self, did):
-        from Cryptodome.PublicKey import RSA
-
+    def _privateKeyPathForDid(self, did):
         match = didIdentRe.match(did)
         if not match:
             return None
 
-        privKeyPath = os.path.join(
+        return os.path.join(
             self.__root,
             'rsa_{0}_ipid_{1}_priv.key'.format(
                 self.__profile, match.group('id')
             )
         )
+
+    def _privateKeyForDid(self, did):
+        from Cryptodome.PublicKey import RSA
+
+        privKeyPath = self.__privateKeyPathForDid(did)
+        if not privKeyPath:
+            return
 
         if os.path.isfile(privKeyPath):
             try:
@@ -630,7 +635,7 @@ class UserProfile(QObject):
 
     @property
     def pathEDagsSeeds(self):
-        return os.path.join(self.pathData, 'seeds')
+        return os.path.join(self.pathEDags, 'seeds')
 
     @property
     def pathEDagsPyramids(self):
@@ -674,11 +679,11 @@ class UserProfile(QObject):
 
     @property
     def pathEdagSeedsMain(self):
-        return os.path.join(self.pathEDagsSeeds, 'smain.edag')
+        return os.path.join(self.pathEDagsSeeds, 'seeds_main.edag')
 
     @property
     def pathEdagSeedsAll(self):
-        return os.path.join(self.pathEDagsSeeds, 'mega.edag')
+        return os.path.join(self.pathEDagsSeeds, 'seeds_agg.edag')
 
     @property
     def pathMDagShares(self):
@@ -734,11 +739,14 @@ class UserProfile(QObject):
             autoUpdateDates=True
         )
 
+        # Seeds
         self.dagSeedsMain = SeedsEDag(
-            self.pathEdagSeedsMain, loop=self.ctx.loop
+            self.pathEdagSeedsMain, loop=self.ctx.loop,
+            cipheredMeta=True
         )
         self.dagSeedsAll = MegaSeedsEDag(
-            self.pathEdagSeedsAll, loop=self.ctx.loop
+            self.pathEdagSeedsAll, loop=self.ctx.loop,
+            cipheredMeta=True
         )
 
         ensure(self.dagUser.load())

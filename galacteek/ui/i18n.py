@@ -572,6 +572,18 @@ def iRemove():
     return QCoreApplication.translate('Galacteek', 'Remove')
 
 
+def iSeed():
+    return QCoreApplication.translate('Galacteek', 'Seed')
+
+
+def iShareFiles():
+    return QCoreApplication.translate('Galacteek', 'Share files')
+
+
+def iFileSharing():
+    return QCoreApplication.translate('Galacteek', 'File sharing')
+
+
 def iRemoveFileAsk():
     return QCoreApplication.translate(
         'Galacteek',
@@ -650,8 +662,30 @@ def iPinning():
     return QCoreApplication.translate('GalacteekWindow', 'Pinning')
 
 
+def iPinningProgress(nodes, secsSinceUpdate):
+    return QCoreApplication.translate(
+        'GalacteekWindow',
+        'Pinning in progress, nodes retrieved: {0} ({1}s since last update)'
+    ).format(nodes, secsSinceUpdate)
+
+
+def iPinningStalled():
+    return QCoreApplication.translate(
+        'GalacteekWindow',
+        'Pinning stalled'
+    )
+
+
 def iPin():
     return QCoreApplication.translate('GalacteekWindow', 'Pin')
+
+
+def iPinAndDownload():
+    return QCoreApplication.translate('GalacteekWindow', 'Pin and download')
+
+
+def iDownloadOnly():
+    return QCoreApplication.translate('GalacteekWindow', 'Download only')
 
 
 def iPinDirectory():
@@ -815,3 +849,50 @@ def iDWebApps():
 
 def iQrCodes():
     return QCoreApplication.translate('FileManagerForm', 'QR codes')
+
+
+# IPFS daemon messages
+
+
+def iIpfsDaemonStarted():
+    return QCoreApplication.translate('Galacteek', 'IPFS daemon started')
+
+
+def iIpfsDaemonResumed():
+    return QCoreApplication.translate(
+        'Galacteek',
+        'IPFS daemon was already running (no start)'
+    )
+
+
+def iIpfsDaemonGwStarted():
+    return QCoreApplication.translate('Galacteek',
+                                      "IPFS daemon's gateway started")
+
+
+def iIpfsDaemonReady():
+    return QCoreApplication.translate('Galacteek', 'IPFS daemon is ready')
+
+
+def iIpfsDaemonProblem():
+    return QCoreApplication.translate('Galacteek',
+                                      'Problem starting IPFS daemon')
+
+
+def iIpfsDaemonInitProblem():
+    return QCoreApplication.translate(
+        'Galacteek',
+        'Problem initializing the IPFS daemon (check the ports configuration)')
+
+
+def iIpfsDaemonWaiting(count):
+    return QCoreApplication.translate(
+        'Galacteek',
+        'IPFS daemon: waiting for connection (try {0})'.format(count))
+
+
+def iIpfsDaemonKeepRunningAsk():
+    return QCoreApplication.translate(
+        'Galacteek',
+        'Do you want to keep the IPFS daemon running ?'
+    )
