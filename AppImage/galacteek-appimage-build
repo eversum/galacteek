@@ -7,7 +7,7 @@
 
 COMMIT_SHORT=$(echo $TRAVIS_COMMIT|cut -c 1-8)
 
-MINICONDA_DIST="Miniconda3-py37_4.8.2-Linux-x86_64.sh"
+MINICONDA_DIST="Miniconda3-py37_4.8.3-Linux-x86_64.sh"
 GO_IPFS_VERSION=0.6.0
 GOIPFS_TGZ="go-ipfs_v${GO_IPFS_VERSION}_linux-amd64.tar.gz"
 GOIPFS_DISTURL="https://dist.ipfs.io/go-ipfs/v${GO_IPFS_VERSION}/${GOIPFS_TGZ}"
@@ -31,7 +31,7 @@ echo "Travis commit: ${TRAVIS_COMMIT}"
 echo "Building AppImage for version: ${G_VERSION}"
 
 if ! [ -e $MINICONDA_DIST ]; then
-    wget "https://repo.continuum.io/miniconda/${MINICONDA_DIST}"
+    wget "https://repo.anaconda.com/miniconda/${MINICONDA_DIST}"
 fi
 
 if [ "$TRAVIS_BRANCH" = "catalyst-ipfs-dev" ]; then
@@ -81,8 +81,6 @@ export PATH="$PATH:$APPDIR/usr/bin"
 # Install necessary conda packages
 conda install -y -c conda-forge libxkbcommon pip
 conda install -y --no-deps libxcb
-
-conda remove -y icu
 
 $APPIPIP install --upgrade pip
 $APPIPIP install wheel
