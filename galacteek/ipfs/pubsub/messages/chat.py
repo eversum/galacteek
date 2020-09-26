@@ -3,6 +3,7 @@ from galacteek.ipfs import ipfsOp
 
 from galacteek.ipfs.pubsub.messages import PubsubMessage
 from galacteek.ipfs.pubsub.messages import LDMessage
+from galacteek.core import doubleUid4
 
 
 class ChatChannelsListMessage(PubsubMessage):
@@ -128,10 +129,10 @@ class ChatRoomMessage(LDMessage):
                    level=0):
         msgDate = date if date else utcDatetimeIso()
         msg = ChatRoomMessage({
-            '@context': await ipfsop.ldContextJson('messages/ChatRoomMessage'),
             'msgtype': ChatRoomMessage.TYPE,
             'version': 1,
             'ChatRoomMessage': {
+                'uid': doubleUid4(),
                 'chatmsgtype': type,
                 'date': msgDate,
                 'message': message,
@@ -149,6 +150,10 @@ class ChatRoomMessage(LDMessage):
     @property
     def message(self):
         return self.jsonAttr('ChatRoomMessage.message')
+
+    @property
+    def uid(self):
+        return self.jsonAttr('ChatRoomMessage.uid')
 
     @property
     def date(self):
@@ -171,3 +176,37 @@ class ChatRoomMessage(LDMessage):
                 ChatRoomMessage.CHATMSG_TYPE_LEFT,
                 ChatRoomMessage.CHATMSG_TYPE_HEARTBEAT
             ]
+
+
+class UserChannelsListMessage(PubsubMessage):
+    TYPE = 'ChatUserChannelsMessage'
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "msgtype": {"type": "string"},
+            "msg": {
+                "type": "object",
+                "properties": {
+                    "UserChannelsMessage": {
+                        "channels": {
+                            "type": "list"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    def make(chanlist):
+        msg = UserChannelsListMessage({
+            'msgtype': UserChannelsListMessage.TYPE,
+            'UserChannelsMessage': {
+                "channels": chanlist
+            }
+        })
+        return msg
+
+    @property
+    def channels(self):
+        return self.jsonAttr('UserChannelsMessage.channels')

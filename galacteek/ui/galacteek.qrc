@@ -138,6 +138,7 @@
     <file>../../share/icons/search-engine.png</file>
     <file>../../share/icons/ipfs-search.png</file>
     <file>../../share/static/css/ipfs-ui.css</file>
+    <file>../../share/static/css/chat.css</file>
     <file>../../share/static/css/orbital.css</file>
     <file>../../share/icons/orbitdb.png</file>
     <file>../../share/icons/folder-open-black.png</file>

@@ -30,10 +30,9 @@ from galacteek.ipfs.stat import StatInfo
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.pubsub.messages.chat import ChatRoomMessage
 from galacteek.ipfs.pubsub.service import PSMainService
-from galacteek.ipfs.pubsub.service import PSChatService
-from galacteek.ipfs.pubsub.service import PSHashmarksExchanger
-from galacteek.ipfs.pubsub.service import PSPeersService
-from galacteek.ipfs.pubsub.service import PSDAGExchangeService
+from galacteek.ipfs.pubsub.srvs.chat import PSChatService
+from galacteek.ipfs.pubsub.srvs.peers import PSPeersService
+from galacteek.ipfs.pubsub.srvs.dagexchange import PSDAGExchangeService
 
 from galacteek.ipfs.pubsub.messages.core import PeerIdentMessageV4
 
@@ -90,6 +89,10 @@ class PeerIdentityCtx:
     @property
     def avatarImage(self):
         return self._avatarImage
+
+    @property
+    def avatarPath(self):
+        return self._avatarPath
 
     @property
     def ipid(self):
@@ -1008,15 +1011,6 @@ class IPFSContext(QObject):
         self.pubsub.reg(
             PSDAGExchangeService(self, self.app.ipfsClient,
                                  scheduler=self.app.scheduler))
-
-        if pubsubHashmarksExch and 0:
-            psServiceMarks = PSHashmarksExchanger(
-                self,
-                self.app.ipfsClient,
-                self.app.marksLocal,
-                self.app.marksNetwork
-            )
-            self.pubsub.reg(psServiceMarks)
 
         await self.pubsub.startServices()
 

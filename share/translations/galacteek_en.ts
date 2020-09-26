@@ -548,12 +548,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../galacteek/ui/chatchannelslist.ui" line="54"/>
+        <location filename="../../galacteek/ui/chatchannelslist.ui" line="61"/>
         <source>Cancel</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../galacteek/ui/chatchannelslist.ui" line="77"/>
+        <location filename="../../galacteek/ui/chatchannelslist.ui" line="84"/>
         <source>Join</source>
         <translation type="unfinished"></translation>
     </message>
@@ -931,17 +931,7 @@ p, li { white-space: pre-wrap; }
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../galacteek/ui/chatroom.ui" line="68"/>
-        <source>Message</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../galacteek/ui/chatroom.ui" line="91"/>
-        <source>Send</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../../galacteek/ui/chatroom.ui" line="42"/>
+        <location filename="../../galacteek/ui/chatroom.ui" line="26"/>
         <source>Chat users</source>
         <translation type="unfinished"></translation>
     </message>

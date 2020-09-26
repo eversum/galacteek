@@ -33,9 +33,9 @@ class RSAExecutor(object):
     async def importKey(self, keyData):
         return await self._exec(lambda: RSA.import_key(keyData))
 
-    async def genKeys(self, keysize=2048):
+    async def genKeys(self, keysize=4096):
         """
-        Generate RSA keys of the given keysize (2048 bits by default)
+        Generate RSA keys of the given keysize
         and return a tuple containing the PEM-encoded private and public key
         """
         def _generateKeypair(size):

@@ -63,7 +63,7 @@ class BasePage(QWebEnginePage):
         self.template = template
         self._handlers = {}
         self.pageCtx = {}
-        self.channel = QWebChannel()
+        self.channel = QWebChannel(self)
         self.url = url if url else QUrl('qrc:/')
         self.setUrl(self.url)
         self.setWebChannel(self.channel)

@@ -17,23 +17,7 @@
    <item>
     <layout class="QVBoxLayout" name="verticalLayout">
      <item>
-      <layout class="QHBoxLayout" name="horizontalLayout_2">
-       <item>
-        <widget class="QTextBrowser" name="chatLog">
-         <property name="font">
-          <font>
-           <family>Helvetica</family>
-           <pointsize>18</pointsize>
-          </font>
-         </property>
-         <property name="focusPolicy">
-          <enum>Qt::NoFocus</enum>
-         </property>
-         <property name="styleSheet">
-          <string notr="true"/>
-         </property>
-        </widget>
-       </item>
+      <layout class="QHBoxLayout" name="hLayoutTop">
        <item>
         <layout class="QVBoxLayout" name="verticalLayout_3">
          <item>
@@ -57,40 +41,6 @@
           </widget>
          </item>
         </layout>
-       </item>
-      </layout>
-     </item>
-     <item>
-      <layout class="QHBoxLayout" name="horizontalLayout">
-       <item>
-        <widget class="QLabel" name="label">
-         <property name="text">
-          <string>Message</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLineEdit" name="message">
-         <property name="maxLength">
-          <number>512</number>
-         </property>
-         <property name="placeholderText">
-          <string/>
-         </property>
-         <property name="clearButtonEnabled">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="sendButton">
-         <property name="focusPolicy">
-          <enum>Qt::NoFocus</enum>
-         </property>
-         <property name="text">
-          <string>Send</string>
-         </property>
-        </widget>
        </item>
       </layout>
      </item>

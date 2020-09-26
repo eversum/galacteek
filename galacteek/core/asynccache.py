@@ -2,6 +2,7 @@ import asyncio
 
 from functools import wraps
 from cachetools import LRUCache
+from cachetools import TTLCache
 from cachetools import keys
 
 __all__ = ['amlrucache', 'cachedcoromethod']
@@ -78,7 +79,13 @@ def cachedcoromethod(cache, key=keys.hashkey):
 def selfcachedcoromethod(cachename, key=keys.hashkey):
     def decorator(method):
         async def wrapper(self, *args, **kwargs):
-            cache = getattr(self, cachename, LRUCache(16))
+            try:
+                cache = getattr(self, cachename)
+            except Exception:
+                # Default cache if not instantiated yet
+                cache = TTLCache(2, 60)
+                setattr(self, cachename, cache)
+
             k = key(*args, **kwargs)
             try:
                 return cache[k]

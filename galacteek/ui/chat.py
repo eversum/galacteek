@@ -8,12 +8,13 @@ from PyQt5.QtWidgets import QDialog
 from PyQt5.QtWidgets import QToolButton
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtCore import QObject
+from PyQt5.QtCore import QUrl
 from PyQt5.QtCore import QSortFilterProxyModel
 from PyQt5.QtCore import QRegExp
 from PyQt5.QtCore import QModelIndex
+from PyQt5.QtCore import QObject, pyqtSlot, pyqtSignal
+from PyQt5.QtCore import QVariant
 
-from PyQt5.QtGui import QTextCursor
 from PyQt5.QtGui import QStandardItemModel
 from PyQt5.QtGui import QRegExpValidator
 from PyQt5.QtGui import QStandardItem
@@ -23,20 +24,31 @@ from PyQt5.QtWidgets import QAbstractItemView
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.pubsub.messages.chat import ChatRoomMessage
-from galacteek.ipfs.pubsub.service import chatChannelTopic
-from galacteek.ipfs.pubsub.service import PSChatChannelService
+from galacteek.ipfs.pubsub.messages.chat import UserChannelsListMessage
+from galacteek.ipfs.pubsub.srvs.chat import encChatChannelTopic
+from galacteek.ipfs.pubsub.srvs.chat import PSEncryptedChatChannelService
+
 from galacteek.core.ps import makeKeyChatChannel
+from galacteek.core.ps import keyChatChanList
+from galacteek.core.ps import keyChatChanListRx
 from galacteek.core.ps import psSubscriber
+from galacteek.core.ps import mSubscriber
+from galacteek.core.ps import gHub
+
 from galacteek.core import SingletonDecorator
 from galacteek.core.asynclib import loopTime
+
 from galacteek.dweb.markdown import markitdown
+from galacteek.dweb.page import IPFSPage
+from galacteek.dweb.page import BaseHandler
+from galacteek.dweb.page import GalacteekHandler
 
 from galacteek.core import datetimeNow
 from galacteek import ensure
 from galacteek import ensureLater
 from galacteek import log
 from galacteek import partialEnsure
-from galacteek.core.modelhelpers import UneditableStringListModel
+from galacteek.core.modelhelpers import UneditableItem
 
 from .dwebspace import WS_PEERS
 from .helpers import getIcon
@@ -46,6 +58,7 @@ from .helpers import messageBox
 from .helpers import runDialogAsync
 from .widgets import GalacteekTab
 from .widgets import PopupToolButton
+from .widgets import IPFSWebView
 from .i18n import iChat
 from .i18n import iChatMessageNotification
 
@@ -60,7 +73,28 @@ class ChatChannels(QObject):
         super().__init__(parent)
 
         self.app = QApplication.instance()
-        self.channelWidgets = {}
+        self.lock = asyncio.Lock()
+        self.channelWidgets = weakref.WeakValueDictionary()
+        self.chanStatus = {}
+
+        mSubscriber.add_async_listener(
+            keyChatChanListRx, self.onUserChannelStatus)
+        ensure(self.sendChannelsStatus())
+
+    async def onUserChannelStatus(self, key, msg):
+        sender, cMsg = msg
+        async with self.lock:
+            self.chanStatus[sender] = cMsg.channels
+
+    async def cnCountByChannel(self, channel):
+        cn = 0
+        async with self.lock:
+            for peer, chans in self.chanStatus.items():
+                if not chans:
+                    continue
+                if channel in chans:
+                    cn += 1
+        return cn
 
     @ipfsOp
     async def createChannel(self, ipfsop, channel):
@@ -68,13 +102,28 @@ class ChatChannels(QObject):
         dagChannels.register(channel)
 
     @ipfsOp
+    async def leaveChannel(self, ipfsop, channel, psService):
+        await psService.stop()
+
+        if channel in self.channelWidgets:
+            del self.channelWidgets[channel]
+
+    async def sendChannelsStatus(self):
+        userChannelsMsg = UserChannelsListMessage.make(
+            [topic for topic in self.channelWidgets.keys()]
+        )
+
+        gHub.publish(keyChatChanList, userChannelsMsg)
+        ensureLater(10, self.sendChannelsStatus)
+
+    @ipfsOp
     async def joinChannel(self, ipfsop, channel, chanSticky=False):
-        topic = chatChannelTopic(channel)
+        topic = encChatChannelTopic(channel)
         service = ipfsop.ctx.pubsub.byTopic(topic)
 
         if not service:
             key = makeKeyChatChannel(channel)
-            service = PSChatChannelService(
+            service = PSEncryptedChatChannelService(
                 ipfsop.ctx,
                 self.app.ipfsClient,
                 channel,
@@ -92,8 +141,7 @@ class ChatChannels(QObject):
             )
 
         ensure(w.startHeartbeatTask())
-        ensureLater(1, w.sendStatusJoin)
-
+        ensureLater(3, w.sendStatusJoin)
         return self.channelWidgets[channel]
 
 
@@ -109,10 +157,15 @@ class JoinChannelDialog(QDialog):
         self.ui.cancelButton.clicked.connect(
             functools.partial(self.done, 1))
 
-        self.channelsModel = UneditableStringListModel(self)
+        self.channelsModel = QStandardItemModel()
+        self.channelsModel.setHorizontalHeaderLabels(['Channel', 'Connected'])
         self.channelsProxyModel = QSortFilterProxyModel(self)
         self.channelsProxyModel.setSourceModel(self.channelsModel)
+        self.channelsProxyModel.setFilterKeyColumn(0)
+        self.channelsProxyModel.setFilterCaseSensitivity(Qt.CaseInsensitive)
         self.ui.channelsView.setModel(self.channelsProxyModel)
+        self.ui.channelsView.doubleClicked.connect(
+            lambda idx: self.onJoinClicked())
         self.ui.channelsView.setEditTriggers(
             QAbstractItemView.NoEditTriggers
         )
@@ -122,13 +175,23 @@ class JoinChannelDialog(QDialog):
     @ipfsOp
     async def initDialog(self, ipfsop):
         dagChannels = ipfsop.ctx.currentProfile.dagChatChannels
-        self.channelsModel.setStringList(dagChannels.channels)
+        for channel in dagChannels.channels:
+            self.channelsModel.appendRow([
+                UneditableItem(channel),
+                UneditableItem(
+                    str(await self.chans.cnCountByChannel(channel)))
+            ])
+            await ipfsop.sleep()
 
     def onApplySearch(self):
         self.channelsProxyModel.setFilterRegExp(self.ui.searchLine.text())
 
     def onJoinClicked(self):
-        idx = self.ui.channelsView.currentIndex()
+        try:
+            idx = self.ui.channelsView.selectionModel().selectedRows(0).pop()
+        except Exception:
+            return
+
         chan = self.channelsProxyModel.data(idx, Qt.DisplayRole)
         if chan:
             ensure(self.onJoinChannel(chan))
@@ -253,16 +316,44 @@ class ParticipantsModel(QStandardItemModel):
         return super().data(index, role)
 
 
+class ChatHandler(BaseHandler):
+    chatMsgReceived = pyqtSignal(QVariant)
+    chatJoinLeftReceived = pyqtSignal(QVariant)
+    chatMsgAttachments = pyqtSignal(str, QVariant)
+
+    @pyqtSlot(str)
+    def sendMessage(self, msg):
+        ensure(self.chatWidget.sendMessage(msg))
+
+
+class ChatWebView(IPFSWebView):
+    def __init__(self, chatWidget):
+        super().__init__(parent=chatWidget)
+
+        self.chatWidget = chatWidget
+
+        self._page = IPFSPage('chatroom.html', url=QUrl('qrc:/testchat'),
+                              parent=self)
+        self.hChat = ChatHandler(self)
+        self.hChat.chatWidget = chatWidget
+        self._page.register('chatroom', self.hChat)
+        self._page.register('galacteek', GalacteekHandler(self))
+        self.setPage(self._page)
+
+
 class ChatRoomWidget(GalacteekTab):
     def __init__(self, channel, psService, gWindow, sticky=False):
         super(ChatRoomWidget, self).__init__(gWindow, sticky=sticky)
 
         self.lock = asyncio.Lock()
+        self.chans = ChatChannels()
 
         self.participantsModel = ParticipantsModel(self)
         self.participantsModel.setHorizontalHeaderLabels(
             ['SpaceHandle', 'HB']
         )
+
+        self.chatView = ChatWebView(self)
 
         self.channel = channel
         self.subscriber = psSubscriber(psService.topic)
@@ -275,15 +366,7 @@ class ChatRoomWidget(GalacteekTab):
 
         self.ui = ui_chatroom.Ui_Form()
         self.ui.setupUi(self.chatWidget)
-        self.ui.chatLog.setOpenExternalLinks(False)
-        self.ui.chatLog.setOpenLinks(False)
-        self.ui.chatLog.anchorClicked.connect(
-            partialEnsure(self.onAnchorClicked))
-
-        self.ui.sendButton.clicked.connect(self.onSendMessage)
-        self.ui.message.returnPressed.connect(self.onSendMessage)
-        self.ui.message.setFocusPolicy(Qt.StrongFocus)
-        self.ui.chatLog.setFocusPolicy(Qt.NoFocus)
+        self.ui.hLayoutTop.addWidget(self.chatView)
 
         self.ui.usersView.setModel(self.participantsModel)
         self.ui.usersView.hideColumn(0)
@@ -373,26 +456,19 @@ class ChatRoomWidget(GalacteekTab):
                     continue
 
     @ipfsOp
-    async def onChatMessageReceived(self, ipfsop, key, message):
+    async def onChatMessageReceived(self, ipfsop, key, hubMessage):
+        sender, message = hubMessage
         now = datetimeNow()
         fromUs = (message.peerCtx.peerId == ipfsop.ctx.node.id)
+
+        avatarPath = str(message.peerCtx.avatarPath) if \
+            message.peerCtx.avatarPath else 'test'
 
         if message.chatMessageType == ChatRoomMessage.CHATMSG_TYPE_HEARTBEAT:
             await self.userHeartbeat(message)
             return
 
-        self.ui.chatLog.moveCursor(QTextCursor.End, QTextCursor.MoveAnchor)
-        self.ui.chatLog.insertPlainText('\n')
-
-        formatted = '<p style="margin-left: 0px">'
-        formatted += '<span style="color: black">{date}</span> '.format(
-            date=now.strftime('%H:%M'))
-        formatted += '<span style="color: {color}">{sender}</span>: '.format(
-            sender=message.peerCtx.spaceHandle.short,
-            color='blue' if fromUs else '#e67300'
-        )
-
-        if message.chatMessageType == ChatRoomMessage.CHATMSG_TYPE_MESSAGE:
+        elif message.chatMessageType == ChatRoomMessage.CHATMSG_TYPE_MESSAGE:
             if not self.isVisible():
                 self.setTabIcon(getIcon('chat-active.png'))
                 self.tabActiveNotify()
@@ -410,22 +486,18 @@ class ChatRoomWidget(GalacteekTab):
                     timeout=4000
                 )
 
-            formatted += '<p> {message}</p>'.format(
-                message=markitdown(message.message))
-        elif message.chatMessageType == ChatRoomMessage.CHATMSG_TYPE_JOINED:
-            await self.userHeartbeat(message)
-            formatted += '<span style="color: blue">{message}</span>'.format(
-                message='joined the channel')
-            formatted += '</p>'
-        elif message.chatMessageType == ChatRoomMessage.CHATMSG_TYPE_LEFT:
-            await self.userLeft(message)
-            formatted += '<span style="color: red">{message}</span>'.format(
-                message='left the channel')
-            formatted += '</p>'
-        elif message.chatMessageType == ChatRoomMessage.CHATMSG_TYPE_HEARTBEAT:
-            pass
+            self.chatView.hChat.chatMsgReceived.emit(QVariant({
+                'uid': message.uid,
+                'date': now,
+                'local': fromUs,
+                'spaceHandle': str(message.peerCtx.spaceHandle.short),
+                'message': markitdown(message.message),
+                'avatarPath': str(message.peerCtx.avatarPath) if
+                message.peerCtx.avatarPath else 'test'
+            }))
 
         if len(message.links) > 0:
+            attach = []
             for obj in message.links:
                 if not isinstance(obj, str):
                     continue
@@ -433,18 +505,40 @@ class ChatRoomWidget(GalacteekTab):
                     path = IPFSPath(obj, autoCidConv=True)
                     if not path.valid:
                         continue
-                    formatted += '<p style="margin-left: 30px">Link '
-                    formatted += '<a href="{objhref}">{name}<a>'.format(
-                        objhref=path.ipfsUrl, name=path.objPath)
-                    formatted += '</p>'
+
+                    mType, stat = await self.app.rscAnalyzer(path)
+
+                    attach.append({
+                        'objPath': path.objPath,
+                        'url': path.ipfsUrl,
+                        'mimeType': str(mType),
+                        'stat': stat
+                    })
                 except Exception:
                     continue
 
-        self.ui.chatLog.insertHtml('<br>')
-        self.ui.chatLog.insertHtml(formatted)
+            if len(attach) > 0:
+                self.chatView.hChat.chatMsgAttachments.emit(
+                    message.uid, QVariant(attach))
 
-        self.ui.chatLog.verticalScrollBar().setValue(
-            self.ui.chatLog.verticalScrollBar().maximum())
+        elif message.chatMessageType == ChatRoomMessage.CHATMSG_TYPE_JOINED:
+            self.chatView.hChat.chatJoinLeftReceived.emit(QVariant({
+                'avatarPath': avatarPath,
+                'status': 'joined',
+                'date': now,
+                'local': fromUs,
+                'spaceHandle': str(message.peerCtx.spaceHandle.short)
+            }))
+            await self.userHeartbeat(message)
+        elif message.chatMessageType == ChatRoomMessage.CHATMSG_TYPE_LEFT:
+            self.chatView.hChat.chatJoinLeftReceived.emit(QVariant({
+                'avatarPath': avatarPath,
+                'status': 'left',
+                'date': now,
+                'local': fromUs,
+                'spaceHandle': str(message.peerCtx.spaceHandle.short)
+            }))
+            await self.userLeft(message)
 
     def onSendMessage(self):
         messageText = self.ui.message.text()
@@ -489,7 +583,6 @@ class ChatRoomWidget(GalacteekTab):
                     type=ChatRoomMessage.CHATMSG_TYPE_HEARTBEAT
                 )
             )
-
             await self.removeInactiveUsers()
 
     async def onClose(self):
@@ -500,4 +593,5 @@ class ChatRoomWidget(GalacteekTab):
             )
         )
 
+        await self.chans.leaveChannel(self.channel, self.psService)
         return True
