@@ -24,7 +24,7 @@ from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.pubsub.messages.chat import ChatRoomMessage
 from galacteek.ipfs.pubsub.service import chatChannelTopic
-from galacteek.ipfs.pubsub.service import PSChatChannelService
+from galacteek.ipfs.pubsub.service import PSEncryptedChatChannelService
 from galacteek.core.ps import makeKeyChatChannel
 from galacteek.core.ps import psSubscriber
 from galacteek.core import SingletonDecorator
@@ -74,7 +74,7 @@ class ChatChannels(QObject):
 
         if not service:
             key = makeKeyChatChannel(channel)
-            service = PSChatChannelService(
+            service = PSEncryptedChatChannelService(
                 ipfsop.ctx,
                 self.app.ipfsClient,
                 channel,

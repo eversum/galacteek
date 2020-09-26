@@ -16,6 +16,7 @@ from galacteek import ensure
 from galacteek.ipfs.pubsub import TOPIC_MAIN
 from galacteek.ipfs.pubsub import TOPIC_PEERS
 from galacteek.ipfs.pubsub import TOPIC_CHAT
+from galacteek.ipfs.pubsub import TOPIC_ENC_CHAT
 from galacteek.ipfs.pubsub import TOPIC_HASHMARKS
 from galacteek.ipfs.pubsub import TOPIC_DAGEXCH
 
@@ -668,7 +669,11 @@ class PSChatService(JSONPubsubService):
 
 
 def chatChannelTopic(channel):
-    return 'galacteek.chat.channels.{}'.format(channel)
+    return f'{TOPIC_CHAT}.{channel}'
+
+
+def encChatChannelTopic(channel):
+    return f'{TOPIC_ENC_CHAT}.{channel}'
 
 
 class PSChatChannelService(JSONLDPubsubService):
@@ -717,8 +722,14 @@ class PSChatChannelService(JSONLDPubsubService):
 class EncryptedJSONPubsubService(JSONPubsubService):
     hubKey = keyPsEncJson
 
-    def __init__(self, *args, **kw):
-        super().__init__(*args, **kw, hubPublish=False)
+    def __init__(self, ipfsCtx, client, baseTopic, **kw):
+        self.baseTopic = baseTopic
+        kw.update(topic=self.peeredTopic(ipfsCtx.node.id))
+
+        super().__init__(ipfsCtx, client, **kw, hubPublish=False)
+
+    def peeredTopic(self, peerId):
+        return f'{self.baseTopic}.{peerId}'
 
     @ipfsOp
     async def asyncMsgDataToJson(self, ipfsop, msg):
@@ -730,23 +741,57 @@ class EncryptedJSONPubsubService(JSONPubsubService):
             logger.debug(f'Could not decode encrypted message: {err}')
             return None
 
+    def peerEncFilter(self, piCtx):
+        return False
+
+    @ipfsOp
+    async def send(self, ipfsop, msg):
+        async with self.ipfsCtx.peers.lock:
+            for peerId, piCtx in self.ipfsCtx.peers.byPeerId.items():
+                if self.peerEncFilter(piCtx) is True:
+                    continue
+
+                topic = self.peeredTopic(peerId)
+
+                pubKey = await piCtx.defaultRsaPubKey()
+
+                if not pubKey:
+                    continue
+
+                enc = await ipfsop.rsaAgent.encrypt(
+                    str(msg).encode(),
+                    pubKey
+                )
+                if enc:
+                    await super().send(
+                        base64.b64encode(enc).decode(),
+                        topic=topic
+                    )
+
+                await ipfsop.sleep(0.1)
+
 
 class PSDAGExchangeService(EncryptedJSONPubsubService):
     def __init__(self, ipfsCtx, client, **kw):
-        super().__init__(ipfsCtx, client,
-                         topic=self.peeredTopic(ipfsCtx.node.id),
+        super().__init__(ipfsCtx, client, TOPIC_DAGEXCH,
                          runPeriodic=True,
                          minMsgTsDiff=60,
                          thrRateLimit=8,
                          thrPeriod=20,
                          thrRetry=5,
                          filterSelfMessages=False, **kw)
+        if 0:
+            super().__init__(ipfsCtx, client,
+                             topic=self.peeredTopic(ipfsCtx.node.id),
+                             runPeriodic=True,
+                             minMsgTsDiff=60,
+                             thrRateLimit=8,
+                             thrPeriod=20,
+                             thrRetry=5,
+                             filterSelfMessages=False, **kw)
 
         self.__authenticatedDags = collections.deque([], 128)
         self.__serviceToken = secrets.token_hex(64)
-
-    def peeredTopic(self, peerId):
-        return f'{TOPIC_DAGEXCH}.{peerId}'
 
     async def processJsonMessage(self, sender, msg):
         msgType = msg.get('msgtype', None)
@@ -961,3 +1006,65 @@ class PSDAGExchangeService(EncryptedJSONPubsubService):
             else:
                 # Wait for the DAG
                 await asyncio.sleep(5)
+
+
+class PSEncryptedChatChannelService(EncryptedJSONPubsubService):
+    def __init__(self, ipfsCtx, client, channel: str, psKey, **kw):
+        self.psKey = psKey
+
+        self._chatPeers = []
+
+        super().__init__(ipfsCtx, client,
+                         encChatChannelTopic(channel),
+                         runPeriodic=True,
+                         filterSelfMessages=False, **kw)
+
+    async def processJsonMessage(self, sender, msg):
+        msgType = msg.get('msgtype', None)
+
+        peerCtx = self.ipfsCtx.peers.getByPeerId(sender)
+        if not peerCtx:
+            self.debug('Message from unauthenticated peer: {}'.format(
+                sender))
+            return
+
+        if msgType == ChatRoomMessage.TYPE:
+            await self.handleChatMessage(sender, peerCtx, msg)
+
+    async def handleChatMessage(self, sender, peerCtx, msg):
+        cMsg = ChatRoomMessage(msg)
+        if not cMsg.valid():
+            self.debug('Invalid chat message')
+            return
+
+        cMsg.peerCtx = peerCtx
+
+        if cMsg.chatMessageType == ChatRoomMessage.CHATMSG_TYPE_HEARTBEAT:
+            await self.processHeartbeat(sender, cMsg)
+        elif cMsg.chatMessageType == ChatRoomMessage.CHATMSG_TYPE_JOINED:
+            await self.processHeartbeat(sender, cMsg)
+        elif cMsg.chatMessageType == ChatRoomMessage.CHATMSG_TYPE_LEFT:
+            self._chatPeers.remove(sender)
+
+        gHub.publish(self.psKey, cMsg)
+        await asyncio.sleep(0.5)
+
+    def peerEncFilter(self, piCtx):
+        if piCtx.peerId == self.ipfsCtx.node.id:
+            return False
+
+        return piCtx.peerId not in self._chatPeers
+
+    async def processHeartbeat(self, sender, message):
+        if sender not in self._chatPeers:
+            self._chatPeers.append(sender)
+
+    async def handleStatusMessage(self, sender, peerCtx, msg):
+        sMsg = ChatStatusMessage(msg)
+        if not sMsg.valid():
+            self.debug('Invalid chat message')
+            return
+
+        sMsg.peerCtx = peerCtx
+        gHub.publish(self.psKey, sMsg)
+        await asyncio.sleep(0.5)
