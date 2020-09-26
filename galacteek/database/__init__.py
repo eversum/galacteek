@@ -13,11 +13,13 @@ from PyQt5.QtCore import QUrl
 from galacteek import log
 from galacteek import AsyncSignal
 from galacteek.core import iptags
+from galacteek.core.asynclib import loopTime
 from galacteek.ipfs.cidhelpers import IPFSPath
 
 
 from galacteek.database.models.core import *
 from galacteek.database.models.seeds import *
+from galacteek.database.models.pubchattokens import *
 
 databaseLock = asyncio.Lock()
 
@@ -453,3 +455,37 @@ async def seedConfigObject(seed, objIdx: int, pin=True, download=False):
 
 async def seedsAll():
     return await IPSeed.all()
+
+
+# Pub chat tokens
+
+
+async def pubChatTokenNew(cid, channel, secTopic, peerId):
+    try:
+        token = PubChatToken(cid=cid, channel=channel, secTopic=secTopic,
+                             peerId=peerId,
+                             ltLast=loopTime())
+        await token.save()
+        return token
+    except Exception:
+        return None
+
+
+async def pubChatTokenGet(cid):
+    return await PubChatToken.filter(cid=cid).first()
+
+
+async def pubChatTokensClear():
+    await PubChatToken.all().delete()
+
+
+async def pubChatTokenDelete(cid):
+    return await PubChatToken.filter(cid=cid).delete()
+
+
+async def pubChatTokensByChannel(channel):
+    return await PubChatToken.filter(channel=channel).all()
+
+
+async def pubChatTokensInactive(ltMax):
+    return await PubChatToken.filter(ltLast__lt=ltMax).all()

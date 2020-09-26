@@ -8,7 +8,7 @@
 COMMIT_SHORT=$(echo $TRAVIS_COMMIT|cut -c 1-8)
 
 MINICONDA_DIST="Miniconda3-py37_4.8.3-Linux-x86_64.sh"
-GO_IPFS_VERSION=0.6.0
+GO_IPFS_VERSION=0.7.0
 GOIPFS_TGZ="go-ipfs_v${GO_IPFS_VERSION}_linux-amd64.tar.gz"
 GOIPFS_DISTURL="https://dist.ipfs.io/go-ipfs/v${GO_IPFS_VERSION}/${GOIPFS_TGZ}"
 
@@ -60,7 +60,7 @@ else
     wget $GOIPFS_DISTURL
     sha=$(sha512sum ${GOIPFS_TGZ}|awk '{print $1}')
 
-    if [ "$sha" != "57e4ac078f4605e3e765c6c5a54fe6e7f45268fa7ec06fc54f03e0046643dff65718f6f143a67fe08c458a7c86e30b5a53c400bdb57b6a2122bdc5df1a4b8f33" ]; then
+    if [ "$sha" != "1d5910f27e8d7ea333145f15c6edcbacc1e8db3a99365f0847467bdfa7c73f4d7a05562e46be8e932056c8324ed0769ca1b6758dfb0ac4c2e1b6066b57c4a086" ]; then
         echo "${GOIPFS_TGZ}: invalid checksum"
         exit 1
     fi

@@ -113,6 +113,7 @@ class IPFSDProtocol(asyncio.SubprocessProtocol):
 
 DEFAULT_APIPORT = 5001
 DEFAULT_SWARMPORT = 4001
+DEFAULT_WS_SWARMPORT = 4011
 DEFAULT_GWPORT = 8080
 
 
@@ -138,6 +139,7 @@ class AsyncIPFSDaemon(object):
                  statusPath=None,
                  apiport=DEFAULT_APIPORT,
                  swarmport=DEFAULT_SWARMPORT,
+                 swarmportWs=DEFAULT_WS_SWARMPORT,
                  swarmportQuic=DEFAULT_SWARMPORT,
                  swarmProtos=['tcp', 'quic'],
                  gatewayport=DEFAULT_GWPORT, initRepo=True,
@@ -161,6 +163,7 @@ class AsyncIPFSDaemon(object):
         self.apiport = apiport
         self.gatewayport = gatewayport
         self.swarmport = swarmport
+        self.swarmportWs = swarmportWs
         self.swarmportQuic = swarmportQuic
         self.swarmProtos = swarmProtos
         self.swarmLowWater = swarmLowWater
@@ -252,6 +255,8 @@ class AsyncIPFSDaemon(object):
             swarmAddrs += [
                 '/ip4/0.0.0.0/tcp/{swarmport}'.format(
                     swarmport=self.swarmport),
+                '/ip4/0.0.0.0/tcp/{swarmportWs}/ws'.format(
+                    swarmportWs=self.swarmportWs),
                 '/ip6/::/tcp/{swarmport}'.format(
                     swarmport=self.swarmport)
             ]

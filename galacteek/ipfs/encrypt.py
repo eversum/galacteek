@@ -3,6 +3,11 @@ import orjson
 import base64
 from io import BytesIO
 
+from jwcrypto import jwk
+from jwcrypto import jws
+from jwcrypto import jwt
+from jwcrypto.common import json_encode
+
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.cidhelpers import cidValid
 from galacteek.core.asynclib import asyncReadFile
@@ -26,6 +31,9 @@ class IpfsRSAAgent:
         self._pubKeyCidCached = None
         self.privKeyPath = privKeyPath
 
+        self.pubJwk = jwk.JWK()
+        self.pubJwk.import_from_pem(self.pubKeyPem)
+
     def debug(self, msg):
         log.debug('RSA Agent: {0}'.format(msg))
 
@@ -45,10 +53,48 @@ class IpfsRSAAgent:
         except Exception as err:
             self.debug(f'Cannot import pubkey: {err}')
 
-    async def encrypt(self, data, pubKey):
+    async def privJwk(self):
+        try:
+            privKey = await self.rsaExec.importKey(
+                await self.__rsaReadPrivateKey())
+            pem = privKey.export_key(pkcs=8)
+            key = jwk.JWK()
+            key.import_from_pem(pem)
+            return key
+        except Exception as err:
+            self.debug(f'Cannot create priv JWK key: {err}')
+            return None
+
+    async def jwsToken(self, payload: str):
+        try:
+            jwk = await self.privJwk()
+            token = jws.JWS(payload.encode('utf-8'))
+            token.add_signature(jwk, None,
+                                json_encode({"alg": "RS256"}),
+                                json_encode({"kid": jwk.thumbprint()}))
+            return token
+        except Exception as err:
+            self.debug(f'Cannot create JWS token: {err}')
+
+    async def jwsTokenObj(self, payload: str):
+        token = await self.jwsToken(payload)
+        if token:
+            return orjson.loads(token.serialize())
+
+    async def jwtCreate(self, claims, alg='RS256'):
+        try:
+            jwk = await self.privJwk()
+            token = jwt.JWT(header={"alg": alg},
+                            claims=claims)
+            token.make_signed_token(jwk)
+            return token.serialize()
+        except Exception as err:
+            self.debug(f'Cannot create JWT: {err}')
+
+    async def encrypt(self, data, pubKey, sessionKey=None):
         return await self.rsaExec.encryptData(
             data if isinstance(data, BytesIO) else BytesIO(data),
-            pubKey
+            pubKey, sessionKey=sessionKey
         )
 
     async def decrypt(self, data):
@@ -166,6 +212,10 @@ class IpfsRSAAgent:
 
         if isinstance(signed, bytes):
             return base64.b64encode(signed).decode()
+
+    async def __rsaReadPrivateKeyUtf8(self):
+        key = await asyncReadFile(self.privKeyPath, mode='rt')
+        return key.encode('utf-8')
 
     async def __rsaReadPrivateKey(self):
         return await asyncReadFile(self.privKeyPath)

@@ -20,6 +20,8 @@ CFG_KEY_ENABLED = 'enabled'
 # These keys are for ipfsdaemon and ipfsconn sections
 CFG_KEY_APIPORT = 'apiport'
 CFG_KEY_SWARMPORT = 'swarmport'
+CFG_KEY_SWARMPORT_WS = 'swarmport_ws'
+CFG_KEY_SWARMPORT_WS_ENABLE = 'swarmport_ws_enable'
 CFG_KEY_SWARMPORT_QUIC = 'swarmport_quic'
 CFG_KEY_SWARM_QUIC = 'swarm_enablequic'
 CFG_KEY_HTTPGWPORT = 'httpgwport'
@@ -104,6 +106,7 @@ def setDefaultSettings(gApp):
     sManager.setDefaultSetting(section, CFG_KEY_APIPORT, 5001)
     sManager.setDefaultSetting(section, CFG_KEY_SWARMPORT, 4001)
     sManager.setDefaultSetting(section, CFG_KEY_SWARMPORT_QUIC, 4001)
+    sManager.setDefaultSetting(section, CFG_KEY_SWARMPORT_WS, 4011)
     sManager.setDefaultSetting(section, CFG_KEY_HTTPGWPORT, 8080)
     sManager.setDefaultSetting(section, CFG_KEY_SWARMHIGHWATER, 900)
     sManager.setDefaultSetting(section, CFG_KEY_SWARMLOWWATER, 600)

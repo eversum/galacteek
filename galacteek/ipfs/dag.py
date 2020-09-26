@@ -582,6 +582,7 @@ class EvolvingDAG(QObject, DAGOperations):
         self.changed.emit()
 
     @async_enterable
+    @selfcachedcoromethod('readCache')
     async def read(self):
         """
         Return a read-only portal, its context manager uses the read lock

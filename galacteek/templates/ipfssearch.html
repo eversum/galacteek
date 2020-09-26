@@ -196,7 +196,7 @@
             `;
         }
 
-        if (hit['type'] == 'directory') {
+        if (hit['type'] == 'directory' || hit['mimetype'] == 'inode/directory') {
           markup += `
         <a href="#" onclick='event.preventDefault(); window.exploreIpfs("${hit.path}")'><img src="qrc:///share/icons/folder-open-black.png" width="16" height="16"/></a>
         `;

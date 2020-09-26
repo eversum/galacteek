@@ -857,7 +857,7 @@ class UserProfile(QObject):
             await self.userInfo.load()
 
             if not self.userInfo.curIdentity:
-                await self.createIpIdentifier(
+                ipid = await self.createIpIdentifier(
                     iphandle=ipHandleGen(
                         getpass.getuser(),
                         'Earth',
@@ -867,13 +867,25 @@ class UserProfile(QObject):
 
             if self.userInfo.curIdentity:
                 # Load our IPID with low resolve timeout
-                await self.ctx.app.ipidManager.load(
+                ipid = await self.ctx.app.ipidManager.load(
                     self.userInfo.personDid,
                     timeout=5,
                     localIdentifier=True
                 )
 
-            return True
+            if ipid:
+                if not await ipid.avatarService():
+                    entry = await self.ctx.app.importQtResource(
+                        '/share/icons/helmet.png'
+                    )
+
+                    if entry:
+                        path = IPFSPath(entry['Hash'])
+                        await ipid.avatarSet(path.objPath)
+
+                return True
+
+            return False
 
     def ipIdentifierKeyName(self, idx: int):
         return 'galacteek.{0}.dids.{1}'.format(self.name, idx)
@@ -983,6 +995,12 @@ class UserProfile(QObject):
         }, publish=False)
 
         await ipid.addServiceCollection('default')
+
+        entry = await self.ctx.app.importQtResource('/share/icons/helmet.png')
+
+        if entry:
+            defAvatar = IPFSPath(entry['Hash'])
+            await ipid.avatarSet(defAvatar.objPath)
 
     @ipfsOp
     async def rsaEncryptSelf(self, op, data, offline=False):

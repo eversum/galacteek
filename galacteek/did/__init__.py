@@ -26,7 +26,7 @@ didRe = re.compile(
 
 
 ipidIdentRe = re.compile(
-    r'(?P<scheme>(did))\:(?P<method>(ipid))\:(?P<id>([\w]){46,46})$'
+    r'(?P<scheme>(did))\:(?P<method>(ipid))\:(?P<id>([\w]){46,56})$'
 )
 
 

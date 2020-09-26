@@ -1,4 +1,5 @@
 import asyncio
+import aiorwlock
 import re
 import collections
 import time
@@ -30,10 +31,9 @@ from galacteek.ipfs.stat import StatInfo
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.pubsub.messages.chat import ChatRoomMessage
 from galacteek.ipfs.pubsub.service import PSMainService
-from galacteek.ipfs.pubsub.service import PSChatService
-from galacteek.ipfs.pubsub.service import PSHashmarksExchanger
-from galacteek.ipfs.pubsub.service import PSPeersService
-from galacteek.ipfs.pubsub.service import PSDAGExchangeService
+from galacteek.ipfs.pubsub.srvs.chat import PSChatService
+from galacteek.ipfs.pubsub.srvs.peers import PSPeersService
+from galacteek.ipfs.pubsub.srvs.dagexchange import PSDAGExchangeService
 
 from galacteek.ipfs.pubsub.messages.core import PeerIdentMessageV4
 
@@ -52,6 +52,7 @@ from galacteek.core.softident import gSoftIdent
 from galacteek.core.iphandle import SpaceHandle
 
 from galacteek.crypto.rsa import RSAExecutor
+from galacteek.crypto.ecc import ECCExecutor
 
 
 class PeerIdentityCtx:
@@ -90,6 +91,10 @@ class PeerIdentityCtx:
     @property
     def avatarImage(self):
         return self._avatarImage
+
+    @property
+    def avatarPath(self):
+        return self._avatarPath
 
     @property
     def ipid(self):
@@ -153,6 +158,19 @@ class PeerIdentityCtx:
     async def defaultRsaPubKey(self, ipfsop):
         if self.ident and isinstance(self.ident, PeerIdentMessageV4):
             return await ipfsop.catObject(self.ident.defaultRsaPubKeyCid)
+
+    @ipfsOp
+    async def pubKeyJwk(self, ipfsop):
+        from jwcrypto import jwk
+
+        rsaPubKey = await self.defaultRsaPubKey()
+        if rsaPubKey:
+            try:
+                key = jwk.JWK()
+                key.import_from_pem(rsaPubKey)
+                return key
+            except Exception as err:
+                self.debug(f'Failed to load pub JWK: {err}')
 
     @ipfsOp
     async def getDidRsaPubKey(self, ipfsop):
@@ -306,7 +324,7 @@ class Peers:
     def __init__(self, ctx):
         self.app = QApplication.instance()
         self.ctx = ctx
-        self.lock = asyncio.Lock()
+        self.lock = aiorwlock.RWLock()
         self.evStopWatcher = asyncio.Event()
         self._byPeerId = collections.OrderedDict()
         self._byHandle = collections.OrderedDict()
@@ -370,8 +388,12 @@ class Peers:
             for peerId, peerHandles in ng.d['peers'].items():
                 for handle, hData in peerHandles.items():
                     sHandle = SpaceHandle(handle)
-
                     did = hData.get('did')
+
+                    if peerId == ipfsop.ctx.node.id:
+                        if did != profile.userInfo.personDid:
+                            # Don't load inactive IPIDs
+                            continue
 
                     log.debug(
                         f'scanNetworkGraph: processing {handle} ({did})')
@@ -436,7 +458,7 @@ class Peers:
 
         ensureLater(1, piCtx.watch)
 
-        async with self.lock:
+        async with self.lock.writer_lock:
             self._byHandle[str(sHandle)] = piCtx
 
             if piCtx.peerId not in self._byPeerId:
@@ -554,7 +576,7 @@ class Peers:
                 self._didAuthInp[personDid] = False
                 return
 
-            async with self.lock:
+            async with self.lock.writer_lock:
                 piCtx = PeerIdentityCtx(
                     self.ctx, iMsg.peer, iMsg.iphandle,
                     ipid,
@@ -575,7 +597,7 @@ class Peers:
             # This peer is already registered in the network graph
             # What we ought to do here is just to refresh the DID document
 
-            async with self.lock:
+            async with self.lock.writer_lock:
                 piCtx = self.getByHandle(iMsg.iphandle)
 
                 if piCtx:
@@ -969,6 +991,8 @@ class IPFSContext(QObject):
                     offline=False):
         self.rsaExec = RSAExecutor(loop=self.loop,
                                    executor=self.app.executor)
+        self.eccExec = ECCExecutor(loop=self.loop,
+                                   executor=self.app.executor)
 
         await self.importSoftIdent()
         await self.node.init()
@@ -1008,15 +1032,6 @@ class IPFSContext(QObject):
         self.pubsub.reg(
             PSDAGExchangeService(self, self.app.ipfsClient,
                                  scheduler=self.app.scheduler))
-
-        if pubsubHashmarksExch and 0:
-            psServiceMarks = PSHashmarksExchanger(
-                self,
-                self.app.ipfsClient,
-                self.app.marksLocal,
-                self.app.marksNetwork
-            )
-            self.pubsub.reg(psServiceMarks)
 
         await self.pubsub.startServices()
 

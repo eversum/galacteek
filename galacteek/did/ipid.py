@@ -160,6 +160,12 @@ class IPService(metaclass=IPServiceRegistry):
         except Exception:
             return None
 
+    @ipfsOp
+    async def endpointCat(self, ipfsop):
+        ipfsPath = IPFSPath(self.endpoint)
+        if ipfsPath.valid:
+            return await ipfsop.catObject(ipfsPath.objPath)
+
     async def onChanged(self):
         pass
 
@@ -778,6 +784,24 @@ class IPIdentifier(DAGOperations):
         except Exception as err:
             print(str(err))
             pass
+
+    async def avatarService(self):
+        avatarServiceId = self.didUrl(path='/avatar')
+        return await self.searchServiceById(avatarServiceId)
+
+    async def avatarSet(self, ipfsPath):
+        avatarServiceId = self.didUrl(path='/avatar')
+
+        if not await self.avatarService():
+            await self.addServiceRaw({
+                'id': avatarServiceId,
+                'type': IPService.SRV_TYPE_AVATAR,
+                'serviceEndpoint': str(ipfsPath),
+                'description': 'User Avatar'
+            }, publish=True)
+        else:
+            async with self.editService(avatarServiceId) as editor:
+                editor.service['serviceEndpoint'] = str(ipfsPath)
 
     @async_enterable
     async def editService(self, _id: str, sync=True):

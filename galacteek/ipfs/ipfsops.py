@@ -11,6 +11,7 @@ import shutil
 import pkg_resources
 import asyncio
 import aiohttp
+import re
 
 from aiohttp.web_exceptions import HTTPOk
 from yarl import URL
@@ -603,6 +604,17 @@ class IPFSOperator(object):
         info = await self.client.core.id()
         if isDict(info):
             return info.get('ID', 'Unknown')
+
+    async def nodeWsAdresses(self):
+        addrs = []
+        nid = await self.client.core.id()
+
+        for addr in nid['Addresses']:
+            # use re instead of multiaddr module
+            if re.search(r"/ip4/[0-9.]+/tcp/[0-9]+/ws/p2p/[\w]+", addr):
+                addrs.append(addr)
+
+        return addrs
 
     async def keysNames(self):
         keys = await self.keys()
@@ -1343,6 +1355,26 @@ class IPFSOperator(object):
             self.debug(err.message)
             return None
 
+    async def addJson(self, obj, cidversion=1, **kw):
+        try:
+            return await self.client.core.add_bytes(
+                orjson.dumps(obj),
+                cid_version=cidversion, **kw)
+        except aioipfs.APIError as err:
+            self.debug(err.message)
+            return None
+
+    async def getJson(self, cid, timeout=5):
+        try:
+            data = await self.catObject(cid, timeout=timeout)
+            return orjson.loads(data.decode())
+        except aioipfs.APIError as err:
+            self.debug(err.message)
+            return None
+        except Exception:
+            self.debug(f'Cannot load JSON from CID {cid}')
+            pass
+
     async def importQtResource(self, path):
         rscFile = QFile(':{0}'.format(path))
 
@@ -1782,6 +1814,18 @@ class IPFSOperator(object):
             self.debug(f'Err: {err}')
             return None
 
+    async def pubsubPeers(self, topic=None, timeout=10):
+        try:
+            resp = await self.waitFor(self.client.pubsub.peers(
+                topic=topic), timeout)
+            return resp['Strings']
+        except aioipfs.APIError as err:
+            self.debug(err.message)
+            return None
+        except Exception as err:
+            self.debug(f'pubsubPeers error: {err}')
+            return None
+
     async def versionNum(self):
         try:
             vInfo = await self.client.core.version()
@@ -1814,6 +1858,9 @@ class IPFSOperator(object):
         except aioipfs.APIError as err:
             self.debug(err.message)
             return False
+
+    def ourNode(self, peerId):
+        return self.ctx.node.id == peerId
 
     async def hasDagCommand(self):
         return await self.hasCommand('dag')

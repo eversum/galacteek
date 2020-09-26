@@ -1246,6 +1246,9 @@ class MainWindow(QMainWindow):
         with self.stack.workspaceCtx(WS_PEERS, show=False) as ws:
             await ws.chatJoinDefault()
 
+        with self.stack.workspaceCtx('@Earth', show=False) as ws:
+            await ws.loadDapps()
+
         self.enableButtons()
 
     @ipfsOp

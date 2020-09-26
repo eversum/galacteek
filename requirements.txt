@@ -1,7 +1,7 @@
 aiodns>=2.0.0
 aiofiles>=0.4.0
 aiohttp>=3.4.4
-aioipfs>=0.5.0
+aioipfs>=0.5.1
 aiojobs>=0.2.2
 aiopubsub>=2.1.5
 aiorwlock>=0.6.0
@@ -20,17 +20,17 @@ gitpython>=2.1.11
 jinja2>=2.10.1
 json-traverse>=0.4
 jsonschema>=3.0.0,<4.0.0
+jwcrypto>=0.8
 logbook>=1.5.3
 markdown>=3.0
 mdx-unimoji>=1.0
 mkdocs-blog-plugin>=0.25
 mkdocs>=1.1.2
 multiaddr>=0.0.8
-orjson>=3,<4
+orjson>=3,<3.4
 pillow>=6.0.0
 protobuf==3.6.1
 psutil>=5.7.2
-py-multibase==1.0.1
 py-multicodec==0.2.1
 py-multihash>=0.2.3
 pycryptodomex==3.9.8
@@ -50,4 +50,6 @@ quamash==0.6.1
 rule-engine>=2.1.0
 strict-rfc3339>=0.7
 tortoise-orm==0.16.13
+weakreflist>=0.4
 yarl==1.5.1
+py-multibase @ git+https://github.com/pinnaculum/py-multibase.git@base36#egg=py-multibase

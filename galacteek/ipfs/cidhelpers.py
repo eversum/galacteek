@@ -184,15 +184,23 @@ def cidConvertBase32(cid):
     return cid.encode('base32').decode()
 
 
-def ipnsKeyCidV1(ipnsKey):
+def ipnsKeyCidV1(ipnsKey: str):
     """
-    Converts a base58 IPNS key to a CIDv1 with the
-    'libp2p-key' multicodec.
+    Converts a base58 IPNS key to a CIDv1 in base32 with the
+    'libp2p-key' multicodec. If it's already a CIDv1
+    (new IPNS keys in base36) return it in base36.
+
+    :rtype: str
     """
 
     cid = getCID(ipnsKey)
     if not cid:
         return None
+
+    if cid.version == 1 and cid.codec == 'libp2p-key':
+        # Already CIDv1 using 'libp2p-key' codec
+        # Return it encoded in base36
+        return cid.encode('base36').decode()
 
     # Need to use the libp2p-key multicodec
     cidV1 = CIDv1('libp2p-key', cid.multihash)
@@ -237,11 +245,14 @@ def domainValid(domain):
 
 # Regexps
 
-pathChars = r'\w|<>"\/:;,!\*%&=@\$~/\s\.\-_\\\'()\+\[\]'
+pathChars = r'\w|<>"\/:;,!\*%&\?=@\$~/\s\.\-_\\\'()\+\[\]'
 
 query = r'(?P<query>[\w?=&:;+]*)?'
 
 fragment = r'#?(?P<fragment>[\w_\.\-\+,;:=/?]{1,256})?$'
+
+
+ipfsLinkRe = re.compile(r'^(/(ipfs|ipns)/[' + pathChars + ']{1,1024}$)')
 
 
 ipfsPathRe = re.compile(

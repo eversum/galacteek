@@ -34,6 +34,8 @@ class ColorizedHandler(ColorizedStderrHandler):
             return 'turquoise'
         elif record.module.startswith('galacteek.did'):
             return 'turquoise'
+        elif record.module.startswith('galacteek.dweb.page'):
+            return 'brown'
         elif record.module == 'galacteek.user':
             return 'fuchsia'
         elif record.module == 'galacteek.hashmarks':

@@ -32,18 +32,27 @@ class ChannelsDAG(EvolvingDAG):
         return self.root['channels']['all']
 
     @property
+    def privateChannels(self):
+        return self.root['channels']['private']
+
+    @property
     def channelsSorted(self):
         return sorted(self.root['channels']['all'])
 
     async def onAvailable(self, obj):
         pass
 
-    def register(self, channel):
+    def registerPublic(self, channel):
         if self.channels and channel not in self.channels:
-            log.debug('Registering channel: {}'.format(channel))
+            log.debug(f'Registering public channel: {channel}')
 
             self.channels.append(channel)
             self.changed.emit()
+
+    def registerPrivate(self, channelPath):
+        privChans = self.root['channels'].setdefault('private', [])
+        privChans.append(channelPath)
+        self.changed.emit()
 
     async def onChatChannels(self, key, msg):
         await self.merge(msg.channels)

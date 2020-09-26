@@ -1,8 +1,11 @@
 from galacteek.core import utcDatetimeIso
 from galacteek.ipfs import ipfsOp
 
+from galacteek.ipfs.cidhelpers import ipfsCid32Re
+from galacteek.ipfs.cidhelpers import ipfsLinkRe
 from galacteek.ipfs.pubsub.messages import PubsubMessage
 from galacteek.ipfs.pubsub.messages import LDMessage
+from galacteek.core import doubleUid4
 
 
 class ChatChannelsListMessage(PubsubMessage):
@@ -89,9 +92,12 @@ class ChatRoomMessage(LDMessage):
     TYPE = 'ChatRoomMessage'
 
     CHATMSG_TYPE_MESSAGE = 0
-    CHATMSG_TYPE_JOINED = 1
-    CHATMSG_TYPE_LEFT = 2
-    CHATMSG_TYPE_HEARTBEAT = 3
+
+    COMMAND_MSG = 'MSG'
+    COMMAND_MSGMARKDOWN = 'MSGMARKDOWN'
+    COMMAND_HEARTBEAT = 'HEARTBEAT'
+    COMMAND_JOIN = 'JOIN'
+    COMMAND_LEAVE = 'LEAVE'
 
     schema = {
         "type": "object",
@@ -102,14 +108,32 @@ class ChatRoomMessage(LDMessage):
                 "properties": {
                     "chatmsgtype": {"type": "integer"},
                     "date": {"type": "string"},
-                    "message": {"type": "string"},
+                    "command": {"type": "string"},
+                    "jwsTokenCid": {
+                        "type": "string",
+                        "pattern": ipfsCid32Re.pattern
+                    },
+                    "params": {
+                        "type": "array",
+                        "maxItems": 8
+                    },
                     "level": {"type": "integer"},
-                    "links": {"type": "array"},
+                    "links": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "pattern": ipfsLinkRe.pattern
+                        },
+                        "maxItems": 4,
+                        "uniqueItems": True
+                    },
                     "attachments": {"type": "array"}
                 },
                 "required": [
+                    "jwsTokenCid",
                     "chatmsgtype",
-                    "message",
+                    "command",
+                    "params",
                     "date",
                     "level"
                 ]
@@ -122,19 +146,24 @@ class ChatRoomMessage(LDMessage):
     }
 
     @ipfsOp
-    async def make(self, ipfsop, message='',
+    async def make(self, ipfsop,
+                   jwsCid,
                    links=[], attachments=[], date=None,
                    type=CHATMSG_TYPE_MESSAGE,
+                   command='MSG',
+                   params=[],
                    level=0):
         msgDate = date if date else utcDatetimeIso()
         msg = ChatRoomMessage({
-            '@context': await ipfsop.ldContextJson('messages/ChatRoomMessage'),
             'msgtype': ChatRoomMessage.TYPE,
             'version': 1,
             'ChatRoomMessage': {
+                'uid': doubleUid4(),
+                'jwsTokenCid': jwsCid,
                 'chatmsgtype': type,
                 'date': msgDate,
-                'message': message,
+                'command': command,
+                'params': params,
                 'links': links,
                 'attachments': attachments,
                 'level': level
@@ -147,8 +176,29 @@ class ChatRoomMessage(LDMessage):
         return self.jsonAttr('ChatRoomMessage.chatmsgtype')
 
     @property
+    def params(self):
+        return self.jsonAttr('ChatRoomMessage.params')
+
+    @property
     def message(self):
-        return self.jsonAttr('ChatRoomMessage.message')
+        if self.command in ['MSG', 'MSGMARKDOWN']:
+            return self.jsonAttr('ChatRoomMessage.params.0')
+
+    @property
+    def body(self):
+        return self.message
+
+    @property
+    def command(self):
+        return self.jsonAttr('ChatRoomMessage.command')
+
+    @property
+    def uid(self):
+        return self.jsonAttr('ChatRoomMessage.uid')
+
+    @property
+    def jwsTokenCid(self):
+        return self.jsonAttr('ChatRoomMessage.jwsTokenCid')
 
     @property
     def date(self):
@@ -165,9 +215,61 @@ class ChatRoomMessage(LDMessage):
     def valid(self):
         schemaOk = self.validSchema(schema=ChatRoomMessage.schema)
         if schemaOk:
-            return len(self.message) < 1024 and self.chatMessageType in [
-                ChatRoomMessage.CHATMSG_TYPE_MESSAGE,
-                ChatRoomMessage.CHATMSG_TYPE_JOINED,
-                ChatRoomMessage.CHATMSG_TYPE_LEFT,
-                ChatRoomMessage.CHATMSG_TYPE_HEARTBEAT
+            return self.chatMessageType in [
+                ChatRoomMessage.CHATMSG_TYPE_MESSAGE
             ]
+
+
+class UserChannelsListMessage(PubsubMessage):
+    TYPE = 'ChatUserChannelsMessage'
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "msgtype": {"type": "string"},
+
+            "msg": {
+                "type": "object",
+                "properties": {
+                    "rev": {
+                        "type": "integer"
+                    },
+                    "pubChannels": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "sessionJwsCid": {
+                                    "type": "string",
+                                    "pattern": ipfsCid32Re.pattern
+                                }
+                            },
+                            "required": ["sessionJwsCid"]
+                        },
+                        "maxItems": 32
+                    }
+                },
+                "required": ["pubChannels", "rev"]
+            }
+        },
+        "required": ["msgtype", "msg"]
+    }
+
+    def make(revision: int, pubchanlist: list):
+        return UserChannelsListMessage({
+            'msgtype': UserChannelsListMessage.TYPE,
+            'version': 1,
+            'msg': {
+                'rev': revision,
+                'pubChannels': pubchanlist,
+                'privChannels': {}
+            }
+        })
+
+    @property
+    def pubChannels(self):
+        return self.jsonAttr('msg.pubChannels')
+
+    @property
+    def rev(self):
+        return self.jsonAttr('msg.rev')

@@ -44,7 +44,14 @@
       </layout>
      </item>
      <item>
-      <widget class="QListView" name="channelsView"/>
+      <widget class="QTreeView" name="channelsView">
+       <attribute name="headerMinimumSectionSize">
+        <number>150</number>
+       </attribute>
+       <attribute name="headerDefaultSectionSize">
+        <number>200</number>
+       </attribute>
+      </widget>
      </item>
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout">

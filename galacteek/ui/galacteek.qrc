@@ -26,6 +26,9 @@
     <file>../../share/icons/blockchain1.png</file>
     <file>../../share/icons/blockchain2.png</file>
     <file>../../share/js/web3.min.js</file>
+    <file>../../share/js/rxjs.umd.min.js</file>
+    <file>../../share/js/quest/quest-service.js</file>
+    <file>../../share/js/quest/quest-service-ext.js</file>
     <file>../../share/static/docs/markdown-reference.html</file>
     <file>../../share/icons/blog.png</file>
     <file>../../share/icons/mimetypes/application-atom+xml.png</file>
@@ -138,6 +141,7 @@
     <file>../../share/icons/search-engine.png</file>
     <file>../../share/icons/ipfs-search.png</file>
     <file>../../share/static/css/ipfs-ui.css</file>
+    <file>../../share/static/css/chat.css</file>
     <file>../../share/static/css/orbital.css</file>
     <file>../../share/icons/orbitdb.png</file>
     <file>../../share/icons/folder-open-black.png</file>

@@ -165,6 +165,9 @@ class BaseWorkspace(QWidget):
     def setupWorkspace(self):
         pass
 
+    async def loadDapps(self):
+        pass
+
     async def handleObjectDrop(self, ipfsPath):
         pass
 
@@ -380,6 +383,14 @@ class PlanetWorkspace(TabbedWorkspace):
 
     def wsToolTip(self):
         return f'Planet workspace: {self.planet}'
+
+    async def loadDapps(self):
+        if self.app.cmdArgs.enablequest:
+            await self.loadQuestService()
+
+    async def loadQuestService(self):
+        from galacteek.dweb.quest import loadQuestService
+        self.qView, self.qPage = await loadQuestService()
 
 
 class WorkspaceCore(TabbedWorkspace):

@@ -159,6 +159,11 @@ def buildArgsParser():
         dest='enableorbital',
         help="Enable orbit-db connector")
     parser.add_argument(
+        '--enable-quest',
+        action='store_true',
+        dest='enablequest',
+        help="Enable quest connector")
+    parser.add_argument(
         '--goipfs-debug',
         action='store_true',
         dest='goipfsdebug',

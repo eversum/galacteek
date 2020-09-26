@@ -252,6 +252,7 @@ setup(
         'galacteek.did',
         'galacteek.ipfs',
         'galacteek.ipfs.pubsub',
+        'galacteek.ipfs.pubsub.srvs',
         'galacteek.ipfs.pubsub.messages',
         'galacteek.ipfs.pb',
         'galacteek.ipfs.p2pservices',
