@@ -1,0 +1,132 @@
+<html>
+  <head>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <link rel="stylesheet" type="text/css"
+                           href="qrc:///share/static/css/chat.css"/>
+  </head>
+  <body>
+    <script type="text/javascript">
+      new QWebChannel(qt.webChannelTransport, function (channel) {
+        window.chatroom = channel.objects.chatroom;
+        window.galacteek = channel.objects.galacteek;
+
+        window.chatroom.chatMsgAttachments.connect(function(msgUid, attach) {
+            attach.forEach(function(att) {
+                message = document.getElementById(msgUid)
+
+                if (typeof(message) == 'undefined') {
+                    return
+                }
+
+                messages = document.getElementById('messages')
+                l1 = document.createElement("div")
+                l1.setAttribute('class', 'attachment')
+                markup = `
+                  <div class="msg-text">
+                    <p>Attachment (${ att.mimeType })</p>
+                    <p><a href="${ att.url  }"
+                     onclick="event.preventDefault(); window.galacteek.openResource('${ att.objPath }');">${ att.objPath }</a></p>
+                  </div>
+                `
+
+                if (att.mimeType.startsWith('image')) {
+                  markup += `
+                    <img src="${ att.url }"
+                     width="250px" height="auto"
+                     onclick="event.preventDefault(); window.galacteek.openResource('${ att.objPath }');"></img>
+                  `
+                }
+
+                l1.innerHTML = markup
+                message.appendChild(l1)
+                bScroll()
+            })
+        })
+
+        window.chatroom.chatJoinLeftReceived.connect(function(msg) {
+            messages = document.getElementById('messages')
+            l0 = document.createElement("div")
+            l0.setAttribute('class', 'chat-status-message center-msg')
+
+            if (msg['status'] == 'joined') {
+                sMsg = `<b>${ msg.spaceHandle }</b> joined the room`
+            } else if (msg['status'] == 'left') {
+                sMsg = `<b>${ msg.spaceHandle }</b> left the room`
+            }
+
+            markup = `
+                <div class="msg-img"
+                style="background-image: url('dweb:${ msg.avatarPath }')">
+                </div>
+
+                  <div class="msg-text">
+                      ${ sMsg }
+                  </div>
+            `
+
+            l0.innerHTML = markup
+            messages.appendChild(l0)
+            bScroll()
+        })
+
+
+        window.chatroom.chatMsgReceived.connect(function(msg) {
+            messages = document.getElementById('messages')
+            l0 = document.createElement("div")
+            l1 = document.createElement("div")
+
+            if (msg['local']) {
+                l1.setAttribute('class', 'msg right-msg')
+            } else {
+                l1.setAttribute('class', 'msg left-msg')
+            }
+            l0.setAttribute('id', msg.uid)
+
+            markup = `
+                <div class="msg-img"
+                style="background-image: url('dweb:${ msg.avatarPath }')">
+                </div>
+
+                <div class="msg-bubble">
+                  <div class="msg-info">
+                    <div class="msg-info-name">${ msg.spaceHandle }</div>
+                  </div>
+
+                  <div class="msg-text">
+                      ${ msg.message }
+                  </div>
+               </div>
+            `
+
+            l1.innerHTML = markup
+            l0.appendChild(l1)
+            messages.appendChild(l0)
+            bScroll()
+        })
+     })
+
+      function sendMessage() {
+         imessage = document.getElementById('input-message')
+         window.chatroom.sendMessage(imessage.value)
+         imessage.value = ""
+      }
+
+      function bScroll() {
+        messages = document.getElementById('messages')
+        messages.scrollTop = messages.scrollHeight;
+      }
+
+    </script>
+
+    <section class="msger">
+      <main class="msger-chat" id="messages">
+      </main>
+
+      <form class="msger-inputarea">
+        <input type="text" class="msger-input" id="input-message">
+        <button type="submit" class="msger-send-btn"
+            onclick="event.preventDefault(); sendMessage();">Send</button>
+      </form>
+    </section>
+  </body>
+</html>

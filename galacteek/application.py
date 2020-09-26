@@ -627,9 +627,9 @@ class GalacteekApplication(QApplication):
         rscFile = QFile(':{0}'.format(path))
 
         try:
-            rscFile.open(QFile.ReadOnly)
-            data = rscFile.readAll().data()
-            entry = await op.addBytes(data)
+            if rscFile.open(QFile.ReadOnly):
+                data = rscFile.readAll().data()
+                entry = await op.addBytes(data)
         except Exception as e:
             log.debug('importQtResource: {}'.format(str(e)))
         else:
@@ -912,7 +912,12 @@ class GalacteekApplication(QApplication):
             self.dataLocation, 'db_main.sqlite3')
         self.marksDataLocation = os.path.join(self.dataLocation, 'marks')
         self.uiDataLocation = os.path.join(self.dataLocation, 'ui')
+
         self.cryptoDataLocation = os.path.join(self.dataLocation, 'crypto')
+        self.eccDataLocation = os.path.join(self.cryptoDataLocation, 'ecc')
+        self.eccChatChannelsDataLocation = os.path.join(
+            self.eccDataLocation, 'channels')
+
         self.gpgDataLocation = os.path.join(self.cryptoDataLocation, 'gpg')
         self.localMarksFileLocation = os.path.join(self.marksDataLocation,
                                                    'ipfsmarks.local.json')
@@ -935,6 +940,8 @@ class GalacteekApplication(QApplication):
                     self.ipfsBinLocation,
                     self.marksDataLocation,
                     self.cryptoDataLocation,
+                    self.eccDataLocation,
+                    self.eccChatChannelsDataLocation,
                     self.gpgDataLocation,
                     self.uiDataLocation,
                     self.configDirLocation]:

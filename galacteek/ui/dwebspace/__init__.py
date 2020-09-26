@@ -381,6 +381,13 @@ class PlanetWorkspace(TabbedWorkspace):
     def wsToolTip(self):
         return f'Planet workspace: {self.planet}'
 
+    def setupWorkspace(self):
+        super().setupWorkspace()
+        ensure(self.loadQuest())
+
+    async def loadQuest(self):
+        pass
+
 
 class WorkspaceCore(TabbedWorkspace):
     def __init__(self, stack):

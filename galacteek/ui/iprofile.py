@@ -32,8 +32,6 @@ from galacteek.crypto.qrcode import IPFSQrEncoder
 from galacteek.ipfs.pubsub import TOPIC_PEERS
 from galacteek.ipfs.pubsub.messages.core import PeerIpHandleChosen
 
-from galacteek.did.ipid import IPService
-
 from .dids import buildIpServicesMenu
 from .helpers import filesSelectImages
 from .helpers import getIcon
@@ -286,16 +284,20 @@ class ProfileEditDialog(QDialog):
         self.ui.vPlanet.setEnabled(False)
 
     async def loadIcon(self):
-        avatar = await self.profile.userInfo.identityGetRaw('avatar')
+        ipIdentifier = await self.profile.userInfo.ipIdentifier()
+        avatarService = await ipIdentifier.avatarService()
 
-        if isinstance(avatar, bytes):
-            try:
-                img1 = QImage()
-                img1.loadFromData(avatar)
-                img = img1.scaledToWidth(128)
-                self.ui.iconPixmap.setPixmap(QPixmap.fromImage(img))
-            except Exception as err:
-                log.debug(str(err))
+        if avatarService:
+            avatar = await avatarService.endpointCat()
+
+            if isinstance(avatar, bytes):
+                try:
+                    img1 = QImage()
+                    img1.loadFromData(avatar)
+                    img = img1.scaledToWidth(128)
+                    self.ui.iconPixmap.setPixmap(QPixmap.fromImage(img))
+                except Exception as err:
+                    log.debug(str(err))
 
     def changeIcon(self):
         fps = filesSelectImages()
@@ -311,23 +313,12 @@ class ProfileEditDialog(QDialog):
         async with self.profile.userInfo as dag:
             dag.curIdentity['avatar'] = dag.mkLink(entry['Hash'])
 
-        await op.sleep(2)
-        await self.loadIcon()
-
         # Update the avatar DID service
         ipid = await self.profile.userInfo.ipIdentifier()
-        avatarServiceId = ipid.didUrl(path='/avatar')
 
-        if not await ipid.searchServiceById(avatarServiceId):
-            await ipid.addServiceRaw({
-                'id': avatarServiceId,
-                'type': IPService.SRV_TYPE_AVATAR,
-                'serviceEndpoint': joinIpfs(entry['Hash']),
-                'description': 'User Avatar'
-            }, publish=True)
-        else:
-            async with ipid.editService(avatarServiceId) as editor:
-                editor.service['serviceEndpoint'] = joinIpfs(entry['Hash'])
+        await ipid.avatarSet(joinIpfs(entry['Hash']))
+        await op.sleep(1)
+        await self.loadIcon()
 
     async def save(self):
         if self.profile.userInfo.iphandleValid:

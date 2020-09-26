@@ -1,7 +1,7 @@
 aiodns>=2.0.0
 aiofiles>=0.4.0
 aiohttp>=3.4.4
-aioipfs>=0.5.0
+aioipfs>=0.5.1
 aiojobs>=0.2.2
 aiopubsub>=2.1.5
 aiorwlock>=0.6.0
@@ -20,6 +20,7 @@ gitpython>=2.1.11
 jinja2>=2.10.1
 json-traverse>=0.4
 jsonschema>=3.0.0,<4.0.0
+jwcrypto>=0.8
 logbook>=1.5.3
 markdown>=3.0
 mdx-unimoji>=1.0

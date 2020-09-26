@@ -1782,6 +1782,18 @@ class IPFSOperator(object):
             self.debug(f'Err: {err}')
             return None
 
+    async def pubsubPeers(self, topic=None, timeout=10):
+        try:
+            resp = await self.waitFor(self.client.pubsub.peers(
+                topic=topic), timeout)
+            return resp['Strings']
+        except aioipfs.APIError as err:
+            self.debug(err.message)
+            return None
+        except Exception as err:
+            self.debug(f'pubsubPeers error: {err}')
+            return None
+
     async def versionNum(self):
         try:
             vInfo = await self.client.core.version()
@@ -1814,6 +1826,9 @@ class IPFSOperator(object):
         except aioipfs.APIError as err:
             self.debug(err.message)
             return False
+
+    def ourNode(self, peerId):
+        return self.ctx.node.id == peerId
 
     async def hasDagCommand(self):
         return await self.hasCommand('dag')

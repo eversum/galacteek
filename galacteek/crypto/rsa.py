@@ -3,6 +3,8 @@ import concurrent.futures
 import functools
 import base64
 
+from jwcrypto import jws
+
 from io import BytesIO
 
 from Cryptodome.Signature import pss
@@ -26,6 +28,9 @@ class RSAExecutor(object):
         self.executor = executor if executor else \
             concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
+    def randBytes(self, rlen=16):
+        return get_random_bytes(rlen)
+
     async def _exec(self, fn, *args, **kw):
         return await self.loop.run_in_executor(
             self.executor, functools.partial(fn, *args, **kw))
@@ -33,9 +38,9 @@ class RSAExecutor(object):
     async def importKey(self, keyData):
         return await self._exec(lambda: RSA.import_key(keyData))
 
-    async def genKeys(self, keysize=2048):
+    async def genKeys(self, keysize=4096):
         """
-        Generate RSA keys of the given keysize (2048 bits by default)
+        Generate RSA keys of the given keysize
         and return a tuple containing the PEM-encoded private and public key
         """
         def _generateKeypair(size):
@@ -46,15 +51,17 @@ class RSAExecutor(object):
 
         return await self._exec(_generateKeypair, keysize)
 
-    async def encryptData(self, data, recipientKeyData):
+    async def encryptData(self, data, recipientKeyData, sessionKey=None):
         if not isinstance(data, BytesIO):
             raise ValueError('Need BytesIO')
-        return await self._exec(self._encryptPkcs1OAEP, data, recipientKeyData)
+        return await self._exec(self._encryptPkcs1OAEP, data, recipientKeyData,
+                                sessionKey=sessionKey)
 
-    def _encryptPkcs1OAEP(self, data, recipientKeyData):
+    def _encryptPkcs1OAEP(self, data, recipientKeyData,
+                          sessionKey=None):
         try:
             recipientKey = RSA.import_key(recipientKeyData)
-            sessionKey = get_random_bytes(16)
+            sessionKey = sessionKey if sessionKey else get_random_bytes(16)
 
             cipherRsa = PKCS1_OAEP.new(recipientKey)
             encSessionKey = cipherRsa.encrypt(sessionKey)
@@ -147,3 +154,12 @@ class RSAExecutor(object):
         except Exception as err:
             log.debug('Exception on PSS verification: {}'.format(str(err)))
             return None
+
+    def jwsVerify(self, sig, key):
+        try:
+            token = jws.JWS()
+            token.deserialize(sig)
+            token.verify(key)
+            return token.payload
+        except Exception as err:
+            self.debug(f'Cannot verify JWS: {err}')

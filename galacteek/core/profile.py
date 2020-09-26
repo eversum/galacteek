@@ -873,6 +873,19 @@ class UserProfile(QObject):
                     localIdentifier=True
                 )
 
+            ipid = await self.userInfo.ipIdentifier()
+
+            if not await ipid.avatarService():
+                entry = await self.ctx.app.importQtResource(
+                    '/share/icons/planets/{planet}.png'.format(
+                        planet=self.userInfo.vplanet.lower()
+                    )
+                )
+
+                if entry:
+                    path = IPFSPath(entry['Hash'])
+                    await ipid.avatarSet(path)
+
             return True
 
     def ipIdentifierKeyName(self, idx: int):
@@ -983,6 +996,9 @@ class UserProfile(QObject):
         }, publish=False)
 
         await ipid.addServiceCollection('default')
+
+        defAvatar = IPFSPath(ipfsop.ctx.resources['ipfs-cube-64'])
+        await ipid.avatarSet(defAvatar.objPath)
 
     @ipfsOp
     async def rsaEncryptSelf(self, op, data, offline=False):

@@ -1,3 +1,4 @@
+from galacteek.core.asynclib import asyncReadFile
 from PyQt5.QtWebEngineWidgets import QWebEngineScript
 from PyQt5.QtCore import QFile
 
@@ -9,6 +10,23 @@ def scriptFromString(name, jsCode):
     script.setWorldId(QWebEngineScript.MainWorld)
     script.setInjectionPoint(QWebEngineScript.DocumentCreation)
     return script
+
+
+async def scriptFromLocalFile(name, filePath):
+    data = await asyncReadFile(filePath, mode='rt')
+    return scriptFromString(name, data)
+
+
+def scriptFromQFile(name, rscPath):
+    jsFile = QFile(rscPath)
+    if not jsFile.open(QFile.ReadOnly):
+        return
+
+    try:
+        libCode = jsFile.readAll().data().decode('utf-8')
+        return scriptFromString(name, libCode)
+    except Exception:
+        return None
 
 
 ipfsInjScript = '''
