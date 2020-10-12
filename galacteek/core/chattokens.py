@@ -1,9 +1,39 @@
 import asyncio
 import attr
+import orjson
+import re
 
+from galacteek import log
 from galacteek import AsyncSignal
 from galacteek.core import SingletonDecorator
+from galacteek.did import didIdentRe
 from galacteek.database import *
+
+
+def verifyTokenPayload(payload: bytes):
+    try:
+        # Decoded the token payload
+        decoded = orjson.loads(payload.decode())
+
+        psTopic = decoded.get('psTopic')
+        chan = decoded.get('channel')
+        did = decoded.get('did')
+        cpass = decoded.get('pass')
+
+        assert isinstance(psTopic, str)
+        assert isinstance(chan, str)
+        assert isinstance(did, str)
+        assert isinstance(cpass, str)
+
+        assert didIdentRe.match(did) is not None
+        assert re.match(r"^#[a-zA-Z0-9-_]{1,64}$", chan) is not None
+        assert re.match(r"^[\w]{1,128}$", cpass) is not None
+        assert re.match(
+            r"^galacteek.rsaenc.[\w\.]{64,256}$", psTopic) is not None
+    except Exception as err:
+        log.debug(f'Invalid JWS: {err}')
+    else:
+        return decoded
 
 
 @SingletonDecorator
@@ -20,8 +50,8 @@ class PubChatTokensManager:
     async def start(self):
         await pubChatTokensClear()
 
-    async def reg(self, jwsCid, channel, secTopic, peerId):
-        token = await pubChatTokenNew(jwsCid, channel, secTopic, peerId)
+    async def reg(self, jwsCid, channel, secTopic, peerId, **kw):
+        token = await pubChatTokenNew(jwsCid, channel, secTopic, peerId, **kw)
 
         await self.sChanChanged.emit(channel)
         await self.sTokenStatus.emit(jwsCid, channel, 0)

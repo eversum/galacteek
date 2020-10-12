@@ -5,7 +5,7 @@ from galacteek.ipfs.cidhelpers import ipfsCid32Re
 from galacteek.ipfs.cidhelpers import ipfsLinkRe
 from galacteek.ipfs.pubsub.messages import PubsubMessage
 from galacteek.ipfs.pubsub.messages import LDMessage
-from galacteek.core import doubleUid4
+from galacteek.core import uid4
 
 
 class ChatChannelsListMessage(PubsubMessage):
@@ -103,12 +103,23 @@ class ChatRoomMessage(LDMessage):
         "type": "object",
         "properties": {
             "msgtype": {"type": "string"},
+            "version": {"type": "integer"},
             "ChatRoomMessage": {
                 "type": "object",
                 "properties": {
+                    "uid": {
+                        "type": "string",
+                        "maxLength": 128
+                    },
                     "chatmsgtype": {"type": "integer"},
-                    "date": {"type": "string"},
-                    "command": {"type": "string"},
+                    "date": {
+                        "type": "string",
+                        "maxLength": 128
+                    },
+                    "command": {
+                        "type": "string",
+                        "maxLength": 32
+                    },
                     "jwsTokenCid": {
                         "type": "string",
                         "pattern": ipfsCid32Re.pattern
@@ -130,6 +141,7 @@ class ChatRoomMessage(LDMessage):
                     "attachments": {"type": "array"}
                 },
                 "required": [
+                    "uid",
                     "jwsTokenCid",
                     "chatmsgtype",
                     "command",
@@ -141,6 +153,7 @@ class ChatRoomMessage(LDMessage):
         },
         "required": [
             "msgtype",
+            "version",
             "ChatRoomMessage"
         ]
     }
@@ -158,7 +171,7 @@ class ChatRoomMessage(LDMessage):
             'msgtype': ChatRoomMessage.TYPE,
             'version': 1,
             'ChatRoomMessage': {
-                'uid': doubleUid4(),
+                'uid': uid4(),
                 'jwsTokenCid': jwsCid,
                 'chatmsgtype': type,
                 'date': msgDate,
@@ -180,7 +193,7 @@ class ChatRoomMessage(LDMessage):
         return self.jsonAttr('ChatRoomMessage.params')
 
     @property
-    def message(self):
+    def messageBody(self):
         if self.command in ['MSG', 'MSGMARKDOWN']:
             return self.jsonAttr('ChatRoomMessage.params.0')
 
@@ -232,7 +245,8 @@ class UserChannelsListMessage(PubsubMessage):
                 "type": "object",
                 "properties": {
                     "rev": {
-                        "type": "integer"
+                        "type": "string",
+                        "maxLength": 36
                     },
                     "pubChannels": {
                         "type": "array",
@@ -255,7 +269,7 @@ class UserChannelsListMessage(PubsubMessage):
         "required": ["msgtype", "msg"]
     }
 
-    def make(revision: int, pubchanlist: list):
+    def make(revision, pubchanlist: list):
         return UserChannelsListMessage({
             'msgtype': UserChannelsListMessage.TYPE,
             'version': 1,

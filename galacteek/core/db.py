@@ -316,14 +316,16 @@ class AtomFeedsDatabase(QObject):
                 self.processedFeedEntry.emit(atomFeed, entry)
 
                 if feedSql['autopin_entries'] == 1 and \
-                        feedSql['scheme'] in ['ipns', 'ipfs', 'dweb']:
+                        feedSql['scheme'] in ['ipns', 'ipfs', 'dweb'] and 0:
+                    # Disable autopin for now
                     path = IPFSPath(entry.id)
                     if path.valid:
                         log.debug('Atom: autopinning {id}'.format(
                             id=entry.id))
                         ensure(ipfsop.pin(
-                            path.objPath, recursive=False, timeout=20)
+                            path.objPath, recursive=False, timeout=10)
                         )
+                        await ipfsop.sleep(0.5)
             else:
                 for exent in entries:
                     if exent['entry_id'] == entry.id:

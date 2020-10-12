@@ -91,10 +91,11 @@ class IpfsRSAAgent:
         except Exception as err:
             self.debug(f'Cannot create JWT: {err}')
 
-    async def encrypt(self, data, pubKey, sessionKey=None):
+    async def encrypt(self, data, pubKey, sessionKey=None, cacheKey=False):
         return await self.rsaExec.encryptData(
             data if isinstance(data, BytesIO) else BytesIO(data),
-            pubKey, sessionKey=sessionKey
+            pubKey, sessionKey=sessionKey,
+            cacheKey=cacheKey
         )
 
     async def decrypt(self, data):

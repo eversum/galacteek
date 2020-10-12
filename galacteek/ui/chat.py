@@ -35,6 +35,7 @@ from galacteek.ipfs.pubsub.srvs.chat import encChatChannelTopic
 from galacteek.ipfs.pubsub.srvs.chat import PSEncryptedChatChannelService
 
 from galacteek.core import doubleUid4
+from galacteek.core import uid4
 from galacteek.core import utcDatetimeIso
 from galacteek.core.ps import makeKeyChatChannel
 from galacteek.core.ps import keyChatChanList
@@ -43,7 +44,7 @@ from galacteek.core.ps import keyChatChanUserList
 from galacteek.core.ps import makeKeyPubChatTokens
 from galacteek.core.ps import mSubscriber
 from galacteek.core.ps import gHub
-from galacteek.core.pubchattokens import PubChatTokensManager
+from galacteek.core.chattokens import PubChatTokensManager
 
 from galacteek.core import SingletonDecorator
 from galacteek.core.asynclib import loopTime
@@ -86,7 +87,7 @@ class ChatChannels(QObject):
         self.app = QApplication.instance()
         self.lock = asyncio.Lock()
         self.channelWidgets = weakref.WeakValueDictionary()
-        self.userListRev = 0
+        self.userListRev = uid4()
 
         self.pubTokensManager = PubChatTokensManager()
 
@@ -175,7 +176,7 @@ class ChatChannels(QObject):
         ipfsop.ctx.pubsub.reg(service)
         await service.start()
 
-        self.userListRev += 1
+        self.userListRev = uid4()
 
         # Create the chatroom widget
         self.channelWidgets[channel] = w = ChatRoomWidget(
@@ -517,7 +518,10 @@ class ChatRoomWidget(GalacteekTab):
         tokenCid, status = message
         idxHandle, _ = self.participantIdxByToken(tokenCid)
 
-        if idxHandle and status == 1:
+        if not idxHandle:
+            return
+
+        if status == 1:
             self.participantsModel.removeRow(idxHandle.row())
 
     @ipfsOp
@@ -608,16 +612,6 @@ class ChatRoomWidget(GalacteekTab):
         if idxHandle:
             self.participantsModel.removeRow(idxHandle.row())
 
-    async def removeInactiveUsers(self):
-        now = loopTime()
-
-        async for p in self.participantsData():
-            if p['hbts'] is None:
-                continue
-
-            if (now - float(p['hbts'])) > 60 * 3:
-                self.participantsModel.removeRow(p['row'])
-
     @ipfsOp
     async def onChatMessageReceived(self, ipfsop, key, hubMessage):
         sender, message = hubMessage
@@ -634,10 +628,10 @@ class ChatRoomWidget(GalacteekTab):
             return
 
         if message.command == ChatRoomMessage.COMMAND_MSGMARKDOWN:
-            if not isinstance(message.message, str):
+            if not isinstance(message.messageBody, str):
                 return
 
-            if len(message.message) > 512:
+            if len(message.messageBody) > 512:
                 return
 
             if not self.isVisible():
@@ -654,7 +648,7 @@ class ChatRoomWidget(GalacteekTab):
                         self.channel,
                         message.peerCtx.spaceHandle.short
                     ),
-                    timeout=4000
+                    timeout=3000
                 )
 
             self.chatView.hChat.chatMsgReceived.emit(QVariant({
@@ -662,7 +656,7 @@ class ChatRoomWidget(GalacteekTab):
                 'date': now,
                 'local': fromUs,
                 'spaceHandle': str(message.peerCtx.spaceHandle.short),
-                'message': markitdown(message.message),
+                'message': markitdown(message.messageBody),
                 'avatarPath': avatarPath
             }))
 
@@ -760,7 +754,6 @@ class ChatRoomWidget(GalacteekTab):
                     command=ChatRoomMessage.COMMAND_HEARTBEAT
                 )
             )
-            # await self.removeInactiveUsers()
 
     async def onClose(self):
         await self.hbTask.close()

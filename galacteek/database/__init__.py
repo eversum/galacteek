@@ -460,11 +460,13 @@ async def seedsAll():
 # Pub chat tokens
 
 
-async def pubChatTokenNew(cid, channel, secTopic, peerId):
+async def pubChatTokenNew(cid, channel, secTopic, peerId, **kw):
     try:
-        token = PubChatToken(cid=cid, channel=channel, secTopic=secTopic,
-                             peerId=peerId,
-                             ltLast=loopTime())
+        token = PubChatSessionToken(
+            cid=cid, channel=channel, secTopic=secTopic,
+            peerId=peerId,
+            ltLast=loopTime(),
+            **kw)
         await token.save()
         return token
     except Exception:
@@ -472,20 +474,20 @@ async def pubChatTokenNew(cid, channel, secTopic, peerId):
 
 
 async def pubChatTokenGet(cid):
-    return await PubChatToken.filter(cid=cid).first()
+    return await PubChatSessionToken.filter(cid=cid).first()
 
 
 async def pubChatTokensClear():
-    await PubChatToken.all().delete()
+    await PubChatSessionToken.all().delete()
 
 
 async def pubChatTokenDelete(cid):
-    return await PubChatToken.filter(cid=cid).delete()
+    return await PubChatSessionToken.filter(cid=cid).delete()
 
 
 async def pubChatTokensByChannel(channel):
-    return await PubChatToken.filter(channel=channel).all()
+    return await PubChatSessionToken.filter(channel=channel).all()
 
 
 async def pubChatTokensInactive(ltMax):
-    return await PubChatToken.filter(ltLast__lt=ltMax).all()
+    return await PubChatSessionToken.filter(ltLast__lt=ltMax).all()

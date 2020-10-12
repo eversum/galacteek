@@ -2,6 +2,9 @@ import asyncio
 import concurrent.futures
 import functools
 import base64
+import hashlib
+
+from cachetools import TTLCache
 
 from jwcrypto import jws
 
@@ -27,6 +30,7 @@ class RSAExecutor(object):
         self.loop = loop if loop else asyncio.get_event_loop()
         self.executor = executor if executor else \
             concurrent.futures.ThreadPoolExecutor(max_workers=4)
+        self._keysCache = TTLCache(maxsize=128, ttl=120)
 
     def randBytes(self, rlen=16):
         return get_random_bytes(rlen)
@@ -51,16 +55,34 @@ class RSAExecutor(object):
 
         return await self._exec(_generateKeypair, keysize)
 
-    async def encryptData(self, data, recipientKeyData, sessionKey=None):
+    async def encryptData(self, data, recipientKeyData, sessionKey=None,
+                          cacheKey=False):
         if not isinstance(data, BytesIO):
             raise ValueError('Need BytesIO')
-        return await self._exec(self._encryptPkcs1OAEP, data, recipientKeyData,
+
+        try:
+            if cacheKey:
+                hasher = hashlib.sha3_256()
+                hasher.update(recipientKeyData)
+                dig = hasher.hexdigest()
+
+                key = self._keysCache.get(dig)
+
+                if not key:
+                    key = RSA.import_key(recipientKeyData)
+                    self._keysCache[dig] = key
+            else:
+                key = RSA.import_key(recipientKeyData)
+        except Exception as err:
+            log.debug(f'Cannot load RSA key: {err}')
+            return
+
+        return await self._exec(self._encryptPkcs1OAEP, data, key,
                                 sessionKey=sessionKey)
 
-    def _encryptPkcs1OAEP(self, data, recipientKeyData,
+    def _encryptPkcs1OAEP(self, data, recipientKey,
                           sessionKey=None):
         try:
-            recipientKey = RSA.import_key(recipientKeyData)
             sessionKey = sessionKey if sessionKey else get_random_bytes(16)
 
             cipherRsa = PKCS1_OAEP.new(recipientKey)

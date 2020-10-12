@@ -500,11 +500,11 @@ class RSAEncryptedJSONPubsubService(JSONPubsubService):
 
     @ipfsOp
     async def send(self, ipfsop, msg):
-        async for peerId, piCtx, sessionKey, topic in self.peersToSend():
+        async for peerId, piCtx, sessionKey, _topic in self.peersToSend():
             if await self.peerEncFilter(piCtx, msg) is True:
                 continue
 
-            topic = topic if topic else self.peeredTopic(peerId)
+            topic = _topic if _topic else self.peeredTopic(peerId)
 
             pubKey = await piCtx.defaultRsaPubKey()
 
@@ -514,7 +514,8 @@ class RSAEncryptedJSONPubsubService(JSONPubsubService):
             enc = await ipfsop.rsaAgent.encrypt(
                 str(msg).encode(),
                 pubKey,
-                sessionKey=sessionKey
+                sessionKey=sessionKey,
+                cacheKey=True
             )
 
             await ipfsop.sleep(0.05)

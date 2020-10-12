@@ -76,6 +76,7 @@ class PeerIdentityCtx:
         self._avatarImage = self.defaultAvatarImage()
 
         self._dtReg = datetime.now()
+        self._processData = {}
 
         self.sInactive = AsyncSignal(str)
         self.sStatusChanged = AsyncSignal()

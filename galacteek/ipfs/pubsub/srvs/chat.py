@@ -1,5 +1,4 @@
 import asyncio
-import aiorwlock
 import orjson
 
 from galacteek import log
@@ -20,7 +19,8 @@ from galacteek.core.ps import keyChatChanList
 from galacteek.core.ps import keyChatChanUserList
 from galacteek.core.ps import makeKeyPubChatTokens
 from galacteek.core.ps import mSubscriber
-from galacteek.core.pubchattokens import PubChatTokensManager
+from galacteek.core.chattokens import PubChatTokensManager
+from galacteek.core.chattokens import verifyTokenPayload
 
 
 def encChatChannelTopic(channel):
@@ -35,8 +35,8 @@ class PSChatService(JSONPubsubService):
     def __init__(self, ipfsCtx, client, **kw):
         super().__init__(ipfsCtx, client, topic=TOPIC_CHAT,
                          runPeriodic=True,
+                         minMsgTsDiff=5,
                          filterSelfMessages=False, **kw)
-        self.lock = aiorwlock.RWLock()
         mSubscriber.add_async_listener(
             keyChatChanList, self.onUserChannelList)
 
@@ -100,11 +100,8 @@ class PSChatService(JSONPubsubService):
             self.debug(f'Invalid UserChannelsListMessage from {sender}')
             return
 
-        senderChans = cMsg.pubChannels if cMsg.pubChannels else []
-        jwsCids = [c['sessionJwsCid'] for c in senderChans]
-
-        # pChans = self.chanUsers.setdefault(sender, {})
-        # lastrev = pChans.get('_lastrev')
+        pubTokensList = cMsg.pubChannels if cMsg.pubChannels else []
+        jwsCids = [c['sessionJwsCid'] for c in pubTokensList]
 
         for jwsCid in jwsCids:
             token = await self.tokManager.tokenGet(jwsCid)
@@ -135,27 +132,21 @@ class PSChatService(JSONPubsubService):
                     await ipfsop.sleep()
                     continue
 
-                try:
-                    # Decoded the token payload
-                    decoded = orjson.loads(payload.decode())
-                    assert 'did' in decoded
-                    assert 'channel' in decoded
-                    assert 'psTopic' in decoded
+                decoded = verifyTokenPayload(payload)
 
-                    psTopic = decoded['psTopic']
-                    chan = decoded['channel']
-                except Exception as err:
-                    log.debug(f'Peer {sender}: invalid JWS: {err}')
+                if not decoded:
                     await ipfsop.sleep()
                     continue
-                else:
-                    log.debug(f'Peer {sender}: valid JWS:'
-                              f'sec topic: {psTopic}')
+
+                psTopic = decoded['psTopic']
+                chan = decoded['channel']
+
+                log.debug(f'Peer {sender}: valid JWS:'
+                          f'sec topic: {psTopic}')
 
                 if ipfsop.ourNode(sender):
-                    async with self.lock.writer_lock:
-                        await self.tokManager.reg(
-                            jwsCid, chan, psTopic, sender)
+                    await self.tokManager.reg(
+                        jwsCid, chan, psTopic, sender)
                 else:
                     # Check who's subscribed on the topic
                     psPeers = await ipfsop.pubsubPeers(
@@ -163,11 +154,14 @@ class PSChatService(JSONPubsubService):
 
                     # There should only be one peer subscribed
                     if psPeers and len(psPeers) > 0:
-                        async with self.lock.writer_lock:
-                            await self.tokManager.reg(
-                                jwsCid, chan, psTopic, sender)
+                        await self.tokManager.reg(
+                            jwsCid, chan, psTopic, sender)
 
             await ipfsop.sleep()
+
+        piCtx._processData['chatTokensLastRev'] = cMsg.rev
+
+        log.debug('Peer {sender}: processed revision {cMsg.rev}')
 
     @ipfsOp
     async def handleChannelsListMessage(self, ipfsop, msg):
@@ -193,12 +187,9 @@ class PSChatService(JSONPubsubService):
                     ChatChannelsListMessage.make(channelsDag.channelsSorted)
                 )
 
-            await self.tokManager.cleanup()
-
     async def shutdown(self):
         await super().shutdown()
         self.tokManager.active = False
-        await asyncio.sleep(0.5)
 
 
 class PSEncryptedChatChannelService(RSAEncryptedJSONPubsubService):

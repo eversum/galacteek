@@ -55,6 +55,10 @@ def doubleUid4():
     return str(uuid.uuid4()) + str(uuid.uuid4())
 
 
+def uid4():
+    return str(uuid.uuid4())
+
+
 def isoformat(dt, sep=' ', timespec='seconds'):
     if version_info.major == 3 and version_info.minor < 6:
         return dt.isoformat(sep)

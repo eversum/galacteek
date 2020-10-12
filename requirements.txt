@@ -50,6 +50,5 @@ quamash==0.6.1
 rule-engine>=2.1.0
 strict-rfc3339>=0.7
 tortoise-orm==0.16.13
-weakreflist>=0.4
 yarl==1.5.1
 py-multibase @ git+https://github.com/pinnaculum/py-multibase.git@base36#egg=py-multibase

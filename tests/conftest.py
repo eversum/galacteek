@@ -11,6 +11,11 @@ from galacteek.ipfs import asyncipfsd
 glogger.basicConfig(level='DEBUG')
 
 
+@pytest.fixture
+def dbpath(tmpdir):
+    return tmpdir.join('db.sqlite3')
+
+
 @pytest.fixture(scope='function')
 def localipfsclient(event_loop):
     client = aioipfs.AsyncIPFS(loop=event_loop, host='127.0.0.1', port=5042)
