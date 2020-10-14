@@ -51,7 +51,7 @@ class SpaceHandle:
                 return ipHandleGen(
                     self.m.group('username'),
                     self.m.group('vplanet'),
-                    peerId=peer[32:]
+                    peerId=peer[-12:]
                 )
             else:
                 return ipHandleGen(

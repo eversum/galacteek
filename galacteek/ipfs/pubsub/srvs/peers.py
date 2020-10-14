@@ -95,13 +95,13 @@ class PSPeersService(JSONPubsubService):
         logger.debug('Sending ident message')
         await self.send(str(msg))
 
-    async def processJsonMessage(self, sender, msg):
+    async def processJsonMessage(self, sender, msg, msgDbRecord=None):
         msgType = msg.get('msgtype', None)
 
         if msgType == PeerIdentMessageV3.TYPE:
             logger.debug('Received ident message (v3) from {}'.format(sender))
             await self.handleIdentMessageV3(sender, msg)
-        if msgType == PeerIdentMessageV4.TYPE:
+        if msgType in PeerIdentMessageV4.VALID_TYPES:
             logger.debug('Received ident message (v4) from {}'.format(sender))
             await self.handleIdentMessageV4(sender, msg)
         elif msgType == PeerLogoutMessage.TYPE:

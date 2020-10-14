@@ -113,6 +113,33 @@ PeerDidRole = Qt.UserRole + 3
 PeerHandleRole = Qt.UserRole + 4
 
 
+def peerToolTip(ctx):
+    handle = SpaceHandle(ctx.iphandle)
+
+    try:
+        data = QByteArray()
+        buffer = QBuffer(data)
+        buffer.open(QIODevice.WriteOnly)
+        ctx.avatarPixmapScaled(128, 128).save(buffer, 'PNG')
+        buffer.close()
+
+        avatarUrl = 'data:image/png;base64, {}'.format(
+            bytes(buffer.data().toBase64()).decode()
+        )
+    except Exception:
+        avatarUrl = ':/share/icons/unknown-file.png'
+
+    return iPeerToolTip(
+        avatarUrl,
+        ctx.peerId,
+        str(handle),
+        ctx.ipid.did,
+        ctx.validated,
+        ctx.authenticated,
+        ctx.pingAvg()
+    )
+
+
 class PeerBaseItem(BaseAbstractItem):
     itemType = None
 
@@ -137,30 +164,7 @@ class PeerTreeItem(PeerBaseItem):
         return self.ctx.peerId
 
     def tooltip(self, col):
-        handle = SpaceHandle(self.ctx.iphandle)
-
-        try:
-            data = QByteArray()
-            buffer = QBuffer(data)
-            buffer.open(QIODevice.WriteOnly)
-            self.ctx.avatarPixmapScaled(128, 128).save(buffer, 'PNG')
-            buffer.close()
-
-            avatarUrl = 'data:image/png;base64, {}'.format(
-                bytes(buffer.data().toBase64()).decode()
-            )
-        except Exception:
-            avatarUrl = ':/share/icons/unknown-file.png'
-
-        return iPeerToolTip(
-            avatarUrl,
-            self.ctx.peerId,
-            str(handle),
-            self.ctx.ipid.did,
-            self.ctx.validated,
-            self.ctx.authenticated,
-            self.ctx.pingAvg()
-        )
+        return peerToolTip(self.ctx)
 
     def data(self, column, role):
         handle = self.ctx.spaceHandle

@@ -427,7 +427,7 @@ class Peers:
             ipid = await self.app.ipidManager.load(
                 did,
                 track=True,
-                timeout=30,
+                timeout=8,
                 localIdentifier=(peerId == ipfsop.ctx.node.id)
             )
 
@@ -535,7 +535,7 @@ class Peers:
             try:
                 mType, stat = await self.app.rscAnalyzer(iMsg.iphandleqrpngcid)
             except Exception:
-                log.debug('Invalid QR: {}'.format(iMsg.iphandleqrpngcid))
+                log.debug('Cannot stat QR: {}'.format(iMsg.iphandleqrpngcid))
                 self._didAuthInp[personDid] = False
                 return
             else:
@@ -712,8 +712,13 @@ class Peers:
 
             for code in codes:
                 if isinstance(code, IPFSPath):
-                    if code.isIpns and str(code) == joinIpns(iMsg.peer):
-                        validCodes += 1
+                    if code.isIpns:
+                        peerKey = IPFSPath(joinIpns(iMsg.peer))
+
+                        if str(code) == joinIpns(iMsg.peer):
+                            validCodes += 1
+                        elif code == peerKey:  # IPFSPath comp
+                            validCodes += 1
 
                     if code.isIpfs:
                         computed = await ipfsop.hashComputeString(

@@ -3,8 +3,13 @@ from galacteek.ipfs.cidhelpers import ipfsCid32Re
 from galacteek.core import utcDatetimeIso
 
 
-class DAGExchangeMessageV1(PubsubMessage):
-    TYPE = 'DAGExchangeMessageV1'
+class DAGExchangeMessage(PubsubMessage):
+    TYPE = 'DAGExchangeMessage'
+
+    VALID_TYPES = [
+        TYPE,
+        'DAGExchangeMessageV1'
+    ]
 
     schema = {
         "type": "object",
@@ -12,6 +17,7 @@ class DAGExchangeMessageV1(PubsubMessage):
             "msgtype": {"type": "string"},
             "version": {"type": "integer"},
             "date": {"type": "string"},
+            "rev": {"type": "string"},
             "exchange": {
                 "type": "object",
                 "properties": {
@@ -76,17 +82,19 @@ class DAGExchangeMessageV1(PubsubMessage):
     }
 
     @staticmethod
-    def make(dagClass: str, dagCid: str,
+    def make(revision: str,
+             dagClass: str, dagCid: str,
              dagNet: str, dagName: str,
              dagUid: str,
              signerPubKeyCid: str,
              mDagCid: str,
              serviceToken: str,
              snakeOil: str):
-        return DAGExchangeMessageV1({
-            'msgtype': DAGExchangeMessageV1.TYPE,
-            'version': 1,
+        return DAGExchangeMessage({
+            'msgtype': DAGExchangeMessage.TYPE,
+            'version': 2,
             'date': utcDatetimeIso(),
+            'rev': revision,
             'exchange': {
                 'dagCid': dagCid,
                 'megaDagCid': mDagCid,
@@ -101,6 +109,10 @@ class DAGExchangeMessageV1(PubsubMessage):
                 }
             }
         })
+
+    @property
+    def revision(self):
+        return self.jsonAttr('rev')
 
     @property
     def dagClass(self):

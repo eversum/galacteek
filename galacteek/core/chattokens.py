@@ -2,17 +2,160 @@ import asyncio
 import attr
 import orjson
 import re
+import hashlib
+import secrets
 
 from galacteek import log
 from galacteek import AsyncSignal
 from galacteek.core import SingletonDecorator
+from galacteek.core import utcDatetimeIso
+from galacteek.core import doubleUid4
+from galacteek.core import parseDate
+from galacteek.core.message import Message
 from galacteek.did import didIdentRe
+from galacteek.ipfs.pubsub import encChatChannelTopic
+from galacteek.ipfs.cidhelpers import ipfsCid32Re
 from galacteek.database import *
 
 
-def verifyTokenPayload(payload: bytes):
+class ChatToken(Message):
+    schema = {
+        "type": "object",
+        "properties": {
+            "type": {
+                "type": "string",
+                "pattern": r"^(pubchattoken|privchattoken)$"
+            },
+            "version": {"type": "integer"},
+            "token": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "maxLength": 48
+                    },
+                    "expires": {
+                        "type": "string",
+                        "maxLength": 48
+                    },
+                    "did": {
+                        "type": "string",
+                        "pattern": didIdentRe.pattern
+                    },
+                    "channel": {
+                        "type": "string",
+                        "pattern": r"^#[a-zA-Z0-9-_]{1,64}$"
+                    },
+                    "cpass": {
+                        "type": "string",
+                        "pattern": r"^[\w]{1,128}$"
+                    },
+                    "psTopic": {
+                        "type": "string",
+                        "pattern": r"^galacteek.rsaenc.[\w\.]{64,256}$"
+                    },
+                    "enc": {
+                        "type": "object",
+                        "properties": {
+                            "etype": {
+                                "type": "string",
+                                "pattern": r"^(rsa-aes)$"
+                            },
+                            "pubKeyCid": {
+                                "type": "string",
+                                "pattern": ipfsCid32Re.pattern
+                            }
+                        },
+                        "required": [
+                            "etype"
+                        ]
+                    }
+                },
+                "required": [
+                    "date"
+                    "channel"
+                    "did"
+                    "psTopic",
+                    "enc"
+                ]
+            }
+        },
+        "required": ["type", "version", "t"]
+    }
+
+    async def make(ipfsop, channel, encType='rsa-aes'):
+        curProfile = ipfsop.ctx.currentProfile
+        try:
+            hasher = hashlib.sha3_384()
+            hasher.update('{peer}_{uid}'.format(
+                peer=ipfsop.ctx.node.id,
+                uid=doubleUid4()).encode())
+            topic = encChatChannelTopic(hasher.hexdigest())
+        except Exception:
+            return None
+
+        if encType == 'rsa-aes':
+            enc = {
+                'etype': encType,
+                'pubKeyCid': await ipfsop.rsaAgent.pubKeyCid()
+            }
+        else:
+            enc = {}
+
+        return ChatToken({
+            'version': 1,
+            'type': 'pubchattoken',
+            't': {
+                'date': utcDatetimeIso(),
+                'did': curProfile.userInfo.personDid,
+                'channel': channel,
+                'psTopic': topic,
+                'pubKeyCid': await ipfsop.rsaAgent.pubKeyCid(),
+                'cpass': secrets.token_hex(8),
+                'enc': enc
+            }
+        })
+
+    @property
+    def version(self):
+        return self.jsonAttr('version')
+
+    @property
+    def date(self):
+        return parseDate(self.jsonAttr('t.date'))
+
+    @property
+    def expires(self):
+        return parseDate(self.jsonAttr('t.expires'))
+
+    @property
+    def channel(self):
+        return self.jsonAttr('t.channel')
+
+    @property
+    def did(self):
+        return self.jsonAttr('t.did')
+
+    @property
+    def psTopic(self):
+        return self.jsonAttr('t.psTopic')
+
+    @property
+    def cpass(self):
+        return self.jsonAttr('t.cpass')
+
+    @property
+    def encType(self):
+        return self.jsonAttr('t.enc.etype')
+
+    @property
+    def pubKeyCid(self):
+        return self.jsonAttr('t.enc.pubKeyCid')
+
+
+def verifyTokenPayloadOld(payload: bytes):
     try:
-        # Decoded the token payload
+        # Decode the token payload
         decoded = orjson.loads(payload.decode())
 
         psTopic = decoded.get('psTopic')
@@ -34,6 +177,21 @@ def verifyTokenPayload(payload: bytes):
         log.debug(f'Invalid JWS: {err}')
     else:
         return decoded
+
+
+def verifyTokenPayload(payload: bytes):
+    try:
+        # Decode the token payload
+        decoded = orjson.loads(payload.decode())
+
+        token = ChatToken(decoded)
+        assert token.valid() is True
+
+        assert token.date is not None
+    except Exception as err:
+        log.debug(f'Invalid JWS: {err}')
+    else:
+        return token
 
 
 @SingletonDecorator

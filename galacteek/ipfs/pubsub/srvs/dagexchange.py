@@ -3,15 +3,17 @@ import collections
 import secrets
 import async_timeout
 
-from galacteek import ensure
+from galacteek import log
 
 from galacteek.core.asynclib import loopTime
 from galacteek.core.ps import keyTokensDagExchange
 from galacteek.core.ps import keySnakeDagExchange
+from galacteek.core import uid4
+from galacteek.core import sha256Digest
 
 from galacteek.ipfs.pubsub import TOPIC_DAGEXCH
 from galacteek.ipfs.pubsub.service import RSAEncryptedJSONPubsubService
-from galacteek.ipfs.pubsub.messages.dagexch import DAGExchangeMessageV1
+from galacteek.ipfs.pubsub.messages.dagexch import DAGExchangeMessage
 from galacteek.ipfs import ipfsOp
 
 
@@ -29,8 +31,9 @@ class PSDAGExchangeService(RSAEncryptedJSONPubsubService):
 
         self.__authenticatedDags = collections.deque([], 128)
         self.__serviceToken = secrets.token_hex(64)
+        self.curRevUid = uid4()
 
-    async def processJsonMessage(self, sender, msg):
+    async def processJsonMessage(self, sender, msg, msgDbRecord=None):
         msgType = msg.get('msgtype', None)
 
         peerCtx = self.ipfsCtx.peers.getByPeerId(sender)
@@ -39,17 +42,24 @@ class PSDAGExchangeService(RSAEncryptedJSONPubsubService):
                 sender))
             return
 
-        if msgType == DAGExchangeMessageV1.TYPE:
-            await self.handleExchangeMessage(sender, msg)
+        if msgType in DAGExchangeMessage.VALID_TYPES:
+            await self.handleExchangeMessage(sender, msg, msgDbRecord)
 
-    async def handleExchangeMessage(self, sender, msg):
-        eMsg = DAGExchangeMessageV1(msg)
+    async def handleExchangeMessage(self, sender, msg, msgDbRecord):
+        eMsg = DAGExchangeMessage(msg)
         if not eMsg.valid():
             self.debug('Invalid DAGExchange message')
             return
 
-        if eMsg.dagClass == 'seeds':
-            ensure(self.handleSeedsExchangeMessage(sender, eMsg))
+        try:
+            mixDigest = sha256Digest(f'{eMsg.dagCid}:{eMsg.megaDagCid}')
+            async with self.msgSpy(msgDbRecord, eMsg.msgType,
+                                   'mix-digest', mixDigest):
+                if eMsg.dagClass == 'seeds':
+                    await self.handleSeedsExchangeMessage(
+                        sender, eMsg, msgDbRecord)
+        except Exception as e:
+            log.debug(f'DAGExchange: exc {e} while processing seeds message')
 
     @ipfsOp
     async def _dagVerifyCidSignature(self, ipfsop, sender: str,
@@ -100,7 +110,8 @@ class PSDAGExchangeService(RSAEncryptedJSONPubsubService):
             return False
 
     @ipfsOp
-    async def handleSeedsExchangeMessage(self, ipfsop, sender, eMsg):
+    async def handleSeedsExchangeMessage(self, ipfsop, sender, eMsg,
+                                         msgDbRecord):
         profile = ipfsop.ctx.currentProfile
         local = (sender == ipfsop.ctx.node.id)
 
@@ -193,7 +204,8 @@ class PSDAGExchangeService(RSAEncryptedJSONPubsubService):
 
         pubKeyCid = await ipfsop.rsaAgent.pubKeyCid()
 
-        eMsg = DAGExchangeMessageV1.make(
+        eMsg = DAGExchangeMessage.make(
+            self.curRevUid,
             seedsDag.dagClass,
             seedsDag.dagCid,
             seedsDag.dagNet,
@@ -220,7 +232,7 @@ class PSDAGExchangeService(RSAEncryptedJSONPubsubService):
                     seedsDag.dagUpdated.connectTo(self.onSeedAdded)
 
                 await self.sendExchangeMessage()
-                await asyncio.sleep(60 * 10)
+                await asyncio.sleep(60 * 3)
             else:
                 # Wait for the DAG
                 await asyncio.sleep(5)

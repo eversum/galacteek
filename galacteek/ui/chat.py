@@ -4,8 +4,6 @@ import weakref
 import aiorwlock
 import os.path
 import orjson
-import hashlib
-import secrets
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QWidget
@@ -31,12 +29,10 @@ from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.pubsub import TOPIC_CHAT
 from galacteek.ipfs.pubsub.messages.chat import ChatRoomMessage
 from galacteek.ipfs.pubsub.messages.chat import UserChannelsListMessage
-from galacteek.ipfs.pubsub.srvs.chat import encChatChannelTopic
 from galacteek.ipfs.pubsub.srvs.chat import PSEncryptedChatChannelService
 
 from galacteek.core import doubleUid4
 from galacteek.core import uid4
-from galacteek.core import utcDatetimeIso
 from galacteek.core.ps import makeKeyChatChannel
 from galacteek.core.ps import keyChatChanList
 from galacteek.core.ps import psSubscriber
@@ -45,9 +41,9 @@ from galacteek.core.ps import makeKeyPubChatTokens
 from galacteek.core.ps import mSubscriber
 from galacteek.core.ps import gHub
 from galacteek.core.chattokens import PubChatTokensManager
+from galacteek.core.chattokens import ChatToken
 
 from galacteek.core import SingletonDecorator
-from galacteek.core.asynclib import loopTime
 
 from galacteek.dweb.markdown import markitdown
 from galacteek.dweb.page import IPFSPage
@@ -62,6 +58,7 @@ from galacteek import partialEnsure
 from galacteek.core.modelhelpers import UneditableItem
 
 from .dwebspace import WS_PEERS
+from .peers import peerToolTip
 from .helpers import getIcon
 from .helpers import inputTextCustom
 from .helpers import messageBox
@@ -133,32 +130,15 @@ class ChatChannels(QObject):
 
     @ipfsOp
     async def joinChannel(self, ipfsop, channel, chanSticky=False):
-        curProfile = ipfsop.ctx.currentProfile
-
         if channel in self.channelWidgets.keys():
             return self.channelWidgets[channel]
 
-        try:
-            hasher = hashlib.sha3_384()
-            hasher.update('{peer}_{uid}'.format(
-                peer=ipfsop.ctx.node.id,
-                uid=doubleUid4()).encode())
-            topic = encChatChannelTopic(hasher.hexdigest())
-        except Exception:
-            return
-
-        payload = {
-            'type': 'pubchattoken',
-            'date': utcDatetimeIso(),
-            'did': curProfile.userInfo.personDid,
-            'channel': channel,
-            'psTopic': topic,
-            'pass': secrets.token_hex(8)
-        }
+        chatToken = await ChatToken.make(ipfsop, channel)
+        log.debug(chatToken.pretty())
 
         # Create the JWS and import it without pinning
         jwsToken = await ipfsop.rsaAgent.jwsTokenObj(
-            orjson.dumps(payload).decode())
+            orjson.dumps(chatToken.data).decode())
         jwsTokenEntry = await ipfsop.addJson(jwsToken, pin=False)
 
         # Create an aiopubsub key and start the pubsub service
@@ -167,7 +147,7 @@ class ChatChannels(QObject):
             ipfsop.ctx,
             self.app.ipfsClient,
             channel,
-            topic,
+            chatToken.psTopic,
             jwsTokenEntry['Hash'],
             key,
             scheduler=self.app.scheduler
@@ -359,12 +339,15 @@ class ChatCenterButton(PopupToolButton):
             self.onCreateChannel
         )
         self.menu.addSeparator()
-        self.menu.addAction(
-            getIcon('qta:mdi.chat'),
-            'Create private channel',
-            self.onCreatePrivateChannel
-        )
-        self.menu.addSeparator()
+
+        if 0:
+            self.menu.addAction(
+                getIcon('qta:mdi.chat'),
+                'Create private channel',
+                self.onCreatePrivateChannel
+            )
+            self.menu.addSeparator()
+
         self.menu.addAction(
             getIcon('qta:mdi.chat'),
             'Join channel',
@@ -470,7 +453,7 @@ class ChatRoomWidget(GalacteekTab):
 
         self.participantsModel = ParticipantsModel(self)
         self.participantsModel.setHorizontalHeaderLabels(
-            ['SpaceHandle', 'HB']
+            ['Token', 'SpaceHandle']
         )
 
         self.chatView = ChatWebView(self)
@@ -510,19 +493,32 @@ class ChatRoomWidget(GalacteekTab):
             for row in range(self.participantsModel.rowCount()):
                 yield {
                     'handle': self.participantsModel.pData(row, 1),
-                    'hbts': self.participantsModel.pData(row, 0),
+                    'tokencid': self.participantsModel.pData(row, 0),
                     'row': row
                 }
 
-    async def onChatTokenMessage(self, key, message):
+    @ipfsOp
+    async def onChatTokenMessage(self, ipfsop, key, message):
         tokenCid, status = message
-        idxHandle, _ = self.participantIdxByToken(tokenCid)
-
-        if not idxHandle:
-            return
 
         if status == 1:
+            idxHandle, _ = self.participantIdxByToken(tokenCid)
+            if not idxHandle:
+                return
             self.participantsModel.removeRow(idxHandle.row())
+
+        if status == 0 and 0:
+            token = await self.chans.pubTokensManager.tokenGet(tokenCid)
+            if not token:
+                return
+
+            piCtx = ipfsop.ctx.peers.getByPeerId(token.peerId)
+            if not piCtx:
+                return
+
+            idxHandle, _ = self.participantIdxByToken(token.cid)
+            if not idxHandle:
+                self.addParticipant(piCtx, token)
 
     @ipfsOp
     async def onChatChanUserList(self, ipfsop, key, message):
@@ -582,6 +578,7 @@ class ChatRoomWidget(GalacteekTab):
 
     def addParticipant(self, piCtx, token):
         itemHandle = ParticipantItem(piCtx.spaceHandle.short)
+        itemHandle.setToolTip(peerToolTip(piCtx))
         itemHandle.peerCtx = weakref.ref(piCtx)
         itemToken = QStandardItem(token.cid)
 
@@ -591,17 +588,6 @@ class ChatRoomWidget(GalacteekTab):
 
     async def userHeartbeat(self, message):
         return
-
-        async with self.lock.writer_lock:
-            idxHandle, idxTs = self.participantIdx(
-                message.peerCtx.spaceHandle.short)
-
-            if not idxHandle:
-                self.addParticipant(message.peerCtx)
-            else:
-                itemTs = self.participantsModel.itemFromIndex(idxTs)
-                if itemTs:
-                    itemTs.setText(str(loopTime()))
 
     async def userLeft(self, message):
         await self.removeUser(message.peerCtx.spaceHandle.short)
@@ -653,7 +639,7 @@ class ChatRoomWidget(GalacteekTab):
 
             self.chatView.hChat.chatMsgReceived.emit(QVariant({
                 'uid': message.uid,
-                'date': now,
+                'time': now.strftime('%H:%M'),
                 'local': fromUs,
                 'spaceHandle': str(message.peerCtx.spaceHandle.short),
                 'message': markitdown(message.messageBody),
@@ -691,7 +677,7 @@ class ChatRoomWidget(GalacteekTab):
             self.chatView.hChat.chatJoinLeftReceived.emit(QVariant({
                 'avatarPath': avatarPath,
                 'status': 'joined',
-                'date': now,
+                'time': now.strftime('%H:%M'),
                 'local': fromUs,
                 'spaceHandle': str(message.peerCtx.spaceHandle.short)
             }))
@@ -700,7 +686,7 @@ class ChatRoomWidget(GalacteekTab):
             self.chatView.hChat.chatJoinLeftReceived.emit(QVariant({
                 'avatarPath': avatarPath,
                 'status': 'left',
-                'date': now,
+                'time': now.strftime('%H:%M'),
                 'local': fromUs,
                 'spaceHandle': str(message.peerCtx.spaceHandle.short)
             }))

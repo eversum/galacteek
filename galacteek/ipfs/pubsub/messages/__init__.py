@@ -1,3 +1,4 @@
+import re
 import json
 import collections
 
@@ -17,6 +18,9 @@ class Encoder(json.JSONEncoder):
 
 
 class PubsubMessage(collections.UserDict):
+    uidRe = re.compile(
+        r'[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}')
+
     def __init__(self, *args, **kw):
         super(PubsubMessage, self).__init__(*args, **kw)
         self.schema = None
@@ -51,6 +55,11 @@ class PubsubMessage(collections.UserDict):
     @staticmethod
     def make(*args, **kw):
         raise Exception('Implement static method make')
+
+    @property
+    def msgType(self):
+        # msgtype should be in all JSON messages
+        return self.jsonAttr('msgtype')
 
 
 class LDMessage(PubsubMessage):

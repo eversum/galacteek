@@ -1,6 +1,7 @@
 import uuid
 import socket
 import re
+import hashlib
 
 from datetime import datetime
 from datetime import timezone
@@ -13,6 +14,12 @@ from contextlib import closing
 
 
 from PyQt5.QtWidgets import QApplication
+
+
+def sha256Digest(value: str):
+    s = hashlib.sha3_256()
+    s.update(value.encode())
+    return s.hexdigest()
 
 
 def runningApp():

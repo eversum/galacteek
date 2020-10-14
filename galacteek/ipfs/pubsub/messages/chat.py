@@ -246,7 +246,7 @@ class UserChannelsListMessage(PubsubMessage):
                 "properties": {
                     "rev": {
                         "type": "string",
-                        "maxLength": 36
+                        "pattern": PubsubMessage.uidRe.pattern
                     },
                     "pubChannels": {
                         "type": "array",

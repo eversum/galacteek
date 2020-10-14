@@ -572,6 +572,7 @@ class IPIdentifier(DAGOperations):
 
         return await ipfsop.nameResolveStreamFirst(
             joinIpns(self.ipnsKey),
+            count=1,
             timeout=resolveTimeout,
             useCache=useCache,
             cache=cache,

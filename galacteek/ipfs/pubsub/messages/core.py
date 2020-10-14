@@ -182,7 +182,12 @@ class PeerIdentMessageV3(PubsubMessage):
 
 
 class PeerIdentMessageV4(PubsubMessage):
-    TYPE = 'peerident.v4'
+    TYPE = 'peerident'
+
+    VALID_TYPES = [
+        'peerident',
+        'peerident.v4'
+    ]
 
     schema = {
         "title": "Peer ident",
@@ -191,8 +196,9 @@ class PeerIdentMessageV4(PubsubMessage):
         "properties": {
             "msgtype": {
                 "type": "string",
-                "pattern": "^{0}$".format(TYPE)
+                "pattern": "^{0}".format(TYPE)
             },
+            "version": {"type": "integer"},
             "msg": {
                 "type": "object",
                 "properties": {
@@ -313,6 +319,7 @@ class PeerIdentMessageV4(PubsubMessage):
         return PeerIdentMessageV4({
             'msgtype': PeerIdentMessageV4.TYPE,
             'date': utcDatetimeIso(),
+            'version': 4,
             'msg': {
                 'peerid': peerId,
                 'identToken': identToken,

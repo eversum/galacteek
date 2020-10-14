@@ -186,7 +186,7 @@ def cidConvertBase32(cid):
 
 def ipnsKeyCidV1(ipnsKey: str):
     """
-    Converts a base58 IPNS key to a CIDv1 in base32 with the
+    Converts a base58 IPNS key to a CIDv1 in base36 with the
     'libp2p-key' multicodec. If it's already a CIDv1
     (new IPNS keys in base36) return it in base36.
 
@@ -204,7 +204,8 @@ def ipnsKeyCidV1(ipnsKey: str):
 
     # Need to use the libp2p-key multicodec
     cidV1 = CIDv1('libp2p-key', cid.multihash)
-    return cidV1.encode('base32').decode()
+    # return cidV1.encode('base32').decode()
+    return cidV1.encode('base36').decode()
 
 
 def cidValid(cid):
@@ -576,8 +577,8 @@ class IPFSPath:
             gdict = ma.groupdict()
 
             subpath = gdict.get('subpath')
-            ipnsId32 = ipnsKeyCidV1(gdict.get('fqdn'))
-            _id = ipnsId32 if ipnsId32 else gdict.get('fqdn')
+            ipnsIdV1 = ipnsKeyCidV1(gdict.get('fqdn'))
+            _id = ipnsIdV1 if ipnsIdV1 else gdict.get('fqdn')
 
             if subpath:
                 self._rscPath = self.pathjoin(
@@ -630,6 +631,9 @@ class IPFSPath:
             self._rootCidUseB32 = True
 
         return True
+
+    def ipnsIdCompare(self, p):
+        return self.ipnsId == p.ipnsId
 
     def child(self, path, normalize=False):
         if not isinstance(path, str):

@@ -17,9 +17,7 @@ from galacteek.core.asynclib import loopTime
 from galacteek.ipfs.cidhelpers import IPFSPath
 
 
-from galacteek.database.models.core import *
-from galacteek.database.models.seeds import *
-from galacteek.database.models.pubchattokens import *
+from galacteek.database.models import *
 
 databaseLock = asyncio.Lock()
 

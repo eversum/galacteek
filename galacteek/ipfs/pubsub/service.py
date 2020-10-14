@@ -12,6 +12,7 @@ from galacteek import ensureLater
 
 from galacteek.ipfs.pubsub import TOPIC_MAIN
 from galacteek.ipfs.pubsub import TOPIC_HASHMARKS
+from galacteek.ipfs.pubsub import MsgAttributeRecordError
 
 from galacteek.ipfs.pubsub.messages.core import PubsubMessage
 from galacteek.ipfs.pubsub.messages.core import MarksBroadcastMessage
@@ -19,6 +20,7 @@ from galacteek.ipfs.pubsub.messages.core import MarksBroadcastMessage
 from galacteek.ipfs.wrappers import ipfsOp
 
 from galacteek.core.asynclib import asyncify
+from galacteek.core.asynclib import async_enterable
 from galacteek.core.ipfsmarks import IPFSMarks
 
 from galacteek.core.ps import keyPsJson
@@ -26,10 +28,44 @@ from galacteek.core.ps import keyPsEncJson
 from galacteek.core.ps import psSubscriber
 from galacteek.core.ps import gHub
 
+from galacteek.database.psmanager import psManagerForTopic
+
 import aioipfs
 
 
 psServSubscriber = psSubscriber('pubsubServices')
+
+
+class MsgSpy(object):
+    def __init__(self, psDbManager, msgRecord, msgType, name, value):
+        self.psDbManager = psDbManager
+        self.msgType = msgType
+        self.attrName = name
+        self.value = value
+        self.msgRecord = msgRecord
+
+    async def __aenter__(self):
+        entries = await self.psDbManager.searchMsgAttribute(
+            self.msgType,
+            self.attrName,
+            self.value
+        )
+        self.found = len(entries) > 0
+
+        if self.found:
+            raise MsgAttributeRecordError(
+                f'{self.msgType}: {self.attrName} exists')
+
+        return self
+
+    async def __aexit__(self, *args):
+        if not self.found:
+            self.rec = await self.psDbManager.recordMsgAttribute(
+                self.msgRecord,
+                self.msgType,
+                self.attrName,
+                self.value
+            )
 
 
 class PubsubService(object):
@@ -38,6 +74,7 @@ class PubsubService(object):
     """
 
     hubPublish = True
+    encodingType = 0
 
     def __init__(self, ipfsCtx, client, topic='galacteek.default',
                  runPeriodic=False, filterSelfMessages=True,
@@ -118,6 +155,9 @@ class PubsubService(object):
 
         if self.runPeriodic:
             self.tskPeriodic = await self.scheduler.spawn(self.periodic())
+
+        self.psDbManager = await psManagerForTopic(
+            self.topic, encType=self.encodingType)
 
     async def stop(self):
         await self.shutdown()
@@ -215,18 +255,13 @@ class PubsubService(object):
 
         try:
             async for message in self.client.pubsub.sub(self.topic):
-                sender = message['from'] if isinstance(
-                    message['from'], str) else message['from'].decode()
-
-                await self.rawMessageReceived.emit(
-                    self.topic, sender, message['data'])
-
                 if await self.filtered(message):
                     continue
 
                 self.ipfsCtx.pubsub.psMessageRx.emit()
 
                 await self.inQueue.put(message)
+
                 self._receivedCount += 1
                 await asyncio.sleep(0)
         except asyncio.CancelledError:
@@ -269,12 +304,23 @@ class PubsubService(object):
         gHub.publish(key, msg)
         await asyncio.sleep(0.5)
 
+    @async_enterable
+    async def msgSpy(self, dbRecord, msgType, attrName, value):
+        return MsgSpy(
+            self.psDbManager,
+            dbRecord,
+            msgType,
+            attrName,
+            value
+        )
+
 
 class JSONPubsubService(PubsubService):
     """
     JSON pubsub listener, handling incoming messages as JSON objects
     """
 
+    encodingType = 1
     jsonMessageReceived = AsyncSignal(str, str, bytes)
     hubKey = keyPsJson
 
@@ -321,7 +367,16 @@ class JSONPubsubService(PubsubService):
                             gHub.publish(
                                 self.hubKey, (sender, self.topic, msg))
 
-                        await self.processJsonMessage(sender, msg)
+                        rec = await self.psDbManager.recordMessage(
+                            sender,
+                            len(data['data']),
+                            seqNo=data['seqno']
+                        )
+
+                        await self.processJsonMessage(
+                            sender, msg,
+                            msgDbRecord=rec
+                        )
                     except Exception as exc:
                         self.debug(
                             'processJsonMessage error: {}'.format(str(exc)))
@@ -334,7 +389,7 @@ class JSONPubsubService(PubsubService):
             self.debug('JSON process exception: {}'.format(
                 str(err)))
 
-    async def processJsonMessage(self, sender, msg):
+    async def processJsonMessage(self, sender, msg, msgDbRecord=None):
         """ Implement this method to process incoming JSON messages"""
         return True
 
@@ -357,13 +412,14 @@ class JSONLDPubsubService(JSONPubsubService):
         except Exception:
             pass
 
-    async def processJsonMessage(self, sender, msg):
+    async def processJsonMessage(self, sender, msg, msgDbRecord=None):
         if self.autoExpand:
             expanded = await self.expand(msg)
             if expanded:
                 return await self.processLdMessage(sender, expanded)
         else:
-            JSONPubsubService.processJsonMessage(self, sender, msg)
+            JSONPubsubService.processJsonMessage(
+                self, sender, msg, msgDbRecord=msgDbRecord)
 
     async def processLdMessage(self, sender, msg):
         return True
@@ -413,7 +469,7 @@ class PSHashmarksExchanger(JSONPubsubService):
             await asyncio.sleep(self._sendEvery)
             await self.broadcastSharedMarks()
 
-    async def processJsonMessage(self, sender, msg):
+    async def processJsonMessage(self, sender, msg, msgDbRecord=None):
         msgType = msg.get('msgtype', None)
         if msgType == MarksBroadcastMessage.TYPE:
             try:
@@ -463,6 +519,7 @@ class PSMainService(JSONPubsubService):
 
 
 class RSAEncryptedJSONPubsubService(JSONPubsubService):
+    encodingType = 2
     hubKey = keyPsEncJson
 
     def __init__(self, ipfsCtx, client, baseTopic, peered=True, **kw):

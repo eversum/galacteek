@@ -66,7 +66,7 @@ class PSChatService(JSONPubsubService):
         async for token in self.tokManager.tokensByChannel(channel):
             yield token.peerId, token
 
-    async def processJsonMessage(self, sender, msg):
+    async def processJsonMessage(self, sender, msg, msgDbRecord=None):
         msgType = msg.get('msgtype', None)
 
         peerCtx = self.ipfsCtx.peers.getByPeerId(sender)
@@ -79,7 +79,8 @@ class PSChatService(JSONPubsubService):
             await self.handleChannelsListMessage(msg)
 
         elif msgType == UserChannelsListMessage.TYPE:
-            await self.handleUserChannelsMessage(sender, peerCtx, msg)
+            await self.handleUserChannelsMessage(
+                sender, peerCtx, msg, msgDbRecord)
 
     @ipfsOp
     async def onUserChannelList(self, ipfsop, key, msg):
@@ -94,7 +95,8 @@ class PSChatService(JSONPubsubService):
         )
 
     @ipfsOp
-    async def handleUserChannelsMessage(self, ipfsop, sender, piCtx, msg):
+    async def handleUserChannelsMessage(self, ipfsop, sender, piCtx, msg,
+                                        dbRecord):
         cMsg = UserChannelsListMessage(msg)
         if not cMsg.valid():
             self.debug(f'Invalid UserChannelsListMessage from {sender}')
@@ -132,14 +134,14 @@ class PSChatService(JSONPubsubService):
                     await ipfsop.sleep()
                     continue
 
-                decoded = verifyTokenPayload(payload)
+                jwsT = verifyTokenPayload(payload)
 
-                if not decoded:
+                if not jwsT:
                     await ipfsop.sleep()
                     continue
 
-                psTopic = decoded['psTopic']
-                chan = decoded['channel']
+                psTopic = jwsT.psTopic
+                chan = jwsT.channel
 
                 log.debug(f'Peer {sender}: valid JWS:'
                           f'sec topic: {psTopic}')
@@ -161,7 +163,7 @@ class PSChatService(JSONPubsubService):
 
         piCtx._processData['chatTokensLastRev'] = cMsg.rev
 
-        log.debug('Peer {sender}: processed revision {cMsg.rev}')
+        log.debug(f'Peer {sender}: processed revision {cMsg.rev}')
 
     @ipfsOp
     async def handleChannelsListMessage(self, ipfsop, msg):
@@ -209,7 +211,7 @@ class PSEncryptedChatChannelService(RSAEncryptedJSONPubsubService):
                          minMsgTsDiff=1,
                          filterSelfMessages=False, **kw)
 
-    async def processJsonMessage(self, sender, msg):
+    async def processJsonMessage(self, sender, msg, msgDbRecord=None):
         msgType = msg.get('msgtype', None)
 
         peerCtx = self.ipfsCtx.peers.getByPeerId(sender)
