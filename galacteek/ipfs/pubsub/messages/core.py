@@ -225,6 +225,10 @@ class PeerIdentMessageV4(PubsubMessage):
                                         "type": "string",
                                         "pattern": ipfsCid32Re.pattern
                                     },
+                                    "curve25519DefPubKeyCid": {
+                                        "type": "string",
+                                        "pattern": ipfsCid32Re.pattern
+                                    },
                                     "pssCurDidSigCid": {
                                         "type": "string",
                                         "pattern": ipfsCid32Re.pattern
@@ -306,6 +310,7 @@ class PeerIdentMessageV4(PubsubMessage):
                    personDid: str,
                    personDidCurCid: str,
                    rsaDefPubKeyCid: str,
+                   curve25519DefPubKeyCid: str,
                    pssSigCurDid: str,
                    edagNetworkCid: str,
                    p2pServices=None):
@@ -337,6 +342,7 @@ class PeerIdentMessageV4(PubsubMessage):
                     },
                     'crypto': {
                         'rsaDefPubKeyCid': rsaDefPubKeyCid,
+                        'curve25519DefPubKeyCid': curve25519DefPubKeyCid,
                         'pssCurDidSigCid': pssSigCurDid
                     },
                     'edags': {
@@ -380,6 +386,10 @@ class PeerIdentMessageV4(PubsubMessage):
     @property
     def defaultRsaPubKeyCid(self):
         return self.jsonAttr('msg.user.crypto.rsaDefPubKeyCid')
+
+    @property
+    def defaultCurve25519PubKeyCid(self):
+        return self.jsonAttr('msg.user.crypto.curve25519DefPubKeyCid')
 
     @property
     def pssSigCurDid(self):
@@ -491,3 +501,43 @@ class PeerLogoutMessage(PubsubMessage):
 
     def valid(self):
         return self.validSchema(schema=PeerLogoutMessage.schema)
+
+
+class PeerIdentReqMessage(PubsubMessage):
+    TYPE = 'peeridentreq'
+
+    schema = {
+        "title": "Peer Ident Req",
+        "type": "object",
+        "properties": {
+            "msgtype": {
+                "type": "string",
+                "pattern": "^{0}$".format(TYPE)
+            },
+            "msg": {
+                "type": "object",
+                "properties": {
+                    "peerId": {"type": "string"},
+                },
+                "required": [
+                    "peerId"
+                ]
+            }
+        },
+        "required": ["msgtype", "msg"]
+    }
+
+    @staticmethod
+    def make(peerId: str):
+        return PeerIdentReqMessage({
+            'msgtype': PeerIdentReqMessage.TYPE,
+            'version': 1,
+            'msg': {
+                'date': utcDatetimeIso(),
+                'peerId': peerId
+            }
+        })
+
+    @property
+    def peer(self):
+        return self.jsonAttr('msg.peerId')

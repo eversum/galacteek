@@ -133,7 +133,13 @@ class ChatChannels(QObject):
         if channel in self.channelWidgets.keys():
             return self.channelWidgets[channel]
 
-        chatToken = await ChatToken.make(ipfsop, channel)
+        # privKey, pubKey = await ipfsop.ctx.curve25Exec.genKeys()
+        cAgent = ipfsop.curve25519Agent
+
+        pubKeyCid = await cAgent.pubKeyCid()
+
+        chatToken = await ChatToken.make(ipfsop, channel, pubKeyCid,
+                                         encType='curve25519')
         log.debug(chatToken.pretty())
 
         # Create the JWS and import it without pinning
@@ -149,6 +155,7 @@ class ChatChannels(QObject):
             channel,
             chatToken.psTopic,
             jwsTokenEntry['Hash'],
+            cAgent.privKey,
             key,
             scheduler=self.app.scheduler
         )

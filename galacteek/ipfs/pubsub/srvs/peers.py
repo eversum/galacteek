@@ -6,6 +6,7 @@ from galacteek import log as logger
 from galacteek import ensure
 
 from galacteek.core.asynclib import asyncify
+from galacteek.core.asynccache import selfcachedcoromethod
 from galacteek.core.ps import keyTokensIdent
 
 from galacteek.ipfs import ipfsOp
@@ -14,6 +15,7 @@ from galacteek.ipfs.pubsub.messages.core import PeerIdentMessageV3
 from galacteek.ipfs.pubsub.messages.core import PeerIdentMessageV4
 from galacteek.ipfs.pubsub.messages.core import PeerLogoutMessage
 from galacteek.ipfs.pubsub.messages.core import PeerIpHandleChosen
+from galacteek.ipfs.pubsub.messages.core import PeerIdentReqMessage
 
 from galacteek.ipfs.pubsub.service import JSONPubsubService
 
@@ -22,7 +24,7 @@ class PSPeersService(JSONPubsubService):
     def __init__(self, ipfsCtx, client, **kw):
         super().__init__(ipfsCtx, client, topic=TOPIC_PEERS,
                          runPeriodic=True,
-                         minMsgTsDiff=20,
+                         minMsgTsDiff=5,
                          filterSelfMessages=False, **kw)
 
         self._curProfile = None
@@ -53,6 +55,14 @@ class PSPeersService(JSONPubsubService):
             await self.sendIdent(self.curProfile)
 
     @ipfsOp
+    async def sendIdentReq(self, op, forPeer):
+        await self.send(PeerIdentReqMessage.make(forPeer))
+
+    @selfcachedcoromethod('sigCache')
+    async def didSigCache(self, ipfsop, did):
+        return await ipfsop.rsaAgent.pssSignImport(did.encode())
+
+    @ipfsOp
     async def sendIdent(self, op, profile):
         if not profile.initialized:
             logger.debug('Profile not initialized, ident message not sent')
@@ -75,9 +85,8 @@ class PSPeersService(JSONPubsubService):
             logger.debug('Local IPID ({did}) load: OK, dagCID is {cid}'.format(
                 did=profile.userInfo.personDid, cid=ipid.docCid))
 
-        pssSigCurDid = await op.rsaAgent.pssSignImport(
-            profile.userInfo.personDid.encode()
-        )
+        pssSigCurDid = await self.didSigCache(
+            op, profile.userInfo.personDid)
 
         msg = await PeerIdentMessageV4.make(
             nodeId,
@@ -88,6 +97,7 @@ class PSPeersService(JSONPubsubService):
             profile.userInfo.personDid,
             ipid.docCid,
             await op.rsaAgent.pubKeyCid(),
+            await op.curve25519Agent.pubKeyCid(),
             pssSigCurDid,
             profile.dagNetwork.dagCid
         )
@@ -104,6 +114,8 @@ class PSPeersService(JSONPubsubService):
         if msgType in PeerIdentMessageV4.VALID_TYPES:
             logger.debug('Received ident message (v4) from {}'.format(sender))
             await self.handleIdentMessageV4(sender, msg)
+        elif msgType == PeerIdentReqMessage.TYPE:
+            await self.handleIdentReqMessage(sender, msg)
         elif msgType == PeerLogoutMessage.TYPE:
             logger.debug('Received logout message from {}'.format(sender))
         elif msgType == PeerIpHandleChosen.TYPE:
@@ -111,6 +123,16 @@ class PSPeersService(JSONPubsubService):
             await self.handleIpHandleMessage(sender, msg)
 
         await asyncio.sleep(0)
+
+    @ipfsOp
+    async def handleIdentReqMessage(self, ipfsop, sender, msg):
+        irMsg = PeerIdentReqMessage(msg)
+        if not irMsg.valid():
+            return
+
+        if ipfsop.ourNode(irMsg.peer):
+            logger.debug('Was asked ident, sending')
+            await self.sendIdent(self.curProfile)
 
     @ipfsOp
     async def handleIpHandleMessage(self, ipfsop, sender, msg):

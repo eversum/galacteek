@@ -1,20 +1,66 @@
-import asyncio
-import concurrent.futures
-import functools
-
 from Cryptodome.PublicKey import ECC
 
+from galacteek.crypto import BaseCryptoExec
 
-class ECCExecutor(object):
-    def __init__(self, loop=None, executor=None):
-        self.loop = loop if loop else asyncio.get_event_loop()
-        self.executor = executor if executor else \
-            concurrent.futures.ThreadPoolExecutor(max_workers=4)
+from nacl.public import Box
+from nacl.public import SealedBox
+from nacl.public import PrivateKey
+from nacl.public import PublicKey
+import nacl.utils
 
-    async def _exec(self, fn, *args, **kw):
-        return await self.loop.run_in_executor(
-            self.executor, functools.partial(fn, *args, **kw))
 
+class Curve25519(BaseCryptoExec):
+    async def genKeys(self):
+        def _generateKeypair():
+            key = PrivateKey.generate()
+            return bytes(key), bytes(key.public_key)
+
+        return await self._exec(_generateKeypair)
+
+    async def encrypt(self, msg: bytes, privKey, pubKey):
+        def _box():
+            try:
+                nonce = nacl.utils.random(Box.NONCE_SIZE)
+                box = Box(PrivateKey(privKey), PublicKey(pubKey))
+                return box.encrypt(msg, nonce)
+            except Exception:
+                return
+
+        return await self._exec(_box)
+
+    async def decrypt(self, enc, privKey, pubKey):
+        def _dec():
+            try:
+                box = Box(PrivateKey(privKey), PublicKey(pubKey))
+                return box.decrypt(enc)
+            except Exception:
+                return
+
+        return await self._exec(_dec)
+
+    async def encryptSealed(self, msg: bytes, pubKey):
+        def _box():
+            try:
+                nonce = nacl.utils.random(Box.NONCE_SIZE)
+                box = SealedBox(PublicKey(pubKey))
+                return box.encrypt(msg, nonce)
+            except Exception:
+                return
+
+        return await self._exec(_box)
+
+    async def decryptSealed(self, enc, privKey):
+        def _dec():
+            try:
+                box = SealedBox(PrivateKey(privKey))
+                return box.decrypt(enc)
+            except Exception:
+                return
+
+        return await self._exec(_dec)
+
+
+class ECCExecutor(BaseCryptoExec):
     async def importKey(self, keyData):
         return await self._exec(lambda: ECC.import_key(keyData))
 

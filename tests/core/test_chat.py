@@ -19,6 +19,7 @@ class TestChatTokens:
             'bafkreiccwmdhji2mi4n65ts3tryl7zxhsr72zwbh7eddn24fbvqqyrbaf4',
             '#galacteek', 'g.ddd.222222222',
             'Qmabcd',
+            'bafkreiccwmdhji2mi4n65ts3tryl7zxhsr72zwbh7eddn24fbvqqyrbaf4',
             did='did:ipid:bafkreiccwmdhji2mi4n65ts3tryl7zxhsr72zwbh7edd')
         assert token is not None
 
@@ -32,6 +33,7 @@ class TestChatTokens:
             'bafkreiccwmdhji2mi4n65ts3tryl7zxhsr72zwbh7eddn24fbvqqyrbaf3',
             '#galacteek', 'g.ddd.222222222',
             'Qmabce',
+            'bafkreiccwmdhji2mi4n65ts3tryl7zxhsr72zwbh7eddn24fbvqqyrbaf4',
             did='did:ipid:bafkreiccwmdhji2mi4n65ts3tryl7zxhsr72zwbh7edb')
 
         tokens = [t async for t in manager.tokensByChannel('#galacteek')]

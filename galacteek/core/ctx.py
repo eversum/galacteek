@@ -29,6 +29,8 @@ from galacteek.ipfs.cidhelpers import stripIpfs
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.stat import StatInfo
 from galacteek.ipfs.wrappers import ipfsOp
+
+from galacteek.ipfs.pubsub import TOPIC_PEERS
 from galacteek.ipfs.pubsub.messages.chat import ChatRoomMessage
 from galacteek.ipfs.pubsub.service import PSMainService
 from galacteek.ipfs.pubsub.srvs.chat import PSChatService
@@ -53,6 +55,7 @@ from galacteek.core.iphandle import SpaceHandle
 
 from galacteek.crypto.rsa import RSAExecutor
 from galacteek.crypto.ecc import ECCExecutor
+from galacteek.crypto.ecc import Curve25519
 
 
 class PeerIdentityCtx:
@@ -159,6 +162,12 @@ class PeerIdentityCtx:
     async def defaultRsaPubKey(self, ipfsop):
         if self.ident and isinstance(self.ident, PeerIdentMessageV4):
             return await ipfsop.catObject(self.ident.defaultRsaPubKeyCid)
+
+    @ipfsOp
+    async def defaultCurve25519PubKey(self, ipfsop):
+        if self.ident and isinstance(self.ident, PeerIdentMessageV4):
+            return await ipfsop.catObject(
+                self.ident.defaultCurve25519PubKeyCid)
 
     @ipfsOp
     async def pubKeyJwk(self, ipfsop):
@@ -423,6 +432,8 @@ class Peers:
 
     async def loadDidFromGraph(self, ipfsop, peerId: str, did: str,
                                sHandle: str):
+        peersService = ipfsop.ctx.pubsub.byTopic(TOPIC_PEERS)
+
         for attempt in range(0, 8):
             ipid = await self.app.ipidManager.load(
                 did,
@@ -469,6 +480,8 @@ class Peers:
 
         await self.peerAdded.emit(piCtx)
         await ipfsop.sleep(1)
+
+        await peersService.sendIdentReq(piCtx.peerId)
 
         self._didGraphLStatus.remove(did)
 
@@ -999,6 +1012,8 @@ class IPFSContext(QObject):
                                    executor=self.app.executor)
         self.eccExec = ECCExecutor(loop=self.loop,
                                    executor=self.app.executor)
+        self.curve25Exec = Curve25519(loop=self.loop,
+                                      executor=self.app.executor)
 
         await self.importSoftIdent()
         await self.node.init()
