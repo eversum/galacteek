@@ -584,3 +584,87 @@ class RSAEncryptedJSONPubsubService(JSONPubsubService):
                 )
 
             await ipfsop.sleep(0.05)
+
+
+class CurveJSONPubsubService(JSONPubsubService):
+    encodingType = 3
+    hubKey = keyPsEncJson
+
+    def __init__(self, ipfsCtx, client, baseTopic, privEccKey,
+                 peered=True, **kw):
+        self.baseTopic = baseTopic
+        self.peered = peered
+        self.privEccKey = privEccKey
+
+        kw.update(topic=self.peeredTopic(ipfsCtx.node.id))
+
+        super().__init__(ipfsCtx, client, **kw)
+
+    def peeredTopic(self, peerId):
+        if self.peered:
+            return f'{self.baseTopic}.{peerId}'
+        else:
+            return self.baseTopic
+
+    @ipfsOp
+    async def asyncMsgDataToJson(self, ipfsop, msg):
+        try:
+            sender = msg['from'] if isinstance(msg['from'], str) else \
+                msg['from'].decode()
+            piCtx = ipfsop.ctx.peers.getByPeerId(sender)
+            if not piCtx:
+                raise Exception('Cannot find peer')
+
+            pubKey = await piCtx.defaultCurve25519PubKey()
+            print(piCtx.peerId, 'ecc', pubKey)
+
+            dec = await ipfsop.ctx.curve25Exec.decrypt(
+                base64.b64decode(msg['data']),
+                self.privEccKey,
+                pubKey
+            )
+            return orjson.loads(dec.decode())
+        except Exception as err:
+            import traceback
+            traceback.print_exc()
+            logger.debug(f'Could not decode encrypted message: {err}')
+            return None
+
+    async def peerEncFilter(self, piCtx, msg):
+        return False
+
+    async def peersToSend(self):
+        # Yields (peerId, piCtx, aesSessionKey, topic)
+        async with self.ipfsCtx.peers.lock.reader_lock:
+            for peerId, piCtx in self.ipfsCtx.peers.byPeerId.items():
+                yield (peerId, piCtx, None, None)
+
+    @ipfsOp
+    async def send(self, ipfsop, msg):
+        async for piCtx, sessionKey, _topic, pubKeyCid in self.peersToSend():
+            if await self.peerEncFilter(piCtx, msg) is True:
+                continue
+
+            topic = _topic if _topic else self.peeredTopic(piCtx.peerId)
+
+            print(piCtx.peerId, pubKeyCid)
+            pubKey = await ipfsop.catObject(pubKeyCid)
+
+            if not pubKey:
+                continue
+
+            enc = await ipfsop.ctx.curve25Exec.encrypt(
+                str(msg).encode(),
+                self.privEccKey,
+                pubKey
+            )
+
+            await ipfsop.sleep(0.05)
+
+            if enc:
+                await super().send(
+                    base64.b64encode(enc).decode(),
+                    topic=topic
+                )
+
+            await ipfsop.sleep(0.05)

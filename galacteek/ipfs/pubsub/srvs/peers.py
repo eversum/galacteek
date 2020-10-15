@@ -88,6 +88,7 @@ class PSPeersService(JSONPubsubService):
             profile.userInfo.personDid,
             ipid.docCid,
             await op.rsaAgent.pubKeyCid(),
+            await op.curve25519Agent.pubKeyCid(),
             pssSigCurDid,
             profile.dagNetwork.dagCid
         )

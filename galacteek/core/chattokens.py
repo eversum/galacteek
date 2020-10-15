@@ -83,7 +83,7 @@ class ChatToken(Message):
         "required": ["type", "version", "t"]
     }
 
-    async def make(ipfsop, channel, encType='rsa-aes'):
+    async def make(ipfsop, channel, pubKeyCid, encType='rsa-aes'):
         curProfile = ipfsop.ctx.currentProfile
         try:
             hasher = hashlib.sha3_384()
@@ -98,6 +98,11 @@ class ChatToken(Message):
             enc = {
                 'etype': encType,
                 'pubKeyCid': await ipfsop.rsaAgent.pubKeyCid()
+            }
+        elif encType == 'curve25519':
+            enc = {
+                'etype': encType,
+                'pubKeyCid': pubKeyCid
             }
         else:
             enc = {}
@@ -208,8 +213,10 @@ class PubChatTokensManager:
     async def start(self):
         await pubChatTokensClear()
 
-    async def reg(self, jwsCid, channel, secTopic, peerId, **kw):
-        token = await pubChatTokenNew(jwsCid, channel, secTopic, peerId, **kw)
+    async def reg(self, jwsCid, channel, secTopic, peerId, pubKeyCid,
+                  **kw):
+        token = await pubChatTokenNew(
+            jwsCid, channel, secTopic, peerId, pubKeyCid=pubKeyCid, **kw)
 
         await self.sChanChanged.emit(channel)
         await self.sTokenStatus.emit(jwsCid, channel, 0)

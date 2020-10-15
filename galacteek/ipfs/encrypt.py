@@ -220,3 +220,44 @@ class IpfsRSAAgent:
 
     async def __rsaReadPrivateKey(self):
         return await asyncReadFile(self.privKeyPath)
+
+
+class IpfsCurve25519Agent:
+    def __init__(self, curveExec, pubKey, privKey):
+        self.curveExec = curveExec
+        self.pubKey = pubKey
+        self._pubKeyCidCached = None
+        self.privKey = privKey
+
+    def debug(self, msg):
+        log.debug('Curve25519 Agent: {0}'.format(msg))
+
+    @property
+    def pubKeyCidCached(self):
+        return self._pubKeyCidCached
+
+    @ipfsOp
+    async def pubKeyCid(self, ipfsop):
+        if self.pubKeyCidCached and cidValid(self.pubKeyCidCached):
+            return self.pubKeyCidCached
+
+        try:
+            entry = await ipfsop.addBytes(self.pubKey)
+            self._pubKeyCidCached = entry['Hash']
+            return self.pubKeyCidCached
+        except Exception as err:
+            self.debug(f'Cannot import pubkey: {err}')
+
+    async def encrypt(self, data: bytes, pubKey):
+        return await self.curveExec.encrypt(
+            data,
+            self.privKey,
+            pubKey
+        )
+
+    async def decrypt(self, data: bytes, pubKey):
+        return await self.curveExec.decrypt(
+            data,
+            self.privKey,
+            pubKey
+        )

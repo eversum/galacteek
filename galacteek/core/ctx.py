@@ -53,6 +53,7 @@ from galacteek.core.iphandle import SpaceHandle
 
 from galacteek.crypto.rsa import RSAExecutor
 from galacteek.crypto.ecc import ECCExecutor
+from galacteek.crypto.ecc import Curve25519
 
 
 class PeerIdentityCtx:
@@ -159,6 +160,12 @@ class PeerIdentityCtx:
     async def defaultRsaPubKey(self, ipfsop):
         if self.ident and isinstance(self.ident, PeerIdentMessageV4):
             return await ipfsop.catObject(self.ident.defaultRsaPubKeyCid)
+
+    @ipfsOp
+    async def defaultCurve25519PubKey(self, ipfsop):
+        if self.ident and isinstance(self.ident, PeerIdentMessageV4):
+            return await ipfsop.catObject(
+                self.ident.defaultCurve25519PubKeyCid)
 
     @ipfsOp
     async def pubKeyJwk(self, ipfsop):
@@ -999,6 +1006,8 @@ class IPFSContext(QObject):
                                    executor=self.app.executor)
         self.eccExec = ECCExecutor(loop=self.loop,
                                    executor=self.app.executor)
+        self.curve25Exec = Curve25519(loop=self.loop,
+                                      executor=self.app.executor)
 
         await self.importSoftIdent()
         await self.node.init()

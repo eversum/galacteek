@@ -23,6 +23,7 @@ from galacteek import AsyncSignal
 from galacteek.ipfs.mutable import MutableIPFSJson, CipheredIPFSJson
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.encrypt import IpfsRSAAgent
+from galacteek.ipfs.encrypt import IpfsCurve25519Agent
 from galacteek.ipfs.dag import EvolvingDAG
 
 from galacteek.did import didIdentRe
@@ -830,7 +831,25 @@ class UserProfile(QObject):
             self.debug('RSA: failed to register keys')
             return False
 
+        await self.cryptoCurveInit(op)
+
         return True
+
+    async def cryptoCurveInit(self, ipfsop):
+        privKey, pubKey = await ipfsop.ctx.curve25Exec.genKeys()
+
+        if not privKey or not pubKey:
+            raise Exception('Could not generate main curve25519 keys')
+
+        self._c25MainPrivKey = privKey
+        self._c25MainPubKey = pubKey
+
+        ipfsop.setCurve25519Agent(
+            IpfsCurve25519Agent(ipfsop.ctx.curve25Exec,
+                                self._c25MainPubKey,
+                                self._c25MainPrivKey
+                                )
+        )
 
     @ipfsOp
     async def cryptoRegisterKeys(self, op):

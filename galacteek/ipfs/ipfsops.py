@@ -267,6 +267,7 @@ class IPFSOperator(object):
         self._offline = offline
         self._objectMapping = objectMapping
         self._rsaAgent = rsaAgent
+        self._curve25519Agent = None
         self._nsCache = {}
         self._nsCachePath = nsCachePath
         self._noPeers = True
@@ -315,6 +316,10 @@ class IPFSOperator(object):
         return self._rsaAgent
 
     @property
+    def curve25519Agent(self):
+        return self._curve25519Agent
+
+    @property
     def logwatch(self):
         return IPFSLogWatcher(self)
 
@@ -331,6 +336,9 @@ class IPFSOperator(object):
 
     def setRsaAgent(self, agent):
         self._rsaAgent = agent
+
+    def setCurve25519Agent(self, agent):
+        self._curve25519Agent = agent
 
     @async_enterable
     async def offlineMode(self):
