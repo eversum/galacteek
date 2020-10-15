@@ -4,6 +4,7 @@ import weakref
 import aiorwlock
 import os.path
 import orjson
+import re
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QWidget
@@ -119,6 +120,7 @@ class ChatChannels(QObject):
 
         for chan, _w in self.channelWidgets.items():
             pubChannels.append({
+                'tokenSigMethod': 'rsa',
                 'sessionJwsCid': _w.psService.jwsTokenCid
             })
 
@@ -133,7 +135,6 @@ class ChatChannels(QObject):
         if channel in self.channelWidgets.keys():
             return self.channelWidgets[channel]
 
-        # privKey, pubKey = await ipfsop.ctx.curve25Exec.genKeys()
         cAgent = ipfsop.curve25519Agent
 
         pubKeyCid = await cAgent.pubKeyCid()
@@ -712,18 +713,29 @@ class ChatRoomWidget(GalacteekTab):
         links = []
         words = msgText.split()
 
+        def addPath(path):
+            oPath = str(path)
+            if len(links) < 4 and oPath not in links:
+                links.append(oPath)
+
         for word in words:
             path = IPFSPath(word, autoCidConv=True)
             if path.valid:
-                if len(links) < 4:
-                    links.append(str(path))
+                addPath(path)
+
+        matches = re.findall(r'"([^"]*)"', msgText)
+        for match in matches:
+            path = IPFSPath(match, autoCidConv=True)
+            if path.valid:
+                addPath(path)
 
         await self.psService.send(
             await ChatRoomMessage.make(
                 self.psService.jwsTokenCid,
                 command='MSGMARKDOWN',
                 params=[msgText],
-                links=links)
+                links=links
+            )
         )
 
     @ipfsOp

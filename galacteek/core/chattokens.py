@@ -226,11 +226,9 @@ class PubChatTokensManager:
     async def tokenGet(self, jwsCid):
         return await pubChatTokenGet(jwsCid)
 
-    async def tokenUpdate(self, jwsCid):
-        token = await self.tokenGet(jwsCid)
-        if token:
-            token.ltLast = loopTime()
-            await token.save()
+    async def tokenUpdate(self, token):
+        token.ltLast = loopTime()
+        await token.save()
 
     async def tokenDestroy(self, jwsCid):
         await pubChatTokenDelete(jwsCid)

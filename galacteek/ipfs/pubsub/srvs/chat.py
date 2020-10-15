@@ -91,7 +91,6 @@ class PSChatService(JSONPubsubService):
                                         dbRecord):
         cMsg = UserChannelsListMessage(msg)
         if not cMsg.valid():
-            self.debug(f'Invalid UserChannelsListMessage from {sender}')
             return
 
         pubTokensList = cMsg.pubChannels if cMsg.pubChannels else []
@@ -101,7 +100,7 @@ class PSChatService(JSONPubsubService):
             token = await self.tokManager.tokenGet(jwsCid)
 
             if token:
-                await self.tokManager.tokenUpdate(jwsCid)
+                await self.tokManager.tokenUpdate(token)
             else:
                 # Fetch the JWS first
                 jws = await ipfsop.getJson(jwsCid, timeout=5)
@@ -160,16 +159,12 @@ class PSChatService(JSONPubsubService):
 
         piCtx._processData['chatTokensLastRev'] = cMsg.rev
 
-        log.debug(f'Peer {sender}: processed revision {cMsg.rev}')
-
     @ipfsOp
     async def handleChannelsListMessage(self, ipfsop, msg):
         cMsg = ChatChannelsListMessage(msg)
         if not cMsg.valid():
             self.debug('Invalid channels message')
             return
-
-        self.debug('Received valid chat channels list message')
 
         # Publish to the hub
         await self.gHubPublish(keyChatChannels, cMsg)

@@ -207,7 +207,7 @@ class PeerIdentityCtx:
                 idToken), 30
             )
 
-            self.debug(f'didping({self.ipid.did}) returned {pongReply}')
+            # self.debug(f'didping({self.ipid.did}) returned {pongReply}')
 
             if pongReply:
                 ms, pong = pongReply
@@ -251,7 +251,6 @@ class PeerIdentityCtx:
                 int(loopTime())
             ))
 
-            self.debug(f'Ping OK: {pingAvg}')
             ensureLater(180, self.watch)
 
             await self.sStatusChanged.emit()
@@ -413,7 +412,6 @@ class Peers:
 
                     # Is it in the model already ?
                     if self.app.peersTracker.model.didRegistered(did):
-                        log.debug(f'DID {did}: already in model')
                         continue
 
                     if did in self._didGraphLStatus:
@@ -617,11 +615,7 @@ class Peers:
                 if piCtx:
                     self._byPeerId[piCtx.peerId] = piCtx
 
-                    log.debug('Updating ident for peer {}'.format(iMsg.peer))
-
                     piCtx.ident = iMsg
-
-                    log.debug('Refreshing DID: {}'.format(piCtx.ipid))
                     await piCtx.ipid.refresh()
 
                     await self.peerModified.emit(piCtx)

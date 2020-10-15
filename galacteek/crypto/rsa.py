@@ -14,8 +14,8 @@ from Cryptodome.Signature import pss
 from Cryptodome.PublicKey import RSA
 from Cryptodome.Random import get_random_bytes
 from Cryptodome.Cipher import AES, PKCS1_OAEP
-from Crypto.Util.Padding import pad
-from Crypto.Util.Padding import unpad
+from Cryptodome.Util.Padding import pad
+from Cryptodome.Util.Padding import unpad
 from Cryptodome.Hash import SHA256
 
 from galacteek import log
@@ -44,7 +44,7 @@ class RSAExecutor(object):
     async def importKey(self, keyData):
         return await self._exec(lambda: RSA.import_key(keyData))
 
-    async def genKeys(self, keysize=4096):
+    async def genKeys(self, keysize=2048):
         """
         Generate RSA keys of the given keysize
         and return a tuple containing the PEM-encoded private and public key

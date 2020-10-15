@@ -475,6 +475,10 @@ async def pubChatTokenGet(cid):
     return await PubChatSessionToken.filter(cid=cid).first()
 
 
+async def pubChatTokenExists(cid):
+    return await pubChatTokenGet(cid) is not None
+
+
 async def pubChatTokensClear():
     await PubChatSessionToken.all().delete()
 
