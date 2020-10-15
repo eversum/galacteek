@@ -624,7 +624,7 @@ class ChatRoomWidget(GalacteekTab):
             if not isinstance(message.messageBody, str):
                 return
 
-            if len(message.messageBody) > 512:
+            if len(message.messageBody) not in range(1, 768):
                 return
 
             if not self.isVisible():

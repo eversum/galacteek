@@ -23,9 +23,17 @@
                 l1.setAttribute('class', 'attachment')
                 markup = `
                   <div class="msg-text">
+                    <img src="qrc:/share/icons/clipboard.png"
+                     width="16px" height="auto"
+                     onclick="event.preventDefault();
+                     window.galacteek.copyToClipboard('${ att.objPath }');"></img>
+
+
                     <p>Attachment (${ att.mimeType })</p>
                     <p><a href="${ att.url  }"
-                     onclick="event.preventDefault(); window.galacteek.openResource('${ att.objPath }');">${ att.objPath }</a></p>
+                     onclick="event.preventDefault(); window.galacteek.openResource('${ att.objPath }');">${ att.objPath }</a>
+
+                     </p>
                   </div>
                 `
 
@@ -107,23 +115,26 @@
      })
 
       function sendMessage() {
-         imessage = document.getElementById('input-message')
-         window.chatroom.sendMessage(imessage.value)
-         imessage.value = ""
+          imessage = document.getElementById('input-message')
+
+          if (imessage.value.length > 0) {
+              window.chatroom.sendMessage(imessage.value)
+              imessage.value = ""
+          }
       }
 
       function clearMessages() {
-         messages = document.getElementById('messages')
+          messages = document.getElementById('messages')
 
-         let ok = confirm('Clear chat messages ?')
-         if (ok) {
-             messages.innerHTML = ""
-         }
+          let ok = confirm('Clear chat messages ?')
+          if (ok) {
+              messages.innerHTML = ""
+          }
       }
 
       function bScroll() {
-        messages = document.getElementById('messages')
-        messages.scrollTop = messages.scrollHeight;
+          messages = document.getElementById('messages')
+          messages.scrollTop = messages.scrollHeight;
       }
 
     </script>

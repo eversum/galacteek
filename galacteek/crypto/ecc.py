@@ -1,6 +1,7 @@
 from Cryptodome.PublicKey import ECC
 
 from galacteek.crypto import BaseCryptoExec
+from galacteek.ipfs import ipfsOp
 
 from nacl.public import Box
 from nacl.public import SealedBox
@@ -16,6 +17,17 @@ class Curve25519(BaseCryptoExec):
             return bytes(key), bytes(key.public_key)
 
         return await self._exec(_generateKeypair)
+
+    @ipfsOp
+    async def pubKeyFromCid(self, ipfsop, pubKeyCid):
+        cached = self.cachedKey(pubKeyCid)
+        if cached:
+            return cached
+
+        key = await ipfsop.catObject(pubKeyCid)
+        if key:
+            self.cacheKey(pubKeyCid, key)
+            return key
 
     async def encrypt(self, msg: bytes, privKey, pubKey):
         def _box():

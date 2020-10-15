@@ -52,14 +52,14 @@ class ChatToken(Message):
                     },
                     "psTopic": {
                         "type": "string",
-                        "pattern": r"^galacteek.rsaenc.[\w\.]{64,256}$"
+                        "pattern": r"^galacteek.[\w\.]{64,512}$"
                     },
                     "enc": {
                         "type": "object",
                         "properties": {
                             "etype": {
                                 "type": "string",
-                                "pattern": r"^(rsa-aes)$"
+                                "pattern": r"^(rsa-aes256-cbc|curve25519)$"
                             },
                             "pubKeyCid": {
                                 "type": "string",
@@ -83,7 +83,7 @@ class ChatToken(Message):
         "required": ["type", "version", "t"]
     }
 
-    async def make(ipfsop, channel, pubKeyCid, encType='rsa-aes'):
+    async def make(ipfsop, channel, pubKeyCid, encType='rsa-aes256-cbc'):
         curProfile = ipfsop.ctx.currentProfile
         try:
             hasher = hashlib.sha3_384()
@@ -94,7 +94,7 @@ class ChatToken(Message):
         except Exception:
             return None
 
-        if encType == 'rsa-aes':
+        if encType == 'rsa-aes256-cbc':
             enc = {
                 'etype': encType,
                 'pubKeyCid': await ipfsop.rsaAgent.pubKeyCid()
@@ -201,7 +201,7 @@ def verifyTokenPayload(payload: bytes):
 
 @SingletonDecorator
 class PubChatTokensManager:
-    def __init__(self, inactiveMax=60):
+    def __init__(self, inactiveMax=40):
         self.__tokens = {}
         self.__byChannel = {}
         self.inactiveMax = inactiveMax

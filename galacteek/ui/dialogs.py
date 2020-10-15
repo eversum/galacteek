@@ -1108,7 +1108,7 @@ class NewSeedDialog(QDialog):
             self.onLoadFromClipboard)
 
         self.ui.name.setValidator(
-            QRegExpValidator(QRegExp(r"[\w\-_()\[\]\s\.,]+"))
+            QRegExpValidator(QRegExp(r"[\w\-_()\[\]\s\.,\+\!\?'\"/&=]+"))
         )
 
     def onLoadFromClipboard(self):

@@ -36,6 +36,12 @@ import aioipfs
 psServSubscriber = psSubscriber('pubsubServices')
 
 
+PS_ENCTYPE_NULL = 0
+PS_ENCTYPE_JSON_RAW = 1
+PS_ENCTYPE_RSA_AES = 2
+PS_ENCTYPE_CURVE25519 = 3
+
+
 class MsgSpy(object):
     def __init__(self, psDbManager, msgRecord, msgType, name, value):
         self.psDbManager = psDbManager
@@ -74,7 +80,7 @@ class PubsubService(object):
     """
 
     hubPublish = True
-    encodingType = 0
+    encodingType = PS_ENCTYPE_NULL
 
     def __init__(self, ipfsCtx, client, topic='galacteek.default',
                  runPeriodic=False, filterSelfMessages=True,
@@ -320,7 +326,7 @@ class JSONPubsubService(PubsubService):
     JSON pubsub listener, handling incoming messages as JSON objects
     """
 
-    encodingType = 1
+    encodingType = PS_ENCTYPE_JSON_RAW
     jsonMessageReceived = AsyncSignal(str, str, bytes)
     hubKey = keyPsJson
 
@@ -519,7 +525,7 @@ class PSMainService(JSONPubsubService):
 
 
 class RSAEncryptedJSONPubsubService(JSONPubsubService):
-    encodingType = 2
+    encodingType = PS_ENCTYPE_RSA_AES
     hubKey = keyPsEncJson
 
     def __init__(self, ipfsCtx, client, baseTopic, peered=True, **kw):
@@ -586,15 +592,16 @@ class RSAEncryptedJSONPubsubService(JSONPubsubService):
             await ipfsop.sleep(0.05)
 
 
-class CurveJSONPubsubService(JSONPubsubService):
-    encodingType = 3
+class Curve25519JSONPubsubService(JSONPubsubService):
+    encodingType = PS_ENCTYPE_CURVE25519
     hubKey = keyPsEncJson
 
     def __init__(self, ipfsCtx, client, baseTopic, privEccKey,
                  peered=True, **kw):
         self.baseTopic = baseTopic
         self.peered = peered
-        self.privEccKey = privEccKey
+        self.__privEccKey = privEccKey
+        self._authorizedPeers = []
 
         kw.update(topic=self.peeredTopic(ipfsCtx.node.id))
 
@@ -611,22 +618,27 @@ class CurveJSONPubsubService(JSONPubsubService):
         try:
             sender = msg['from'] if isinstance(msg['from'], str) else \
                 msg['from'].decode()
+
+            if sender not in self._authorizedPeers:
+                raise Exception(f'Unauthorized message from {sender} '
+                                'on curve25519 topic {self.topic}')
+
+            # Load the peer context
             piCtx = ipfsop.ctx.peers.getByPeerId(sender)
             if not piCtx:
                 raise Exception('Cannot find peer')
 
+            # Get the peer's default curve25519 public key
             pubKey = await piCtx.defaultCurve25519PubKey()
-            print(piCtx.peerId, 'ecc', pubKey)
 
+            # curve25519 decryption
             dec = await ipfsop.ctx.curve25Exec.decrypt(
                 base64.b64decode(msg['data']),
-                self.privEccKey,
+                self.__privEccKey,
                 pubKey
             )
             return orjson.loads(dec.decode())
         except Exception as err:
-            import traceback
-            traceback.print_exc()
             logger.debug(f'Could not decode encrypted message: {err}')
             return None
 
@@ -634,10 +646,7 @@ class CurveJSONPubsubService(JSONPubsubService):
         return False
 
     async def peersToSend(self):
-        # Yields (peerId, piCtx, aesSessionKey, topic)
-        async with self.ipfsCtx.peers.lock.reader_lock:
-            for peerId, piCtx in self.ipfsCtx.peers.byPeerId.items():
-                yield (peerId, piCtx, None, None)
+        raise Exception('implement peersToSend')
 
     @ipfsOp
     async def send(self, ipfsop, msg):
@@ -647,14 +656,14 @@ class CurveJSONPubsubService(JSONPubsubService):
 
             topic = _topic if _topic else self.peeredTopic(piCtx.peerId)
 
-            pubKey = await ipfsop.catObject(pubKeyCid)
+            pubKey = await ipfsop.ctx.curve25Exec.pubKeyFromCid(pubKeyCid)
 
             if not pubKey:
                 continue
 
             enc = await ipfsop.ctx.curve25Exec.encrypt(
                 str(msg).encode(),
-                self.privEccKey,
+                self.__privEccKey,
                 pubKey
             )
 

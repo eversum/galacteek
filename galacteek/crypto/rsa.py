@@ -14,6 +14,8 @@ from Cryptodome.Signature import pss
 from Cryptodome.PublicKey import RSA
 from Cryptodome.Random import get_random_bytes
 from Cryptodome.Cipher import AES, PKCS1_OAEP
+from Crypto.Util.Padding import pad
+from Crypto.Util.Padding import unpad
 from Cryptodome.Hash import SHA256
 
 from galacteek import log
@@ -56,7 +58,7 @@ class RSAExecutor(object):
         return await self._exec(_generateKeypair, keysize)
 
     async def encryptData(self, data, recipientKeyData, sessionKey=None,
-                          cacheKey=False):
+                          cacheKey=False, aesMode='CBC'):
         if not isinstance(data, BytesIO):
             raise ValueError('Need BytesIO')
 
@@ -77,11 +79,39 @@ class RSAExecutor(object):
             log.debug(f'Cannot load RSA key: {err}')
             return
 
-        return await self._exec(self._encryptPkcs1OAEP, data, key,
+        if aesMode == 'EAX':
+            encFn = self._encryptPkcs1OAEP_AES128EAX
+        elif aesMode == 'CBC':
+            encFn = self._encryptPkcs1OAEP_AES256CBC
+
+        return await self._exec(encFn, data, key,
                                 sessionKey=sessionKey)
 
-    def _encryptPkcs1OAEP(self, data, recipientKey,
-                          sessionKey=None):
+    def _encryptPkcs1OAEP_AES256CBC(self, data, recipientKey,
+                                    sessionKey=None):
+        """
+        PKCS1-OAEP AES-256 encryption (CBC mode)
+        """
+
+        try:
+            sessionKey = sessionKey if sessionKey else get_random_bytes(32)
+
+            cipherRsa = PKCS1_OAEP.new(recipientKey)
+            encSessionKey = cipherRsa.encrypt(sessionKey)
+
+            cipherAes = AES.new(sessionKey, AES.MODE_CBC)
+            ctb = cipherAes.encrypt(pad(data.getvalue(), AES.block_size))
+
+            fd = BytesIO()
+            [fd.write(x) for x in (encSessionKey,
+                                   cipherAes.iv, ctb)]
+            return fd.getvalue()
+        except Exception as err:
+            log.debug('RSA encryption error {}'.format(str(err)))
+            return None
+
+    def _encryptPkcs1OAEP_AES128EAX(self, data, recipientKey,
+                                    sessionKey=None):
         try:
             sessionKey = sessionKey if sessionKey else get_random_bytes(16)
 
@@ -102,9 +132,53 @@ class RSAExecutor(object):
     async def decryptData(self, data, privKey):
         if not isinstance(data, BytesIO):
             raise ValueError('Need BytesIO')
-        return await self._exec(self._decryptPkcs1OAEP, data, privKey)
 
-    def _decryptPkcs1OAEP(self, data, privKey):
+        # AES-256 CBC is now the default.
+        # Try AES-128 EAX last as some EDAGs's metadata could
+        # still be encrypted in that mode (keep compatibility)
+
+        dec = await self._exec(
+            self._decryptPkcs1OAEP_AES256CBC, data, privKey)
+
+        if dec:
+            return dec
+        else:
+            log.debug('AES-256 CBC decryption failed, EAX fallback')
+
+            # Seek the BytesIO to 0 (CBC read some of it)
+            data.seek(0, 0)
+
+            return await self._exec(
+                self._decryptPkcs1OAEP_AES128EAX, data, privKey)
+
+    def _decryptPkcs1OAEP_AES256CBC(self, data, privKey):
+        """
+        PKCS1-OAEP AES-256 decryption (CBC mode)
+        """
+
+        if privKey is None:
+            raise ValueError('Invalid private key')
+
+        try:
+            private = RSA.import_key(privKey)
+
+            encSessionKey, iv, ciphertext = [
+                data.read(x) for x in (
+                    private.size_in_bytes(), 16, -1)]
+
+            cipherRsa = PKCS1_OAEP.new(private)
+            sessionKey = cipherRsa.decrypt(encSessionKey)
+
+            cipherAes = AES.new(sessionKey, AES.MODE_CBC, iv)
+            return unpad(cipherAes.decrypt(ciphertext), AES.block_size)
+        except ValueError as verr:
+            log.debug('RSA decryption error: {}'.format(str(verr)))
+            return None
+        except TypeError:
+            log.debug('Type error on decryption, check privkey')
+            return None
+
+    def _decryptPkcs1OAEP_AES128EAX(self, data, privKey):
         if privKey is None:
             raise ValueError('Invalid private key')
 

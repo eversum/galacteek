@@ -3,11 +3,10 @@ import orjson
 
 from galacteek import log
 from galacteek.ipfs.pubsub import TOPIC_CHAT
-from galacteek.ipfs.pubsub import TOPIC_ENC_CHAT
 
 from galacteek.ipfs.pubsub.service import JSONPubsubService
 from galacteek.ipfs.pubsub.service import RSAEncryptedJSONPubsubService
-from galacteek.ipfs.pubsub.service import CurveJSONPubsubService
+from galacteek.ipfs.pubsub.service import Curve25519JSONPubsubService
 
 from galacteek.ipfs.pubsub.messages.chat import ChatRoomMessage
 from galacteek.ipfs.pubsub.messages.chat import ChatStatusMessage
@@ -22,14 +21,6 @@ from galacteek.core.ps import makeKeyPubChatTokens
 from galacteek.core.ps import mSubscriber
 from galacteek.core.chattokens import PubChatTokensManager
 from galacteek.core.chattokens import verifyTokenPayload
-
-
-def encChatChannelTopic(channel):
-    return f'{TOPIC_ENC_CHAT}.{channel}'
-
-
-def chatChannelTopic(channel):
-    return f'{TOPIC_CHAT}.{channel}'
 
 
 class PSChatService(JSONPubsubService):
@@ -151,17 +142,19 @@ class PSChatService(JSONPubsubService):
                 if ipfsop.ourNode(sender):
                     await self.tokManager.reg(
                         jwsCid, chan, psTopic, sender,
-                        pubKeyCid)
+                        pubKeyCid, encType=jwsT.encType,
+                        did=jwsT.did)
                 else:
-                    # Check who's subscribed on the topic
+                    # Check who's subscribed to the topic
                     psPeers = await ipfsop.pubsubPeers(
-                        topic=psTopic, timeout=4)
+                        topic=psTopic, timeout=5)
 
                     # There should only be one peer subscribed
-                    if psPeers and len(psPeers) > 0:
+                    if psPeers and len(psPeers) == 1:
                         await self.tokManager.reg(
                             jwsCid, chan, psTopic, sender,
-                            pubKeyCid)
+                            pubKeyCid, encType=jwsT.encType,
+                            did=jwsT.did)
 
             await ipfsop.sleep()
 
@@ -264,7 +257,7 @@ class RSAPSEncryptedChatChannelService(RSAEncryptedJSONPubsubService):
         await self.mChatService.tokManager.tokenDestroy(self.jwsTokenCid)
 
 
-class PSEncryptedChatChannelService(CurveJSONPubsubService):
+class PSEncryptedChatChannelService(Curve25519JSONPubsubService):
     def __init__(self, ipfsCtx, client,
                  channel: str, topic: str,
                  jwsTokenCid, privEccKey, psKey, **kw):
@@ -272,8 +265,11 @@ class PSEncryptedChatChannelService(CurveJSONPubsubService):
         self.psKey = psKey
         self.privEccKey = privEccKey
         self.jwsTokenCid = jwsTokenCid
-        self._chatPeers = []
+
         self.mChatService = ipfsCtx.pubsub.byTopic(TOPIC_CHAT)
+
+        mSubscriber.add_sync_listener(
+            keyChatChanUserList, self.onChatChanUserList)
 
         super().__init__(ipfsCtx, client,
                          topic,
@@ -282,6 +278,14 @@ class PSEncryptedChatChannelService(CurveJSONPubsubService):
                          peered=False,
                          minMsgTsDiff=1,
                          filterSelfMessages=False, **kw)
+
+    def onChatChanUserList(self, key, message):
+        chan, chanList = message
+
+        if chan != self.channel:
+            return
+
+        self._authorizedPeers = [peerId for peerId, token in chanList]
 
     async def processJsonMessage(self, sender, msg, msgDbRecord=None):
         msgType = msg.get('msgtype', None)
@@ -311,12 +315,7 @@ class PSEncryptedChatChannelService(CurveJSONPubsubService):
             if not piCtx:
                 continue
 
-            topic = token.secTopic
-            yield (piCtx, None, topic, token.pubKeyCid)
-
-    async def processHeartbeat(self, sender, message):
-        if sender not in self._chatPeers:
-            self._chatPeers.append(sender)
+            yield (piCtx, None, token.secTopic, token.pubKeyCid)
 
     async def handleStatusMessage(self, sender, peerCtx, msg):
         sMsg = ChatStatusMessage(msg)

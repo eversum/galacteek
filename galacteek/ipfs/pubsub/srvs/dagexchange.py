@@ -26,7 +26,7 @@ class PSDAGExchangeService(RSAEncryptedJSONPubsubService):
                          minMsgTsDiff=60,
                          thrRateLimit=8,
                          thrPeriod=20,
-                         thrRetry=5,
+                         thrRetry=4,
                          filterSelfMessages=False, **kw)
 
         self.__authenticatedDags = collections.deque([], 128)

@@ -160,13 +160,13 @@ class PeerIdentityCtx:
 
     @ipfsOp
     async def defaultRsaPubKey(self, ipfsop):
-        if self.ident and isinstance(self.ident, PeerIdentMessageV4):
+        if self.ident and self.ident.defaultRsaPubKeyCid:
             return await ipfsop.catObject(self.ident.defaultRsaPubKeyCid)
 
     @ipfsOp
     async def defaultCurve25519PubKey(self, ipfsop):
-        if self.ident and isinstance(self.ident, PeerIdentMessageV4):
-            return await ipfsop.catObject(
+        if self.ident and self.ident.defaultCurve25519PubKeyCid:
+            return await ipfsop.ctx.curve25Exec.pubKeyFromCid(
                 self.ident.defaultCurve25519PubKeyCid)
 
     @ipfsOp

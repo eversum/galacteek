@@ -115,6 +115,13 @@ def iAbout():
                 galacteek@protonmail.com
             </a>
         </p>
+
+        <p>GitHub:
+        <a href="https://github.com/pinnaculum/galacteek">
+            https://github.com/pinnaculum/galacteek
+        </a>
+        </p>
+
         <p>Authors: see
         <a href="https://github.com/pinnaculum/galacteek/blob/master/AUTHORS.rst">
             AUTHORS.rst

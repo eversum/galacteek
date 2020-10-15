@@ -385,7 +385,7 @@ class PlanetWorkspace(TabbedWorkspace):
         return f'Planet workspace: {self.planet}'
 
     async def loadDapps(self):
-        if self.app.cmdArgs.enablequest:
+        if self.app.cmdArgs.enablequest and 0:
             await self.loadQuestService()
 
     async def loadQuestService(self):

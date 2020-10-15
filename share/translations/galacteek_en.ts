@@ -1686,31 +1686,6 @@ Path: {0}, nodes processed: {1}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../galacteek/ui/mainui.py" line="103"/>
-        <source>
-        &lt;p align=&apos;center&apos;&gt;
-        &lt;img src=&apos;:/share/icons/galacteek.png&apos; /&gt;
-        &lt;/p&gt;
-
-        &lt;p&gt;
-        &lt;b&gt;galacteek&lt;/b&gt; is a multi-platform Qt5-based browser
-        for the distributed web
-        &lt;/p&gt;
-        &lt;br/&gt;
-        &lt;p&gt;Contact:
-            &lt;a href=&quot;mailto: galacteek@protonmail.com&quot;&gt;
-                galacteek@protonmail.com
-            &lt;/a&gt;
-        &lt;/p&gt;
-        &lt;p&gt;Authors: see
-        &lt;a href=&quot;https://github.com/pinnaculum/galacteek/blob/master/AUTHORS.rst&quot;&gt;
-            AUTHORS.rst
-        &lt;/a&gt;
-        &lt;/p&gt;
-        &lt;p&gt;galacteek version {0}&lt;/p&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <location filename="../../galacteek/ui/i18n.py" line="49"/>
         <source>IPFS URL: native</source>
         <translation type="unfinished"></translation>
@@ -1808,6 +1783,38 @@ Path: {0}, nodes processed: {1}</source>
     <message>
         <location filename="../../galacteek/ui/i18n.py" line="702"/>
         <source>No one seems to have this file ..</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../galacteek/ui/mainui.py" line="103"/>
+        <source>
+        &lt;p align=&apos;center&apos;&gt;
+        &lt;img src=&apos;:/share/icons/galacteek.png&apos; /&gt;
+        &lt;/p&gt;
+
+        &lt;p&gt;
+        &lt;b&gt;galacteek&lt;/b&gt; is a multi-platform Qt5-based browser
+        for the distributed web
+        &lt;/p&gt;
+        &lt;br/&gt;
+        &lt;p&gt;Contact:
+            &lt;a href=&quot;mailto: galacteek@protonmail.com&quot;&gt;
+                galacteek@protonmail.com
+            &lt;/a&gt;
+        &lt;/p&gt;
+
+        &lt;p&gt;GitHub:
+        &lt;a href=&quot;https://github.com/pinnaculum/galacteek&quot;&gt;
+            https://github.com/pinnaculum/galacteek
+        &lt;/a&gt;
+        &lt;/p&gt;
+
+        &lt;p&gt;Authors: see
+        &lt;a href=&quot;https://github.com/pinnaculum/galacteek/blob/master/AUTHORS.rst&quot;&gt;
+            AUTHORS.rst
+        &lt;/a&gt;
+        &lt;/p&gt;
+        &lt;p&gt;galacteek version {0}&lt;/p&gt;</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

@@ -628,7 +628,8 @@ class ClipboardItemButton(PopupToolButton):
         if self.loadingClip.state() == QMovie.Running:
             self.loadingClip.stop()
 
-        playSound('mime-detected.wav')
+        if 0:
+            playSound('mime-detected.wav')
 
         ensure(self.updateButton())
 
