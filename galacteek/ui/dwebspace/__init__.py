@@ -540,11 +540,14 @@ class WorkspaceEdition(TabbedWorkspace):
         self.app.manuals.browseManualPage('editing.html')
 
     def onHelpMarkdown(self):
-        ref = self.app.ipfsCtx.resources.get('markdown-reference')
-        if ref:
-            self.app.mainWindow.addBrowserTab().browseIpfsHash(
-                ref['Hash']
-            )
+        self.app.manuals.browseManualPage('markdown.html')
+
+        if 0:
+            ref = self.app.ipfsCtx.resources.get('markdown-reference')
+            if ref:
+                self.app.mainWindow.addBrowserTab().browseIpfsHash(
+                    ref['Hash']
+                )
 
     def onAddTextEditorTab(self):
         tab = textedit.TextEditorTab(editing=True, parent=self)

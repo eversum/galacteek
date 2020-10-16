@@ -3,14 +3,8 @@
 Editing documents
 =================
 
-Markdown
---------
-
-Common Markdown is supported, with the following extensions:
-
-- attrlist_: this adds a syntax to define attributes on the various
-  HTML elements in markdown’s output.
-- mdxunimoji_: Converts defined emoticon symbols to Unicode emojis
+See the :ref:`markdown` section for details on the Markdown
+syntax.
 
 Linking IPFS files
 ------------------
@@ -23,7 +17,8 @@ From the text editor or blog post writer, right-clicking shows
 a submenu which allows you to create markdown links for the
 files referenced in the clipboard manager. First copy to the
 clipboard the object you want to link, then from the editor
-right-click and link this file, or hit **Ctrl-v** to create
+right-click and link this file from the clipboard submenu, or
+use **Paste from clipboard** to create
 a link for the latest item in the clipboard stack.
 
 

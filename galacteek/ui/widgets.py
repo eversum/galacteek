@@ -1297,7 +1297,7 @@ class MarkdownTextEdit(QPlainTextEdit):
             event.accept()
 
     def insertFromMimeData(self, mimeData):
-        ensure(self._fromMimeData(mimeData))
+        self.insertPlainText(mimeData.text())
 
     async def _fromMimeData(self, mimeData):
         if mimeData.hasText():
@@ -1310,6 +1310,20 @@ class MarkdownTextEdit(QPlainTextEdit):
         app = QApplication.instance()
         clipMgr = app.mainWindow.clipboardManager
         menu = self.createStandardContextMenu()
+
+        def onPaste():
+            clipItem = clipMgr.tracker.current
+            if clipItem:
+                ensure(self.onLinkClipboardItem(clipItem, 'fullpath'))
+
+        for action in menu.actions():
+            if action.text().startswith('&Paste'):
+                menu.removeAction(action)
+                break
+
+        pAction = QAction('&Paste from clipboard', self, triggered=onPaste)
+        menu.addSeparator()
+        menu.addAction(pAction)
 
         if clipMgr.itemsStack.count() > 0:
             itemsMenu = QMenu(

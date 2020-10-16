@@ -41,6 +41,12 @@
            <verstretch>0</verstretch>
           </sizepolicy>
          </property>
+         <property name="minimumSize">
+          <size>
+           <width>250</width>
+           <height>0</height>
+          </size>
+         </property>
          <attribute name="headerVisible">
           <bool>false</bool>
          </attribute>

@@ -18,6 +18,7 @@ galacteek's manual (english)
     File manager <filemanager>
     Explorer <unixfs>
     Browsing <browsing>
+    Markdown <markdown> 
     Editing <editing> 
     Pinning <pinning>
     Pyramids <pyramids>

@@ -10,11 +10,14 @@ from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QApplication
 
 from galacteek.ui.widgets import GalacteekTab
+from galacteek.ui.helpers import questionBox
 from galacteek import ensure
 from galacteek import log
 from galacteek.dweb.render import renderTemplate
 from galacteek.dweb.webscripts import ipfsClientScripts
 from galacteek.dweb.webscripts import orbitScripts
+from galacteek.core.schemes import isIpfsUrl
+from galacteek.ipfs.cidhelpers import IPFSPath
 
 
 class BaseHandler(QObject):
@@ -33,7 +36,9 @@ class GalacteekHandler(QObject):
 
     @pyqtSlot(str)
     def openResource(self, path):
-        ensure(self.app.resourceOpener.open(path))
+        if questionBox('Open resource',
+                       f'Open object <b>{path}</b> ?'):
+            ensure(self.app.resourceOpener.open(path))
 
     @pyqtSlot(str)
     def openIpfsLink(self, path):
@@ -56,7 +61,10 @@ class GalacteekHandler(QObject):
 
 
 class BasePage(QWebEnginePage):
-    def __init__(self, template, url=None, parent=None):
+    def __init__(self, template, url=None,
+                 navBypassLinks=False,
+                 openObjConfirm=True,
+                 parent=None):
         self.app = QApplication.instance()
         super(BasePage, self).__init__(self.app.webProfiles['ipfs'], parent)
 
@@ -68,6 +76,8 @@ class BasePage(QWebEnginePage):
         self.setUrl(self.url)
         self.setWebChannel(self.channel)
         self.webScripts = self.profile().scripts()
+        self.navBypass = navBypassLinks
+        self.openObjConfirm = openObjConfirm
 
         self.settings().setAttribute(
             QWebEngineSettings.LocalStorageEnabled,
@@ -75,10 +85,24 @@ class BasePage(QWebEnginePage):
         self.settings().setAttribute(
             QWebEngineSettings.LocalContentCanAccessFileUrls,
             True)
+
+        self.featurePermissionRequested.connect(self.onPermissionRequest)
+        self.fullScreenRequested.connect(self.onFullScreenRequest)
+
         self.installScripts()
+        self.setPermissions()
         ensure(self.render())
 
+    def onPermissionRequest(self, url, feature):
+        pass
+
+    def onFullScreenRequest(self, req):
+        req.reject()
+
     def installScripts(self):
+        pass
+
+    def setPermissions(self):
         pass
 
     def register(self, name, obj):
@@ -96,6 +120,28 @@ class BasePage(QWebEnginePage):
     async def render(self):
         self.setHtml(await renderTemplate(self.template, **self.pageCtx),
                      baseUrl=self.url)
+
+    def acceptNavigationRequest(self, url, navType, isMainFrame):
+        if self.navBypass and \
+                navType == QWebEnginePage.NavigationTypeLinkClicked:
+            if isIpfsUrl(url):
+                path = IPFSPath(url.toString(), autoCidConv=True)
+                if path.valid:
+                    if self.openObjConfirm:
+                        if questionBox('Open resource',
+                                       f'Open object <b>{path}</b> ?'):
+                            ensure(self.app.resourceOpener.open(path))
+                    else:
+                        ensure(self.app.resourceOpener.open(path))
+
+                    return False
+
+            elif url.scheme() in ['http', 'https', 'ftp', 'manual']:
+                tab = self.app.mainWindow.addBrowserTab()
+                tab.enterUrl(url)
+                return False
+
+        return True
 
 
 class IPFSPage(BasePage):

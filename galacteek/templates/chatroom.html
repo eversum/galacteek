@@ -143,13 +143,24 @@
       <main class="msger-chat" id="messages">
       </main>
 
-      <form class="msger-inputarea">
-        <input type="text" class="msger-input" id="input-message"/>
-        <button type="submit" class="msger-send-btn"
-            onclick="event.preventDefault(); sendMessage();">Send</button>
-        <button type="submit" class="msger-clear-btn"
-            onclick="event.preventDefault(); clearMessages();">Clear</button>
-      </form>
+      <div style="background-color: #CCDAD5">
+          <p style="font-size: 1em; padding: 10px; margin-left: 10px;
+            text-align: center">
+              Paste a CID/path or use the <b>@CID</b> syntax (or <b>@PATH</b>) to
+              <a href="manual:/markdown.html#ipfs-links">
+                  send IPFS links in the chat
+                </a>
+          </p>
+
+          <form class="msger-inputarea">
+            <p title="Markdown message">Message</p>
+            <input type="text" class="msger-input" id="input-message"/>
+            <button type="submit" class="msger-send-btn"
+                onclick="event.preventDefault(); sendMessage();">Send</button>
+            <button type="submit" class="msger-clear-btn"
+                onclick="event.preventDefault(); clearMessages();">Clear</button>
+          </form>
+      </div>
     </section>
   </body>
 </html>

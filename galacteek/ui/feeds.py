@@ -26,8 +26,7 @@ from .helpers import runDialogAsync
 
 
 class EmptyPage(BasePage):
-    def __init__(self, parent=None):
-        super(EmptyPage, self).__init__('atomfeedsinit.html', parent=parent)
+    pass
 
 
 class NumericSortProxyModel(QSortFilterProxyModel):
@@ -59,7 +58,8 @@ class AtomFeedsView(QWidget):
         self._offlineMode = False
 
         self.webView = IPFSWebView(parent=self)
-        self.emptyPage = EmptyPage(self)
+        self.emptyPage = EmptyPage(
+            'atomfeedsinit.html', parent=self, navBypassLinks=True)
         self.webView.setPage(self.emptyPage)
 
         self.ui = ui_atomfeeds.Ui_AtomFeeds()

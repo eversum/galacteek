@@ -257,7 +257,7 @@ ipfsLinkRe = re.compile(r'^(/(ipfs|ipns)/[' + pathChars + ']{1,1024}$)')
 
 
 ipfsPathRe = re.compile(
-    r'^(\s*)?(?:fs:|dweb:|dwebgw:|https?://[\w:.-]+)?(?P<fullpath>(/ipfs/)?(?P<rootcid>[a-zA-Z0-9]{46,113})/?(?P<subpath>[' + pathChars + ']{1,1024})?)' + query + fragment,  # noqa
+    r'(?:fs:|dweb:|dwebgw:|https?://[\w:.-]+)?(?P<fullpath>(/ipfs/)?(?P<rootcid>[a-zA-Z0-9]{46,113})/?(?P<subpath>[' + pathChars + ']{1,1024})?)' + query + fragment,  # noqa
     flags=re.UNICODE)
 
 
@@ -289,8 +289,17 @@ ipnsKeyRe = re.compile(
     r'^(?P<key>(Qm[\w]{44}))$')
 
 ipnsPathRe = re.compile(
-    r'^(\s*)?(?:fs:|dweb:|dwebgw:|https?://[\w:.-]+)?(?P<fullpath>/ipns/(?P<fqdn>[\w\.-]+)/?(?P<subpath>[' + pathChars + ']{1,1024})?)' + query + fragment,  # noqa
+    r'(?:fs:|dweb:|dwebgw:|https?://[\w:.-]+)?(?P<fullpath>/ipns/(?P<fqdn>[\w\.-]+)/?(?P<subpath>[' + pathChars + ']{1,1024})?)' + query + fragment,  # noqa
     flags=re.UNICODE)
+
+
+ipfsMdMagic = r'(?P<linkname>[\w]+)?(?P<a>#?%?!?@{1,3})'
+
+# Used by markdown extension
+ipfsPathMagicRe = re.compile(ipfsMdMagic + ipfsPathRe.pattern,
+                             flags=re.UNICODE)
+ipnsPathMagicRe = re.compile(ipfsMdMagic + ipnsPathRe.pattern,
+                             flags=re.UNICODE)
 
 
 class IPFSPath:

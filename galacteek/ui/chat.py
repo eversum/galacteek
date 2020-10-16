@@ -431,15 +431,44 @@ class ChatHandler(BaseHandler):
         ensure(self.chatWidget.sendMessage(msg))
 
 
+class ChatRoomPage(IPFSPage):
+    def setPermissions(self):
+        from PyQt5.QtWebEngineWidgets import QWebEngineSettings
+
+        self.settings().setAttribute(
+            QWebEngineSettings.LocalContentCanAccessRemoteUrls,
+            True
+        )
+        self.settings().setAttribute(
+            QWebEngineSettings.FullScreenSupportEnabled,
+            True
+        )
+
+    def onPermissionRequest(self, url, feature):
+        from PyQt5.QtWebEngineWidgets import QWebEnginePage
+
+        if 0:
+            self.setFeaturePermission(
+                QUrl('file:/chatroom'),
+                QWebEnginePage.MediaAudioVideoCapture,
+                QWebEnginePage.PermissionGrantedByUser
+            )
+
+    def onFullScreenRequest(self, request):
+        request.accept()
+
+
 class ChatWebView(IPFSWebView):
     def __init__(self, chatWidget):
         super().__init__(parent=chatWidget)
 
         self.chatWidget = chatWidget
 
-        self._page = IPFSPage('chatroom.html',
-                              url=QUrl('qrc:/chatroom'),
-                              parent=self)
+        self._page = ChatRoomPage('chatroom.html',
+                                  url=QUrl('file:/chatroom'),
+                                  parent=self,
+                                  navBypassLinks=True)
+
         self.hChat = ChatHandler(self)
         self.hChat.chatWidget = chatWidget
         self._page.register('chatroom', self.hChat)
