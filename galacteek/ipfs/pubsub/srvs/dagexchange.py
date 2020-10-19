@@ -224,7 +224,8 @@ class PSDAGExchangeService(RSAEncryptedJSONPubsubService):
     @ipfsOp
     async def periodic(self, ipfsop):
         while True:
-            if ipfsop.ctx.currentProfile:
+            if ipfsop.ctx.currentProfile and \
+                    ipfsop.ctx.currentProfile.initialized:
                 seedsDag = ipfsop.ctx.currentProfile.dagSeedsMain
 
                 if seedsDag.dagUpdated.count() == 0:
@@ -232,6 +233,7 @@ class PSDAGExchangeService(RSAEncryptedJSONPubsubService):
                     seedsDag.dagUpdated.connectTo(self.onSeedAdded)
 
                 await self.sendExchangeMessage()
+
                 await asyncio.sleep(60 * 3)
             else:
                 # Wait for the DAG

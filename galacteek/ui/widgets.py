@@ -1593,3 +1593,30 @@ class AnimatedLabel(QLabel):
     def leaveEvent(self, event):
         self.hovered.emit(False)
         super(AnimatedLabel, self).enterEvent(event)
+
+
+class PlanetSelector(QComboBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self.app = QApplication.instance()
+        planets = self.app.solarSystem.planetsNames
+
+        self.clear()
+
+        for planet in planets:
+            icon = getIcon('planets/{}.png'.format(planet.lower()))
+            if icon:
+                self.addItem(icon, planet)
+            else:
+                self.addItem(planet)
+
+    def setRandomPlanet(self):
+        import random
+
+        r = random.Random()
+        idx = r.randint(0, self.count() - 1)
+        self.setCurrentIndex(idx)
+
+    def planet(self):
+        return self.currentText()

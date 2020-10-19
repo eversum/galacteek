@@ -27,15 +27,13 @@ class IpfsRSAAgent:
     :param privKeyPath: Path to private RSA key
     """
 
-    def __init__(self, rsaExecutor, pubKeyPem, privKeyPath):
+    def __init__(self, rsaExecutor, pubKeyPem, privKeyPath,
+                 privKeyPassword=None):
         self.rsaExec = rsaExecutor
         self.pubKeyPem = pubKeyPem
         self._pubKeyCidCached = None
         self.privKeyPath = privKeyPath
         self._privKeyCache = LRUCache(4)
-
-        self.pubJwk = jwk.JWK()
-        self.pubJwk.import_from_pem(self.pubKeyPem)
 
     def debug(self, msg):
         log.debug('RSA Agent: {0}'.format(msg))
@@ -223,10 +221,23 @@ class IpfsRSAAgent:
     async def __rsaReadPrivateKey(self):
         return await asyncReadFile(self.privKeyPath)
 
+    async def privKeyUnlock(self, passphrase=None):
+        key = await self.rsaExec.importKey(
+            await asyncReadFile(self.privKeyPath),
+            passphrase=passphrase
+        )
+
+        if key:
+            self.debug('Private key unlock success, caching')
+            self._privKeyCache[0] = key
+            self.debug(f'Key cache size: {len(self._privKeyCache)}')
+            return key
+
     @selfcachedcoromethod('_privKeyCache')
-    async def __privateKey(self):
+    async def __privateKey(self, key=0):
         return await self.rsaExec.importKey(
-            await asyncReadFile(self.privKeyPath))
+            await asyncReadFile(self.privKeyPath)
+        )
 
 
 class IpfsCurve25519Agent:

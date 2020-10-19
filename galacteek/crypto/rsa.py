@@ -41,30 +41,36 @@ class RSAExecutor(object):
         if isinstance(key, RSA.RsaKey):
             return key
         else:
-            try:
-                return await self.importKey(key)
-            except Exception:
-                log.debug('Could not import RSA key ....')
+            return await self.importKey(key)
 
     async def _exec(self, fn, *args, **kw):
         return await self.loop.run_in_executor(
             self.executor, functools.partial(fn, *args, **kw))
 
-    async def importKey(self, keyData):
-        return await self._exec(lambda: RSA.import_key(keyData))
+    async def importKey(self, keyData, passphrase=None):
+        def _import(key, pphrase):
+            try:
+                return RSA.import_key(key, passphrase=pphrase)
+            except Exception as err:
+                log.debug(f'Could not import RSA key: {err}')
 
-    async def genKeys(self, keysize=2048):
+        return await self._exec(_import, keyData, passphrase)
+
+    async def genKeys(self, keysize=2048, passphrase=None):
         """
         Generate RSA keys of the given keysize
         and return a tuple containing the PEM-encoded private and public key
         """
-        def _generateKeypair(size):
+        def _generateKeypair(size, passphrase):
             key = RSA.generate(size)
-            privKey = key.export_key(pkcs=8, protection='scryptAndAES128-CBC')
+            privKey = key.export_key(
+                pkcs=8, protection='scryptAndAES128-CBC',
+                passphrase=passphrase
+            )
             pubKey = key.publickey().export_key()
             return privKey, pubKey
 
-        return await self._exec(_generateKeypair, keysize)
+        return await self._exec(_generateKeypair, keysize, passphrase)
 
     async def encryptData(self, data, recipientKeyData, sessionKey=None,
                           cacheKey=False, aesMode='CBC'):

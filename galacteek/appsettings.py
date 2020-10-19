@@ -40,6 +40,7 @@ CFG_KEY_NICE = 'nice'
 CFG_KEY_IPFSD_DETACHED = 'detached'
 CFG_KEY_IPFSD_DETACHED_DONTASK = 'detached_dontask'
 CFG_KEY_IPFSD_AUTORESTART = 'autorestart'
+CFG_KEY_IPFSD_PROFILES = 'daemonprofiles'
 
 # Browser
 CFG_KEY_HOMEURL = 'homeurl'
@@ -112,6 +113,7 @@ def setDefaultSettings(gApp):
     sManager.setDefaultSetting(section, CFG_KEY_SWARMLOWWATER, 600)
     sManager.setDefaultSetting(section, CFG_KEY_STORAGEMAX, 50)
     sManager.setDefaultSetting(section, CFG_KEY_ROUTINGMODE, 'dht')
+    sManager.setDefaultSetting(section, CFG_KEY_IPFSD_PROFILES, '')
     sManager.setDefaultSetting(section, CFG_KEY_PUBSUB_ROUTER,
                                ROUTER_TYPE_GOSSIP)
     sManager.setDefaultSetting(section, CFG_KEY_NICE, 20)
@@ -258,6 +260,9 @@ class SettingsManager(object):
         elif boolVal is False:
             self.setFalse(section, name)
 
+    def setCommaJoined(self, section, name, val: str):
+        self.setSetting(section, name, ','.join(val))
+
     def isTrue(self, section, name):
         return self.getSetting(section, name) == self.trueVal
 
@@ -345,6 +350,12 @@ class SettingsManager(object):
     @property
     def swarmQuicEnabled(self):
         return self.isTrue(CFG_SECTION_IPFSD, CFG_KEY_SWARM_QUIC)
+
+    @property
+    def daemonProfiles(self):
+        profiles = self.getSetting(CFG_SECTION_IPFSD, CFG_KEY_IPFSD_PROFILES)
+        if isinstance(profiles, str):
+            return profiles.split(',')
 
     @property
     def swarmProtosList(self):

@@ -31,6 +31,8 @@ class LinkBuilder:
             vid = etree.SubElement(el, 'video')
 
             vid.set('src', href)
+            vid.set('width', '300px')
+            vid.set('height', 'auto')
             vid.set('controls', '')
             vid.set('crossorigin', 'anonymous')
             return vid

@@ -32,9 +32,19 @@ class IPFSRequestInterceptor(QWebEngineUrlRequestInterceptor):
     def interceptRequest(self, info):
         url = info.requestUrl()
 
-        if url.isValid():
+        if url and url.isValid():
             log.debug('IPFS interceptor for URL: {}'.format(
                 url.toString()))
+            path = url.path()
+
+            # Force some Content-type
+            if path and path.endswith('.js'):
+                info.setHttpHeader(
+                    'Content-Type'.encode(), 'text/javascript'.encode())
+
+            if path and path.endswith('.css'):
+                info.setHttpHeader(
+                    'Content-Type'.encode(), 'text/css'.encode())
 
 
 class BaseProfile(QWebEngineProfile):
@@ -45,6 +55,8 @@ class BaseProfile(QWebEngineProfile):
         self.webScripts = self.scripts()
         self.webSettings = self.settings()
         self.profileName = storageName
+        self.iceptor = IPFSRequestInterceptor(self)
+        self.setUrlRequestInterceptor(self.iceptor)
         self.setSettings()
         self.installIpfsSchemeHandlers()
         self.installScripts()
@@ -57,6 +69,11 @@ class BaseProfile(QWebEngineProfile):
             QWebEngineSettings.FullScreenSupportEnabled,
             True
         )
+
+        self.webSettings.setAttribute(QWebEngineSettings.PluginsEnabled,
+                                      True)
+        self.webSettings.setAttribute(QWebEngineSettings.LocalStorageEnabled,
+                                      True)
 
     def installHandler(self, scheme, handler):
         sch = scheme if isinstance(scheme, bytes) else scheme.encode()

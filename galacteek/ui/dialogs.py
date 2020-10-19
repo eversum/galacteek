@@ -28,6 +28,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtCore import QUrl
 from PyQt5.QtCore import QStringListModel
 from PyQt5.QtCore import QSortFilterProxyModel
+from PyQt5.QtCore import QTimer
 
 from PyQt5.QtGui import QClipboard
 from PyQt5.QtGui import QPixmap
@@ -47,6 +48,7 @@ from galacteek.ipfs import cidhelpers
 from galacteek.ipfs.ipfsops import *
 from galacteek.ipfs.wrappers import ipfsOp
 from galacteek.ipfs.cidhelpers import IPFSPath
+from galacteek.appsettings import *
 
 from . import ui_addhashmarkdialog
 from . import ui_addfeeddialog
@@ -56,11 +58,15 @@ from . import ui_qschemecreatemapping
 from . import ui_iptagsmanager
 from . import ui_mfsoptionsdialog
 from . import ui_newseeddialog
+from . import ui_ipfsdaemoninitdialog
+from . import ui_profileinitdialog
+from . import ui_ipidrsapasswordprompt
 
 from .helpers import *
 from .widgets import ImageWidget
 from .widgets import HorizontalLine
 from .widgets import IconSelector
+from .widgets import PlanetSelector
 from .widgets import LabelWithURLOpener
 
 from .i18n import iTitle
@@ -1132,13 +1138,17 @@ class NewSeedDialog(QDialog):
         event.accept()
 
     def dropEvent(self, event):
-        event.accept()
         mimeData = event.mimeData()
 
         if mimeData is None:
             return
 
         mfsNameEnc = mimeData.data('ipfs/mfs-entry-name')
+        if not mfsNameEnc:
+            event.reject()
+            return
+
+        event.accept()
 
         if mimeData.hasUrls():
             url = mimeData.urls()[0]
@@ -1303,3 +1313,241 @@ class NewSeedDialog(QDialog):
 
             if cid:
                 await messageBoxAsync('Published seed !')
+
+
+class CountDownDialog(QDialog):
+    def __init__(self, countdown=10, parent=None):
+        super().__init__(parent, Qt.WindowStaysOnTopHint)
+
+        self.initCountdown = countdown
+        self.countdown = countdown
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.onTimerOut)
+        self.timer.start(1000)
+
+    def enterEvent(self, ev):
+        self.timer.stop()
+        super().enterEvent(ev)
+
+    def leaveEvent(self, ev):
+        self.timer.stop()
+        self.countdown = self.initCountdown / 2
+        self.timer.start(1000)
+
+        super().leaveEvent(ev)
+
+    def onTimerOut(self):
+        self.countdown -= 1
+
+        if self.countdown == 0:
+            self.accept()
+
+
+class IPFSDaemonInitDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent, Qt.WindowStaysOnTopHint)
+
+        self.app = QApplication.instance()
+        self.countdown = 7
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.onTimerOut)
+        self.timer.start(1000)
+
+        self.ui = ui_ipfsdaemoninitdialog.Ui_IPFSDaemonInitDialog()
+        self.ui.setupUi(self)
+
+        self.ui.okButton.clicked.connect(self.accept)
+        self.ui.dataStore.currentIndexChanged.connect(self.onDataStoreChanged)
+        self.ui.ipfsIconLabel.setPixmap(
+            self.ui.ipfsIconLabel.pixmap().scaledToWidth(64))
+
+        self.preloadCfg()
+
+    def preloadCfg(self):
+        sManager = self.app.settingsMgr
+        try:
+            self.ui.apiPort.setValue(
+                sManager.getInt(CFG_SECTION_IPFSD, CFG_KEY_APIPORT))
+            self.ui.swarmPort.setValue(
+                sManager.getInt(CFG_SECTION_IPFSD, CFG_KEY_SWARMPORT))
+            self.ui.gatewayPort.setValue(
+                sManager.getInt(CFG_SECTION_IPFSD, CFG_KEY_HTTPGWPORT))
+        except Exception:
+            pass
+
+    def enterEvent(self, ev):
+        self.timer.stop()
+        self.ui.status.setText('')
+
+    def leaveEvent(self, ev):
+        self.timer.stop()
+        self.countdown = 5
+        self.timer.start(1000)
+
+    def dataStore(self):
+        return self.ui.dataStore.currentText()
+
+    def onDataStoreChanged(self, idx):
+        pass
+
+    def updateStatus(self):
+        self.ui.status.setText(
+            f'Using <b>{self.dataStore()}</b> in '
+            f'{self.countdown} seconds ...')
+
+    def onTimerOut(self):
+        self.countdown -= 1
+        self.updateStatus()
+
+        if self.countdown == 0:
+            self.accept()
+
+    def accept(self):
+        self.done(1)
+
+    def profiles(self):
+        pr = []
+        if self.ui.profileLowPower.isChecked():
+            pr.append('lowpower')
+        return pr
+
+    def options(self):
+        return {
+            'dataStore': self.ui.dataStore.currentText(),
+            'swarmPort': self.ui.swarmPort.value(),
+            'gatewayPort': self.ui.gatewayPort.value(),
+            'apiPort': self.ui.apiPort.value(),
+            'profiles': self.profiles()
+        }
+
+
+class UserProfileInitDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent=parent)
+
+        self.app = QApplication.instance()
+
+        self.ui = ui_profileinitdialog.Ui_ProfileInitDialog()
+        self.ui.setupUi(self)
+
+        self.planetSel = PlanetSelector()
+        self.ui.gridLayout.addWidget(self.planetSel, 3, 1)
+
+        self.ui.username.setValidator(
+            QRegExpValidator(QRegExp(r"[A-Za-z0-9/\-_]+")))
+        self.ui.username.setMaxLength(32)
+
+        self.ui.useIpidPassphrase.stateChanged.connect(self.onUsePassphrase)
+        self.ui.useIpidPassphrase.setCheckState(Qt.Checked)
+
+        self.ui.ipidRsaPassphrase.setEchoMode(QLineEdit.Password)
+        self.ui.ipidRsaPassphraseVerif.setEchoMode(QLineEdit.Password)
+        self.ui.ipidRsaPassphrase.textEdited.connect(self.onPassphraseEdit)
+        self.ui.ipidRsaPassphraseVerif.textEdited.connect(
+            self.onPassphraseVerifEdit)
+
+        self.ui.okButton.clicked.connect(self.accept)
+        self.ui.generateRandom.clicked.connect(self.onGenerateRandomUser)
+        self.validPass = False
+
+    def onUsePassphrase(self, state):
+        enable = (state == Qt.Checked)
+        self.ui.ipidRsaPassphrase.setVisible(enable)
+        self.ui.ipidRsaPassphraseVerif.setVisible(enable)
+        self.ui.ipidRsaPassphraseCheck.setVisible(enable)
+        self.ui.ipidRsaPassphraseLabel.setVisible(enable)
+        self.ui.ipidRsaPassphraseVerifLabel.setVisible(enable)
+        self.ui.ipidRsaPassphraseVerifCheck.setVisible(enable)
+
+    def onPassphraseEdit(self, text):
+        if len(text) in range(8, 64):
+            self.ui.ipidRsaPassphraseCheck.setStyleSheet(
+                'background-color: green')
+        else:
+            self.ui.ipidRsaPassphraseCheck.setStyleSheet(
+                'background-color: red')
+
+    def onPassphraseVerifEdit(self, text):
+        passphrase = self.ui.ipidRsaPassphrase.text()
+
+        if text == passphrase:
+            self.ui.ipidRsaPassphraseVerifCheck.setStyleSheet(
+                'background-color: green')
+            self.validPass = True
+        else:
+            self.validPass = False
+            self.ui.ipidRsaPassphraseVerifCheck.setStyleSheet(
+                'background-color: red')
+
+    def onGenerateRandomUser(self):
+        from random_username.generate import generate_username
+
+        try:
+            username = generate_username()[0][:-1]
+            self.ui.username.setText(username)
+            self.planetSel.setRandomPlanet()
+        except Exception:
+            pass
+
+    def enterEvent(self, ev):
+        super().enterEvent(ev)
+
+    def accept(self):
+        username = self.ui.username.text()
+        if not len(username) in range(3, 32):
+            messageBox('Username too short')
+            return
+
+        if self.ui.useIpidPassphrase.isChecked() and not self.validPass:
+            messageBox('Invalid password')
+            return
+
+        self.done(1)
+
+    def ipidPassphrase(self):
+        if self.ui.useIpidPassphrase.checkState() == Qt.Checked and \
+                self.validPass:
+            return self.ui.ipidRsaPassphrase.text()
+
+    def options(self):
+        return {
+            'username': self.ui.username.text(),
+            'vPlanet': self.planetSel.planet(),
+            'ipidRsaKeySize': int(self.ui.ipidRsaKeySize.currentText()),
+            'ipidRsaPassphrase': self.ipidPassphrase(),
+            'profileRsaKeySize': int(self.ui.profileRsaKeySize.currentText()),
+        }
+
+
+class IPIDPasswordPromptDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent=parent)
+
+        self.app = QApplication.instance()
+
+        self.ui = ui_ipidrsapasswordprompt.Ui_PasswordPrompt()
+        self.ui.setupUi(self)
+
+        self.ui.password.setEchoMode(QLineEdit.Password)
+        self.ui.password.setFocus(Qt.OtherFocusReason)
+        self.ui.password.returnPressed.connect(self.accept)
+
+        # self.ui.okButton.clicked.connect(self.accept)
+        self.ui.forgotPwdButton.clicked.connect(self.onForgotPassword)
+
+        self.ui.keyIcon.setPixmap(
+            self.ui.keyIcon.pixmap().scaledToWidth(16))
+
+    def onForgotPassword(self):
+        pass
+
+    def accept(self):
+        self.done(1)
+
+    def reject(self):
+        self.done(0)
+
+    def passwd(self):
+        return self.ui.password.text()

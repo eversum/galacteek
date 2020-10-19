@@ -48,6 +48,7 @@ pyzbar>=0.1.8
 qrcode==6.1
 qtawesome>=0.7.2
 quamash==0.6.1
+random-username>=1.0.2
 rule-engine>=2.1.0
 strict-rfc3339>=0.7
 tortoise-orm==0.16.13

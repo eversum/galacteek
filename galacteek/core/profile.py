@@ -4,7 +4,6 @@ import asyncio
 import time
 import re
 import uuid
-import getpass
 
 from cachetools import cached
 from cachetools import TTLCache
@@ -57,6 +56,10 @@ from galacteek.crypto.qrcode import IPFSQrEncoder
 from galacteek.ipfs.cidhelpers import IPFSPath
 from galacteek.ipfs.cidhelpers import joinIpns
 from galacteek.ipfs.cidhelpers import joinIpfs
+
+from galacteek.ui.dialogs import IPIDPasswordPromptDialog
+from galacteek.ui.helpers import runDialogAsync
+from galacteek.ui.helpers import messageBoxAsync
 
 from galacteek.dweb import render
 
@@ -431,18 +434,21 @@ class UserProfile(QObject):
     User profile object
     """
 
+    DEFAULT_PROFILE_NAME = 'default'
+
     qrImageEncoded = AsyncSignal(bool, str)
     webPageSaved = AsyncSignal(dict, str)
 
     identityChanged = AsyncSignal(str, str)
 
-    def __init__(self, ctx, name, rootDir):
+    def __init__(self, ctx, name, rootDir, initOptions=None):
         super(UserProfile, self).__init__()
 
         self._ctx = ctx
         self._name = name
         self._rootDir = rootDir
         self._initialized = False
+        self._initOptions = initOptions if initOptions else {}
 
         self._status = 'Available'
         self._statusMessage = ''
@@ -489,6 +495,10 @@ class UserProfile(QObject):
     @property
     def initialized(self):
         return self._initialized
+
+    @property
+    def initOptions(self):
+        return self._initOptions
 
     @property
     def status(self):
@@ -685,6 +695,10 @@ class UserProfile(QObject):
         return self.edagMetadataPath('profile')
 
     @property
+    def pathProfileEncEDag(self):
+        return self.edagEncMetadataPath('profile')
+
+    @property
     def pathUserDagMeta(self):
         return os.path.join(self.pathData, 'dag.main')
 
@@ -800,11 +814,9 @@ class UserProfile(QObject):
         self._initialized = True
         self.userLogInfo('Initialization complete')
 
-        ensure(self.sendChatLogin())
         ensure(self.ctx.app.manuals.importManuals(self))
 
-    async def sendChatLogin(self):
-        pass
+        self._initOptions = {}
 
     @ipfsOp
     async def cryptoInit(self, op):
@@ -812,7 +824,7 @@ class UserProfile(QObject):
                 not os.path.isfile(self.rsaPubKeyPath):
             self.userLogInfo('Creating RSA keypair')
 
-            privKey, pubKey = await self.rsaExec.genKeys()
+            privKey, pubKey = await self.ctx.rsaExec.genKeys()
             if privKey is None or pubKey is None:
                 self.debug('RSA: keygen failed')
                 return False
@@ -868,47 +880,79 @@ class UserProfile(QObject):
             self.debug('RSA: error while importing keys {}'.format(str(e)))
             return False
         else:
-            self.rsaAgent = IpfsRSAAgent(self.rsaExec,
+            self.rsaAgent = IpfsRSAAgent(self.ctx.rsaExec,
                                          self.rsaPubKey,
                                          self.rsaPrivKeyPath)
             op.setRsaAgent(self.rsaAgent)
 
+            return await self.setupProfileEDag(op)
+
+    def randomUsername(self):
+        from random_username.generate import generate_username
+        return generate_username()[0]
+
+    async def setupProfileEDag(self, op):
+        exists = await op.filesList(self.pathProfileEDag)
+
+        if exists:
             self.userInfo = UserProfileEDAG(
-                self.pathProfileEDag, dagMetaHistoryMax=32,
-                offline=True
+                self.pathProfileEDag, dagMetaHistoryMax=32
             )
-            await self.userInfo.load()
+        else:
+            self.userInfo = UserProfileEDAG(
+                self.pathProfileEncEDag, dagMetaHistoryMax=16,
+                cipheredMeta=True
+            )
 
-            if not self.userInfo.curIdentity:
-                ipid = await self.createIpIdentifier(
-                    iphandle=ipHandleGen(
-                        getpass.getuser(),
-                        'Earth',
-                        peerId=op.ctx.node.id
-                    )
+        await self.userInfo.load()
+
+        if not self.userInfo.curIdentity:
+            # Create initial IPID
+
+            username = self.initOptions.get('username', self.randomUsername())
+            vPlanet = self.initOptions.get('vPlanet', 'Earth')
+
+            ipid = await self.createIpIdentifier(
+                iphandle=ipHandleGen(
+                    username,
+                    vPlanet,
+                    peerId=op.ctx.node.id
+                )
+            )
+
+        if self.userInfo.curIdentity:
+            # Load our IPID with low resolve timeout
+            ipid = await self.ctx.app.ipidManager.load(
+                self.userInfo.personDid,
+                timeout=5,
+                localIdentifier=True
+            )
+
+            pwd = self.initOptions.get('ipidRsaPassphrase', None)
+            # Unlock
+            if not await ipid.unlock(rsaPassphrase=pwd):
+                for att in range(0, 4):
+                    dlg = IPIDPasswordPromptDialog()
+                    await runDialogAsync(dlg)
+
+                    if await ipid.unlock(rsaPassphrase=dlg.passwd()):
+                        break
+                    else:
+                        await messageBoxAsync('Invalid password')
+
+        if ipid:
+            if not await ipid.avatarService():
+                entry = await self.ctx.app.importQtResource(
+                    '/share/icons/helmet.png'
                 )
 
-            if self.userInfo.curIdentity:
-                # Load our IPID with low resolve timeout
-                ipid = await self.ctx.app.ipidManager.load(
-                    self.userInfo.personDid,
-                    timeout=5,
-                    localIdentifier=True
-                )
+                if entry:
+                    path = IPFSPath(entry['Hash'])
+                    await ipid.avatarSet(path.objPath)
 
-            if ipid:
-                if not await ipid.avatarService():
-                    entry = await self.ctx.app.importQtResource(
-                        '/share/icons/helmet.png'
-                    )
+            return True
 
-                    if entry:
-                        path = IPFSPath(entry['Hash'])
-                        await ipid.avatarSet(path.objPath)
-
-                return True
-
-            return False
+        return False
 
     def ipIdentifierKeyName(self, idx: int):
         return 'galacteek.{0}.dids.{1}'.format(self.name, idx)
@@ -952,7 +996,13 @@ class UserProfile(QObject):
                 if num > useKeyIdx:
                     useKeyIdx = num + 1
 
-            privKey, pubKey = await self.rsaExec.genKeys()
+            keySize = self.initOptions.get('ipidRsaKeySize', 2048)
+            passphrase = self.initOptions.get('ipidRsaPassphrase', None)
+
+            privKey, pubKey = await self.ctx.rsaExec.genKeys(
+                keysize=int(keySize),
+                passphrase=passphrase
+            )
 
             ipid = await self.ctx.app.ipidManager.create(
                 ipnsKey if ipnsKey else self.ipIdentifierKeyName(useKeyIdx),
@@ -983,7 +1033,7 @@ class UserProfile(QObject):
                 uid, identity = await self.userInfo.createIdentity(
                     iphandle=iphandle,
                     personDid=ipid.did,
-                    setAsCurrent=True,
+                    setAsCurrent=True
                 )
 
             await self.ipIdentifierInit(ipid)
@@ -1220,6 +1270,10 @@ class UserProfile(QObject):
     def edagMetadataPath(self, name):
         return os.path.join(
             self.pathEDags, '{0}.edag.json'.format(name))
+
+    def edagEncMetadataPath(self, name):
+        return os.path.join(
+            self.pathEDags, '{0}.edag.enc.json'.format(name))
 
     def edagPyramidMetadataPath(self, name):
         return os.path.join(

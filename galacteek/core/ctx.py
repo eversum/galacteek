@@ -874,7 +874,10 @@ class P2PServices(QObject):
         service.manager = self._manager
         self._services.append(service)
 
-        await service.start()
+    async def startServices(self):
+        for service in self.services:
+            log.debug(f'P2P services: starting {service}')
+            await service.start()
 
     @ipfsOp
     async def init(self, ipfsop):
@@ -954,6 +957,13 @@ class IPFSContext(QObject):
         self.pinnerTask = None
         self.orbitConnector = None
 
+        self.rsaExec = RSAExecutor(loop=self.loop,
+                                   executor=self.app.executor)
+        self.eccExec = ECCExecutor(loop=self.loop,
+                                   executor=self.app.executor)
+        self.curve25Exec = Curve25519(loop=self.loop,
+                                      executor=self.app.executor)
+
     @property
     def app(self):
         return self._app
@@ -1002,13 +1012,6 @@ class IPFSContext(QObject):
     async def setup(self, ipfsop, pubsubEnable=True,
                     pubsubHashmarksExch=False, p2pEnable=True,
                     offline=False):
-        self.rsaExec = RSAExecutor(loop=self.loop,
-                                   executor=self.app.executor)
-        self.eccExec = ECCExecutor(loop=self.loop,
-                                   executor=self.app.executor)
-        self.curve25Exec = Curve25519(loop=self.loop,
-                                      executor=self.app.executor)
-
         await self.importSoftIdent()
         await self.node.init()
         await self.peers.init()
@@ -1018,10 +1021,16 @@ class IPFSContext(QObject):
 
         self.pinner = pinning.PinningMaster(
             self, statusFilePath=self.app.pinStatusLocation)
-        await self.pinner.start()
 
         if pubsubEnable is True and not offline:
             await self.setupPubsub(pubsubHashmarksExch=pubsubHashmarksExch)
+
+    async def start(self):
+        log.debug('Starting IPFS context services')
+
+        await self.pinner.start()
+        await self.pubsub.startServices()
+        await self.p2p.startServices()
 
     async def shutdown(self):
         if self.pinner:
@@ -1048,33 +1057,49 @@ class IPFSContext(QObject):
             PSDAGExchangeService(self, self.app.ipfsClient,
                                  scheduler=self.app.scheduler))
 
-        await self.pubsub.startServices()
+    @ipfsOp
+    async def profileExists(self, ipfsop, profileName):
+        rootList = await ipfsop.filesList(GFILES_ROOT_PATH)
+
+        for entry in rootList:
+            name = entry['Name']
+            if entry['Type'] == 1:
+                if re.search(
+                        r'profile\.{p}$'.format(p=profileName), name):
+                    return True
+
+        return False
+
+    async def defaultProfileExists(self):
+        return await self.profileExists(UserProfile.DEFAULT_PROFILE_NAME)
 
     @ipfsOp
-    async def profilesInit(self, ipfsop):
+    async def createRootEntry(self, ipfsop):
         hasGalacteek = await ipfsop.filesLookup('/', GALACTEEK_NAME)
         if not hasGalacteek:
             await ipfsop.client.files.mkdir(GFILES_ROOT_PATH, parents=True)
 
-        rootList = await ipfsop.filesList(GFILES_ROOT_PATH)
+    @ipfsOp
+    async def profileLoad(self, ipfsop, pName):
+        if await self.profileExists(pName):
+            profile = UserProfile(self, pName, os.path.join(
+                GFILES_ROOT_PATH, 'profile.{}'.format(pName))
+            )
 
-        # Scans existing profiles
-        for entry in rootList:
-            name = entry['Name']
-            if entry['Type'] == 1 and name.startswith('profile.'):
-                ma = re.search(r'profile\.([a-zA-Z\.\_\-]*)$', name)
-                if ma:
-                    profileName = ma.group(1).rstrip()
-                    await self.profileNew(profileName)
+            if pName not in self.profiles:
+                self.profiles[pName] = profile
+                self.currentProfile = profile
 
-        defaultProfile = 'default'
+            try:
+                await profile.init()
+            except Exception as e:
+                log.info('Could not initialize profile: {}'.format(
+                    str(e)), exc_info=True)
+                return None
 
-        # Create default profile if not found
-        if defaultProfile not in self.profiles:
-            await self.profileNew(defaultProfile)
-
-        self.profileEmitAvail()
-        self.profileChange(defaultProfile)
+            self.profileEmitAvail()
+            self.profileChange(profile)
+            return profile
 
     def profileGet(self, name):
         return self.profiles.get(name, None)
@@ -1083,15 +1108,22 @@ class IPFSContext(QObject):
         self.loop.call_soon(self.profilesAvailable.emit,
                             list(self.profiles.keys()))
 
-    async def profileNew(self, pName, emitavail=False):
+    async def profileNew(self, pName, initOptions=None, emitavail=False):
         profile = UserProfile(self, pName, os.path.join(
-            GFILES_ROOT_PATH, 'profile.{}'.format(pName)))
+            GFILES_ROOT_PATH, 'profile.{}'.format(pName)),
+            initOptions=initOptions
+        )
+
+        if not self.currentProfile:
+            self.currentProfile = profile
+
         try:
             await profile.init()
         except Exception as e:
             log.info('Could not initialize profile: {}'.format(
                 str(e)), exc_info=True)
             return None
+
         self.profiles[pName] = profile
         if emitavail is True:
             self.profileEmitAvail()

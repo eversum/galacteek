@@ -26,44 +26,10 @@
          <string>User information</string>
         </attribute>
         <layout class="QGridLayout" name="gridLayout_2">
-         <item row="4" column="0">
-          <widget class="QLabel" name="label_5">
-           <property name="text">
-            <string>DID (IPID)</string>
-           </property>
-          </widget>
-         </item>
-         <item row="2" column="1">
-          <widget class="QLabel" name="labelInfo">
-           <property name="text">
-            <string/>
-           </property>
-          </widget>
-         </item>
-         <item row="4" column="1">
-          <widget class="QLabel" name="profileDid">
-           <property name="text">
-            <string/>
-           </property>
-           <property name="textInteractionFlags">
-            <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
-           </property>
-          </widget>
-         </item>
          <item row="6" column="0">
           <widget class="QLabel" name="label_6">
            <property name="text">
             <string>Virtual Planet</string>
-           </property>
-          </widget>
-         </item>
-         <item row="3" column="1">
-          <widget class="QLabel" name="ipHandle">
-           <property name="text">
-            <string/>
-           </property>
-           <property name="textInteractionFlags">
-            <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
            </property>
           </widget>
          </item>
@@ -83,15 +49,25 @@
            </property>
           </spacer>
          </item>
-         <item row="7" column="1">
-          <widget class="QLineEdit" name="username">
-           <property name="maxLength">
-            <number>16</number>
-           </property>
-           <property name="clearButtonEnabled">
-            <bool>false</bool>
+         <item row="4" column="0">
+          <widget class="QLabel" name="label_5">
+           <property name="text">
+            <string>DID (IPID)</string>
            </property>
           </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="QLabel" name="profileDid">
+           <property name="text">
+            <string/>
+           </property>
+           <property name="textInteractionFlags">
+            <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="1">
+          <widget class="QComboBox" name="vPlanet"/>
          </item>
          <item row="7" column="0">
           <widget class="QLabel" name="label">
@@ -116,13 +92,44 @@
            </property>
           </spacer>
          </item>
-         <item row="6" column="1">
-          <widget class="QComboBox" name="vPlanet"/>
+         <item row="2" column="1">
+          <widget class="QLabel" name="labelInfo">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item row="7" column="1">
+          <widget class="QLineEdit" name="username">
+           <property name="maxLength">
+            <number>16</number>
+           </property>
+           <property name="clearButtonEnabled">
+            <bool>false</bool>
+           </property>
+          </widget>
          </item>
          <item row="3" column="0">
           <widget class="QLabel" name="label_4">
            <property name="text">
             <string>Your IP handle</string>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="QLabel" name="ipHandle">
+           <property name="text">
+            <string/>
+           </property>
+           <property name="textInteractionFlags">
+            <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
+           </property>
+          </widget>
+         </item>
+         <item row="10" column="1">
+          <widget class="QPushButton" name="generateIdentityButton">
+           <property name="text">
+            <string>Generate new identity</string>
            </property>
           </widget>
          </item>

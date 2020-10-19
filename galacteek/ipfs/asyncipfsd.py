@@ -148,6 +148,8 @@ class AsyncIPFSDaemon(object):
                  pubsubRouter='floodsub', namesysPubsub=False,
                  pubsubSigning=False, offline=False,
                  fileStore=False,
+                 profiles=[],
+                 dataStore=None,
                  detached=True, autoRestart=True,
                  p2pStreams=True, migrateRepo=False, routingMode='dht',
                  gwWritable=False, storageMax=20, debug=False, loop=None):
@@ -181,6 +183,9 @@ class AsyncIPFSDaemon(object):
         self.migrateRepo = migrateRepo
         self.gwWritable = gwWritable
         self.routingMode = routingMode
+
+        self.profiles = profiles
+        self.dataStore = dataStore
         self.offline = offline
         self.nice = nice
         self.debug = debug
@@ -188,6 +193,8 @@ class AsyncIPFSDaemon(object):
         self._procPid = None
         self._process = None
         self.daemonClient = self.client()
+
+        self._createRepoDir()
 
     @property
     def process(self):
@@ -210,23 +217,42 @@ class AsyncIPFSDaemon(object):
     def running(self):
         return self.pid is not None
 
+    def _createRepoDir(self):
+        if not os.path.isdir(self.repopath):
+            os.mkdir(self.repopath)
+
+    def repoExists(self):
+        if not os.path.exists(os.path.join(self.repopath, 'config')) or \
+                not os.path.isdir(os.path.join(self.repopath, 'keystore')):
+            return False
+
+        return True
+
+    def availableProfiles(self):
+        return [
+            'lowpower',
+            'randomports',
+            'local-discovery',
+            'test',
+            'server',
+            'default-networking'
+        ]
+
     async def start(self):
         # Set the IPFS_PATH environment variable
         os.environ['IPFS_PATH'] = self.repopath
 
         log.debug('Using go-ipfs binary: {}'.format(self.goIpfsPath))
 
-        if not os.path.isdir(self.repopath):
-            os.mkdir(self.repopath)
-
-        if not os.path.exists(os.path.join(self.repopath, 'config')) or \
-                not os.path.isdir(os.path.join(self.repopath, 'datastore')):
-            # Pretty sure this is an empty repository path
-
+        if not self.repoExists():
             log.info('Initializing IPFS repository: {repo}'.format(
                 repo=self.repopath))
 
-            await shell('ipfs init')
+            if isinstance(self.dataStore, str):
+                log.info(f'Initializing with datastore {self.dataStore}')
+                await shell(f'ipfs init -p {self.dataStore}')
+            else:
+                await shell('ipfs init')
 
         apifile = os.path.join(self.repopath, 'api')
         if os.path.exists(apifile):
@@ -317,6 +343,8 @@ class AsyncIPFSDaemon(object):
         await self.ipfsConfigJson('Gateway.Writable',
                                   self.gwWritable)
 
+        await self.profilesListApply(self.profiles)
+
         args = [self.goIpfsPath, 'daemon']
 
         if self.pubsubEnable:
@@ -360,6 +388,15 @@ class AsyncIPFSDaemon(object):
         self.process = psutil.Process(self._procPid)
         self.setProcLimits(self.process, nice=self.nice)
         return True
+
+    async def profilesListApply(self, profiles):
+        for profile in profiles:
+            if profile and profile in self.availableProfiles():
+                await self.profileApply(profile)
+
+    async def profileApply(self, profile):
+        log.info(f'Applying daemon profile {profile}')
+        await ipfsConfigProfileApply(self.goIpfsPath, profile)
 
     async def watchProcess(self):
         while True:

@@ -287,6 +287,7 @@ class IPIdentifier(DAGOperations):
         self._localId = localId
         self._lastResolve = None
         self._latestModified = None
+        self.rsaAgent = None
 
         # JSON-LD expanded cache
         self.cache = ldCache if ldCache else LRUCache(4)
@@ -396,22 +397,38 @@ class IPIdentifier(DAGOperations):
             del self.cache[cacheKey]
 
     @ipfsOp
-    async def rsaAgent(self, ipfsop):
+    async def unlock(self, ipfsop, rsaPassphrase=None):
+        rsaAgent = await self.rsaAgentGet(ipfsop)
+        if not rsaAgent:
+            raise Exception('Agent')
+
+        if await rsaAgent.privKeyUnlock(passphrase=rsaPassphrase):
+            return True
+        else:
+            return False
+
+    async def rsaAgentGet(self, ipfsop):
         curProfile = ipfsop.ctx.currentProfile
+
+        if self.rsaAgent:
+            return self.rsaAgent
 
         if self.local:
             privKeyPath = curProfile._didKeyStore._privateKeyPathForDid(
                 self.did)
+
             if not privKeyPath:
-                return
+                raise Exception('Cannot find private DID key')
 
             pubKeyPem = await self.pubKeyPemGet(idx=0)
 
-            return IpfsRSAAgent(ipfsop.ctx.rsaExec, pubKeyPem, privKeyPath)
+            self.rsaAgent = IpfsRSAAgent(
+                ipfsop.ctx.rsaExec, pubKeyPem, privKeyPath)
+            return self.rsaAgent
 
     @ipfsOp
     async def pssSign64(self, ipfsop, message: bytes):
-        agent = await self.rsaAgent()
+        agent = await self.rsaAgentGet(ipfsop)
         if agent:
             return await agent.pssSign64(message)
 
